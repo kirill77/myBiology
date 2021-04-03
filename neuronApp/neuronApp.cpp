@@ -1,5 +1,4 @@
 #define NOMINMAX
-#include <direct.h>
 #include <easy3d/viewer/viewer.h>
 #include <easy3d/core/surface_mesh.h>
 #include <easy3d/renderer/drawable_lines.h>
@@ -7,6 +6,8 @@
 #include <easy3d/fileio/resources.h>
 #include <easy3d/util/logging.h>
 #include <easy3d/util/file_system.h>
+
+#include <simulation/ocTree.h>
 
 using namespace easy3d;
 
@@ -37,18 +38,6 @@ private:
     std::vector<vec3> m_points;
 };
 
-struct MyViewer : public Viewer
-{
-    MyViewer(const char* sName, MyModel *pModel) : Viewer(sName), m_pModel(pModel) { }
-    virtual void pre_draw()
-    {
-        Viewer::pre_draw();
-    }
-
-private:
-    MyModel* m_pModel;
-};
-
 int main(int argc, char** argv)
 {
     // initialize logging
@@ -66,12 +55,11 @@ int main(int argc, char** argv)
         dir = file_system::parent_directory(dir);
     }
 
-    MyModel* pMyModel = new MyModel;
-
     // Create the default Easy3D viewer.
     // Note: a viewer must be created before creating any drawables.
-    MyViewer viewer("atom", pMyModel);
+    Viewer viewer("neuron");
 
+    MyModel* pMyModel = new MyModel;
     // Load point cloud data from a file
     viewer.add_model(pMyModel, false);
 

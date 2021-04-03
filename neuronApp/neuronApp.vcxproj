@@ -120,7 +120,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_WINDOWS;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..;$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

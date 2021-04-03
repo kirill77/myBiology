@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mybasics.h"
+#include "bboxes.h"
 
 template <class Access> // implements all access to outside world required by this class
 struct OcTreeNode
@@ -18,42 +18,47 @@ struct OcTreeNode
         m_uEndPoint = endPoint;
     }
 
-    bool split(const float3 &vCenter, PointArray &points, NodeArray &nodes)
+    bool split(const float3& vCenter, Access &access)
     {
-        if (!m_isLeaf || m_nPoints == 0) return false;
-       
-        NvU32 fc = m_nodes.size();
-        m_nodes.resize(fc + 8);
+        if (!isLeaf() || m_uFirstPoint == m_uEndPoint) return false;
 
-        nodes[fc + 0].initLeaf(looseSort(points, m_uFirstPoint, m_uEndPoint, vCenter, 2), m_uEndPoint); // split in z
-        nodes[fc + 4].initLeaf(fc[0].m_uEndPoint, m_uEndPoint); // just initialize
+        NvU32 uFirstChild = access.getNNodes();
+        access.resizeNodes(uFirstChild + 8);
 
-        nodes[fc + 2].m_uFirstPoint = looseSort(points, m_uFirstPoint, nodes[fc + 4].m_uFirstPoint, vCenter, 1); // split in y
-        nodes[fc + 6].m_uFirstPoint = looseSort(nodes[fc + 4].m_uFirstPoint, m_uEndPoint, vCenter, 1); // split in y
+        NvU32 splitZ  = access.looseSort(m_uFirstPoint, m_uEndPoint, vCenter[2], 2);
+        NvU32 splitY0 = access.looseSort(m_uFirstPoint, splitZ, vCenter[1], 1);
+        NvU32 splitY1 = access.looseSort(splitZ, m_uEndPoint, vCenter[1], 1);
+        NvU32 splitX0 = access.looseSort(m_uFirstPoint, splitY0, vCenter[0], 0);
+        NvU32 splitX1 = access.looseSort(splitY0, splitZ, vCenter[0], 0);
+        NvU32 splitX2 = access.looseSort(splitZ, splitY1, vCenter[0], 0);
+        NvU32 splitX3 = access.looseSort(splitY1, m_uEndPoint, vCenter[0], 0);
 
-        nodes[fc + 1].initLeaf(looseSort(points, m_uFirstPoint, nodes[fc + 2].m_uFirstPoint, vCenter, 0); // split in x
-        nodes[fc + 3].initLeaf(looseSort(points, notes[fc + 2].m_uFirstNode, nodes[fc + 4].m_uFirstPoint, vCenter, 0); // split in x
-        nodes[fc + 5].initLeaf(looseSort(points, nodes[fc + 4], nodes[fc + 6].m_uFirstPoint, vCenter, 0); // split in x
-        nodes[fc + 7].initLeaf(looseSort(points, notes[fc + 6].m_uFirstNode, m_uEndPoint, vCenter, 0); // split in x
+        access.node(uFirstChild + 0).initLeaf(m_uFirstPoint, splitX0);
+        access.node(uFirstChild + 1).initLeaf(splitX0, splitY0);
+        access.node(uFirstChild + 2).initLeaf(splitY0, splitX1);
+        access.node(uFirstChild + 2).initLeaf(splitX1, splitZ);
+        access.node(uFirstChild + 3).initLeaf(splitZ, splitX2);
+        access.node(uFirstChild + 4).initLeaf(splitX2, splitY1);
+        access.node(uFirstChild + 5).initLeaf(splitY1, splitX3);
+        access.node(uFirstChild + 6).initLeaf(splitX3, m_uEndPoint);
 
         m_uEndPoint = ~0U;
 
         return true;
     }
 
-    enum ACCURACY_DECISION { ACCURACY_TOO_CLOSE, ACCURACY_MATCH, ACCURACY_TOO_FAR };
-
     struct BoxIterator
     {
-        BoxIterator(NvU32 uRootNode, const BBox3f& rootBox);
+        BoxIterator(NvU32 uRootNode, const BBox3f& rootBox, Access& access);
         BoxIterator(const BoxIterator& other);
-        void descend(NodeArray& nodeArray, NvU32 childIndex);
+        void descend(NvU32 childIndex);
         NvU32 ascend(); // returns index of the child where we've been
-        NvU32 getCurNode() const { return nodesStack[m_curDepth]; }
+        NvU32 getCurNodeIndex() const { return m_nodesStack[m_curDepth]; }
         NvU32 getCurDepth() const { return m_curDepth; }
         const BBox3f& getCurBox() const { return m_curBox; }
-        ACCURACY_DECISION computeAccuracyDecision(const Iterator& other, NvU32 nAccuracyDist);
+        bool isAccuracyMatch(const BoxIterator& other);
     private:
+        Access& m_access;
         NvU32 m_uBox[3]; // starts with 0,0,0, *= 2 when we descend, += 1 when we shift
         float3 m_boundsStack[32];
         BBox3f m_curBox;
@@ -61,19 +66,10 @@ struct OcTreeNode
         NvU32 m_curDepth;
     };
 
-    static double beforeComputePointForces(NodeType& root, NodeArray& nodes, PointArray& points)
-    {
-        root.m_nodeData.setForce(float3(0));
-        double fCharge = 0;
-        if (root.isLeaf())
-        {
-
-        }
-    }
     // assuming each point has scalar charge and there is a force acting between each pair of charges, compute cumulative force acting on each point.
     // accuracy is understood like this: if two octree boxes are of the same size and distance between them is >= nAccuracyDist, we compute box<->box
     // force instead of point<->point force
-    static void computePointForces(NvU32 rootIndex, Access &access)
+    static void computePointForces(NvU32 rootIndex, Access& access)
     {
         bool bIt1NextSucceeded = true;
         for (BoxIterator it1(rootIndex, access); bIt1NextSucceeded; bIt1NextSucceeded = it1.next())
@@ -89,7 +85,7 @@ struct OcTreeNode
             if (!it2.nextNoDescendent())
                 continue;
             bool bIt2NextSuceeded = true;
-            for ( ; bIt2NextSuceeded; )
+            for (; bIt2NextSuceeded; )
             {
                 if (it2.isEmptyNode())
                 {
@@ -125,13 +121,13 @@ struct OcTreeNode
                 }
                 bIt2NextSuceeded = it2.next();
             }
+        }
     }
 
-    NodeData m_nodeData;
-
 private:
+#if 0
     // returns index of first point for which points[u][uDim] >= vCenter[uDim]
-    static NvU32 looseSort(PointArray& points, NvU32 uBegin, NvU32 uEnd, const float3& vCenter, NvU32 uDim)
+    static NvU32 looseSort(NvU32 uBegin, NvU32 uEnd, const float3& vCenter, NvU32 uDim)
     {
         for (float fSplit = vCenter[uDim]; ; ++uBegin)
         {
@@ -152,15 +148,16 @@ private:
             points.swap(uBegin, uEnd);
         }
     }
+#endif
     union
     {
         NvU32 m_uFirstChild; // index into NodeAllocator
         NvU32 m_uFirstPoint; // index into PointAllocator
     };
     NvU32 m_uEndPoint = ~0U; // inner node would have this set to ~0U
-
+#if 0
     // implementation of BoxIterator methods
-    BoxIterator::BoxIterator(NvU32 uRootNode, const BBox3f& rootBox)
+    BoxIterator::BoxIterator(NvU32 uRootNode, const BBox3f& rootBox, Access& access) : m_access(access)
     {
         uBox[0] = uBox[1] = uBox[2] = uDepth = 0;
         nodesStack[0] = uRootNode;
@@ -209,7 +206,7 @@ private:
     }
     ACCURACY_DECISION BoxIterator::computeAccuracyDecision(const Iterator& other, NvU32 nAccuracyDist)
     {
-        auto uDist = c1.uBox[0] >= c2.uBox[0] ? c1.uBox[0] - c2.uBox[0] : c2.uBox[0] - c1.uBox[0]);
+        auto uDist = c1.uBox[0] >= c2.uBox[0] ? c1.uBox[0] - c2.uBox[0] : c2.uBox[0] - c1.uBox[0];
         for (NvU32 uDim = 1; uDim < 3; ++uDim)
         {
             uDist = std::max(uDist, c1.uBox[uDim] >= c2.uBox[uDim] ? c1.uBox[uDim] - c2.uBox[uDim] : c2.uBox[uDim] - c1.uBox[uDim]);
@@ -219,4 +216,5 @@ private:
         // the goal here is to avoid counting same volume twice. ACCURACY_TOO_FAR means that this volume must have been counted on the coarser level
         return uDist / 2 >= nAccuracyDist ? ACCURACY_TOO_FAR : ACCURACY_MATCH;
     }
+#endif
 };
