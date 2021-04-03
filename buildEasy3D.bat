@@ -1,7 +1,10 @@
-git clone https://github.com/LiangliangNan/Easy3D.git --recurse-submodules
-mkdir Easy3D\build
+pushd ..
 
-pushd
-cd Easy3D\build
+git clone https://github.com/kirill77/Easy3D.git
+cd Easy3D
+
+mkdir build
+cd build
 cmake ..
+
 popd

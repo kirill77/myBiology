@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{39a3e85d-4389-4884-8f3c-513c8052b476}</ProjectGuid>
+    <RootNamespace>neuronApp</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="neuronApp.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\backward\3rd_backward.vcxproj">
+      <Project>{8fb0f76e-9922-3c86-9f43-f250bd772427}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\easyloggingpp\3rd_easyloggingpp.vcxproj">
+      <Project>{c99598e5-1118-305b-bf0c-a09041be0deb}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\glew\3rd_glew.vcxproj">
+      <Project>{e0279de7-a82f-36bc-a768-cf2fa19b98e5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\glfw\src\3rd_glfw.vcxproj">
+      <Project>{c5f1bc8f-2b5a-3a76-beb4-7ace4080aab4}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\glutess\3rd_glutess.vcxproj">
+      <Project>{d71131f3-400c-341c-97a3-2f0a1c8df811}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\kdtree\3rd_kdtree.vcxproj">
+      <Project>{c09d7fcc-0d3c-3316-aa39-ce15658735ec}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\lastools\3rd_lastools.vcxproj">
+      <Project>{b7a47289-08fd-3a44-8729-d1bd964d7e51}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\poisson\3rd_poisson.vcxproj">
+      <Project>{dab71185-c6df-325b-8bc9-fe0c226f51b0}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\ransac\3rd_ransac.vcxproj">
+      <Project>{f482965c-b52e-377e-81a7-5c60cf3b0197}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\rply\3rd_rply.vcxproj">
+      <Project>{57b32535-8a9d-39a0-8369-dd91e9c745aa}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\tetgen\3rd_tetgen.vcxproj">
+      <Project>{49859ad5-3e38-3413-a53c-aeda899ae454}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\3rd_party\triangle\3rd_triangle.vcxproj">
+      <Project>{36795ea1-018c-3364-ac46-b9902e264754}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\algo\easy3d_algo.vcxproj">
+      <Project>{e2c23a57-b64d-39d9-854b-8aa70b284035}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\core\easy3d_core.vcxproj">
+      <Project>{1ad7d0fb-f570-3084-a6ab-9834b7e392ce}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\fileio\easy3d_fileio.vcxproj">
+      <Project>{a8ff4944-56a0-3729-b86a-ab4e9272605f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\kdtree\easy3d_kdtree.vcxproj">
+      <Project>{24b278fe-cc27-38ac-9507-53ab5ddc45ac}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\renderer\easy3d_renderer.vcxproj">
+      <Project>{516181fd-d01c-3fac-90da-b3b5025c3124}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\util\easy3d_util.vcxproj">
+      <Project>{a50bb819-5469-319e-9d99-d8a942ffc0de}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Easy3D\build\easy3d\viewer\easy3d_viewer.vcxproj">
+      <Project>{fd10bbe7-d30b-3138-80ad-794beb686de9}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
