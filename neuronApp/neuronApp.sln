@@ -9,43 +9,45 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "easy3d", "easy3d", "{8939D4
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "3rdparty", "3rdparty", "{0CF6DAC3-1B53-4C05-904E-51AA17FB4747}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_algo", "..\..\Easy3D\build\easy3d\algo\easy3d_algo.vcxproj", "{E2C23A57-B64D-39D9-854B-8AA70B284035}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_algo", "..\Easy3D\build\easy3d\algo\easy3d_algo.vcxproj", "{E2C23A57-B64D-39D9-854B-8AA70B284035}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_viewer", "..\..\Easy3D\build\easy3d\viewer\easy3d_viewer.vcxproj", "{FD10BBE7-D30B-3138-80AD-794BEB686DE9}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_viewer", "..\Easy3D\build\easy3d\viewer\easy3d_viewer.vcxproj", "{FD10BBE7-D30B-3138-80AD-794BEB686DE9}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_util", "..\..\Easy3D\build\easy3d\util\easy3d_util.vcxproj", "{A50BB819-5469-319E-9D99-D8A942FFC0DE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_util", "..\Easy3D\build\easy3d\util\easy3d_util.vcxproj", "{A50BB819-5469-319E-9D99-D8A942FFC0DE}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_renderer", "..\..\Easy3D\build\easy3d\renderer\easy3d_renderer.vcxproj", "{516181FD-D01C-3FAC-90DA-B3B5025C3124}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_renderer", "..\Easy3D\build\easy3d\renderer\easy3d_renderer.vcxproj", "{516181FD-D01C-3FAC-90DA-B3B5025C3124}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_kdtree", "..\..\Easy3D\build\easy3d\kdtree\easy3d_kdtree.vcxproj", "{24B278FE-CC27-38AC-9507-53AB5DDC45AC}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_kdtree", "..\Easy3D\build\easy3d\kdtree\easy3d_kdtree.vcxproj", "{24B278FE-CC27-38AC-9507-53AB5DDC45AC}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_fileio", "..\..\Easy3D\build\easy3d\fileio\easy3d_fileio.vcxproj", "{A8FF4944-56A0-3729-B86A-AB4E9272605F}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_fileio", "..\Easy3D\build\easy3d\fileio\easy3d_fileio.vcxproj", "{A8FF4944-56A0-3729-B86A-AB4E9272605F}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_core", "..\..\Easy3D\build\easy3d\core\easy3d_core.vcxproj", "{1AD7D0FB-F570-3084-A6AB-9834B7E392CE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "easy3d_core", "..\Easy3D\build\easy3d\core\easy3d_core.vcxproj", "{1AD7D0FB-F570-3084-A6AB-9834B7E392CE}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_backward", "..\..\Easy3D\build\3rd_party\backward\3rd_backward.vcxproj", "{8FB0F76E-9922-3C86-9F43-F250BD772427}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_backward", "..\Easy3D\build\3rd_party\backward\3rd_backward.vcxproj", "{8FB0F76E-9922-3C86-9F43-F250BD772427}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_easyloggingpp", "..\..\Easy3D\build\3rd_party\easyloggingpp\3rd_easyloggingpp.vcxproj", "{C99598E5-1118-305B-BF0C-A09041BE0DEB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_easyloggingpp", "..\Easy3D\build\3rd_party\easyloggingpp\3rd_easyloggingpp.vcxproj", "{C99598E5-1118-305B-BF0C-A09041BE0DEB}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_glew", "..\..\Easy3D\build\3rd_party\glew\3rd_glew.vcxproj", "{E0279DE7-A82F-36BC-A768-CF2FA19B98E5}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_glew", "..\Easy3D\build\3rd_party\glew\3rd_glew.vcxproj", "{E0279DE7-A82F-36BC-A768-CF2FA19B98E5}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_glfw", "..\..\Easy3D\build\3rd_party\glfw\src\3rd_glfw.vcxproj", "{C5F1BC8F-2B5A-3A76-BEB4-7ACE4080AAB4}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_glfw", "..\Easy3D\build\3rd_party\glfw\src\3rd_glfw.vcxproj", "{C5F1BC8F-2B5A-3A76-BEB4-7ACE4080AAB4}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_glutess", "..\..\Easy3D\build\3rd_party\glutess\3rd_glutess.vcxproj", "{D71131F3-400C-341C-97A3-2F0A1C8DF811}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_glutess", "..\Easy3D\build\3rd_party\glutess\3rd_glutess.vcxproj", "{D71131F3-400C-341C-97A3-2F0A1C8DF811}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_kdtree", "..\..\Easy3D\build\3rd_party\kdtree\3rd_kdtree.vcxproj", "{C09D7FCC-0D3C-3316-AA39-CE15658735EC}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_kdtree", "..\Easy3D\build\3rd_party\kdtree\3rd_kdtree.vcxproj", "{C09D7FCC-0D3C-3316-AA39-CE15658735EC}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_lastools", "..\..\Easy3D\build\3rd_party\lastools\3rd_lastools.vcxproj", "{B7A47289-08FD-3A44-8729-D1BD964D7E51}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_lastools", "..\Easy3D\build\3rd_party\lastools\3rd_lastools.vcxproj", "{B7A47289-08FD-3A44-8729-D1BD964D7E51}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_poisson", "..\..\Easy3D\build\3rd_party\poisson\3rd_poisson.vcxproj", "{DAB71185-C6DF-325B-8BC9-FE0C226F51B0}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_poisson", "..\Easy3D\build\3rd_party\poisson\3rd_poisson.vcxproj", "{DAB71185-C6DF-325B-8BC9-FE0C226F51B0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_ransac", "..\..\Easy3D\build\3rd_party\ransac\3rd_ransac.vcxproj", "{F482965C-B52E-377E-81A7-5C60CF3B0197}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_ransac", "..\Easy3D\build\3rd_party\ransac\3rd_ransac.vcxproj", "{F482965C-B52E-377E-81A7-5C60CF3B0197}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_rply", "..\..\Easy3D\build\3rd_party\rply\3rd_rply.vcxproj", "{57B32535-8A9D-39A0-8369-DD91E9C745AA}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_rply", "..\Easy3D\build\3rd_party\rply\3rd_rply.vcxproj", "{57B32535-8A9D-39A0-8369-DD91E9C745AA}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_tetgen", "..\..\Easy3D\build\3rd_party\tetgen\3rd_tetgen.vcxproj", "{49859AD5-3E38-3413-A53C-AEDA899AE454}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_tetgen", "..\Easy3D\build\3rd_party\tetgen\3rd_tetgen.vcxproj", "{49859AD5-3E38-3413-A53C-AEDA899AE454}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_triangle", "..\..\Easy3D\build\3rd_party\triangle\3rd_triangle.vcxproj", "{36795EA1-018C-3364-AC46-B9902E264754}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_triangle", "..\Easy3D\build\3rd_party\triangle\3rd_triangle.vcxproj", "{36795EA1-018C-3364-AC46-B9902E264754}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MonteCarlo", "..\MonteCarlo\MonteCarlo.vcxproj", "{B21FF890-4353-4486-9091-4BF3E4348B34}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -303,6 +305,22 @@ Global
 		{36795EA1-018C-3364-AC46-B9902E264754}.RelWithDebInfo|x64.ActiveCfg = RelWithDebInfo|x64
 		{36795EA1-018C-3364-AC46-B9902E264754}.RelWithDebInfo|x64.Build.0 = RelWithDebInfo|x64
 		{36795EA1-018C-3364-AC46-B9902E264754}.RelWithDebInfo|x86.ActiveCfg = RelWithDebInfo|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Debug|x64.ActiveCfg = Debug|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Debug|x64.Build.0 = Debug|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Debug|x86.ActiveCfg = Debug|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Debug|x86.Build.0 = Debug|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.MinSizeRel|x64.ActiveCfg = Release|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.MinSizeRel|x64.Build.0 = Release|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.MinSizeRel|x86.ActiveCfg = Release|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.MinSizeRel|x86.Build.0 = Release|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Release|x64.ActiveCfg = Release|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Release|x64.Build.0 = Release|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Release|x86.ActiveCfg = Release|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.Release|x86.Build.0 = Release|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.RelWithDebInfo|x64.ActiveCfg = Release|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.RelWithDebInfo|x64.Build.0 = Release|x64
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
+		{B21FF890-4353-4486-9091-4BF3E4348B34}.RelWithDebInfo|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

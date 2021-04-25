@@ -23,7 +23,7 @@
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{39a3e85d-4389-4884-8f3c-513c8052b476}</ProjectGuid>
     <RootNamespace>neuronApp</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -88,7 +88,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\Easy3D;$(ProjectDir)\..\Easy3D\build;$(ProjectDir)\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -104,7 +104,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\Easy3D;$(ProjectDir)\..\Easy3D\build;$(ProjectDir)\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -118,9 +118,9 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_USE_MATH_DEFINES;_WINDOWS;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)\..;$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..;$(ProjectDir)\..\Easy3D;$(ProjectDir)\..\Easy3D\build;$(ProjectDir)\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -134,9 +134,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_USE_MATH_DEFINES;_WINDOWS;NDEBUG;GLEW_STATIC;GLOG_NO_ABBREVIATED_SEVERITIES;GOOGLE_GLOG_DLL_DECL=;GLEW_NO_GLU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)\..\..\Easy3D;$(ProjectDir)\..\..\Easy3D\build;$(ProjectDir)\..\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\Easy3D;$(ProjectDir)\..\Easy3D\build;$(ProjectDir)\..\Easy3D\build\3rd_party\glog;$(ProjectDir)\..\Easy3D\3rd_party\glog\src;$(ProjectDir)\..\Easy3D\3rd_party\glog\src\windows;$(ProjectDir)\..\Easy3D\3rd_party\glew\include;$(ProjectDir)\..\Easy3D\3rd_party\glfw\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -150,62 +150,65 @@
     <ClCompile Include="neuronApp.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\backward\3rd_backward.vcxproj">
-      <Project>{8fb0f76e-9922-3c86-9f43-f250bd772427}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\backward\3rd_backward.vcxproj">
+      <Project>{87218235-8446-3cb0-a012-c136c683912d}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\easyloggingpp\3rd_easyloggingpp.vcxproj">
-      <Project>{c99598e5-1118-305b-bf0c-a09041be0deb}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\easyloggingpp\3rd_easyloggingpp.vcxproj">
+      <Project>{a0f3becd-3c32-3809-aa6a-55a92f0efe47}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\glew\3rd_glew.vcxproj">
-      <Project>{e0279de7-a82f-36bc-a768-cf2fa19b98e5}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\glew\3rd_glew.vcxproj">
+      <Project>{946f68c3-441a-387a-be95-679a39275713}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\glfw\src\3rd_glfw.vcxproj">
-      <Project>{c5f1bc8f-2b5a-3a76-beb4-7ace4080aab4}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\glfw\src\3rd_glfw.vcxproj">
+      <Project>{985fcc1a-7e74-3fe5-a217-7aee40dac38a}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\glutess\3rd_glutess.vcxproj">
-      <Project>{d71131f3-400c-341c-97a3-2f0a1c8df811}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\glutess\3rd_glutess.vcxproj">
+      <Project>{e7277fd0-9b53-3d97-ac5f-8217b6985918}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\kdtree\3rd_kdtree.vcxproj">
-      <Project>{c09d7fcc-0d3c-3316-aa39-ce15658735ec}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\kdtree\3rd_kdtree.vcxproj">
+      <Project>{28c810d0-f37b-3e3c-b030-564ef01845a7}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\lastools\3rd_lastools.vcxproj">
-      <Project>{b7a47289-08fd-3a44-8729-d1bd964d7e51}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\lastools\3rd_lastools.vcxproj">
+      <Project>{a4f19030-c319-3aab-996a-3c3a67109d88}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\poisson\3rd_poisson.vcxproj">
-      <Project>{dab71185-c6df-325b-8bc9-fe0c226f51b0}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\poisson\3rd_poisson.vcxproj">
+      <Project>{5cd0087d-75ca-356c-8cfa-ba5f99bf7a67}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\ransac\3rd_ransac.vcxproj">
-      <Project>{f482965c-b52e-377e-81a7-5c60cf3b0197}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\ransac\3rd_ransac.vcxproj">
+      <Project>{4d008107-7bd1-370c-8f1a-434edc430cd3}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\rply\3rd_rply.vcxproj">
-      <Project>{57b32535-8a9d-39a0-8369-dd91e9c745aa}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\rply\3rd_rply.vcxproj">
+      <Project>{4721ac14-8d40-3b14-96bd-13469d3c958a}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\tetgen\3rd_tetgen.vcxproj">
-      <Project>{49859ad5-3e38-3413-a53c-aeda899ae454}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\tetgen\3rd_tetgen.vcxproj">
+      <Project>{065de9ff-9179-30fe-94ef-6391b324ff7e}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\3rd_party\triangle\3rd_triangle.vcxproj">
-      <Project>{36795ea1-018c-3364-ac46-b9902e264754}</Project>
+    <ProjectReference Include="..\Easy3D\build\3rd_party\triangle\3rd_triangle.vcxproj">
+      <Project>{5ea137d9-8510-37a7-afa4-0408b245fdbb}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\algo\easy3d_algo.vcxproj">
-      <Project>{e2c23a57-b64d-39d9-854b-8aa70b284035}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\algo\easy3d_algo.vcxproj">
+      <Project>{694f71d2-e32e-37c4-92fd-14575312b8b8}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\core\easy3d_core.vcxproj">
-      <Project>{1ad7d0fb-f570-3084-a6ab-9834b7e392ce}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\core\easy3d_core.vcxproj">
+      <Project>{15a20bd7-69fc-3182-803d-68670a81874f}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\fileio\easy3d_fileio.vcxproj">
-      <Project>{a8ff4944-56a0-3729-b86a-ab4e9272605f}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\fileio\easy3d_fileio.vcxproj">
+      <Project>{3a65146c-2842-39ef-898b-39bc85446a4f}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\kdtree\easy3d_kdtree.vcxproj">
-      <Project>{24b278fe-cc27-38ac-9507-53ab5ddc45ac}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\kdtree\easy3d_kdtree.vcxproj">
+      <Project>{56c12bfa-b331-3803-9f9e-642efd582681}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\renderer\easy3d_renderer.vcxproj">
-      <Project>{516181fd-d01c-3fac-90da-b3b5025c3124}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\renderer\easy3d_renderer.vcxproj">
+      <Project>{0ff0a747-6ce6-3c51-9214-ce5bceae0a27}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\util\easy3d_util.vcxproj">
-      <Project>{a50bb819-5469-319e-9d99-d8a942ffc0de}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\util\easy3d_util.vcxproj">
+      <Project>{61b7f8f3-aa3c-3419-842d-220c3db67424}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Easy3D\build\easy3d\viewer\easy3d_viewer.vcxproj">
-      <Project>{fd10bbe7-d30b-3138-80ad-794beb686de9}</Project>
+    <ProjectReference Include="..\Easy3D\build\easy3d\viewer\easy3d_viewer.vcxproj">
+      <Project>{dcdf18ba-7376-3a00-9523-2d55f5216eac}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\MonteCarlo\MonteCarlo.vcxproj">
+      <Project>{b21ff890-4353-4486-9091-4bf3e4348b34}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

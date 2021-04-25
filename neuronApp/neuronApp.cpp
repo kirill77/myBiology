@@ -7,39 +7,62 @@
 #include <easy3d/util/logging.h>
 #include <easy3d/util/file_system.h>
 
-#include <simulation/ocTree.h>
+#include "neuron.h"
 
 using namespace easy3d;
 
-struct MyModel : public Model
+template <class T>
+struct MyModel : public SurfaceMesh
 {
     MyModel()
     {
-        m_points.push_back(vec3(0, 0, 0));
-        m_points.push_back(vec3(1, 0, 0));
-        m_points.push_back(vec3(1, 1, 0));
-        m_points.push_back(vec3(0, 1, 0));
+        const auto& points = m_neuron.points();
+        for (NvU32 u = 0; u < points.size(); ++u)
+        {
+            auto& center = points[u].m_pos;
+
+            auto nVerts = this->n_vertices();
+
+            const T POINT_SIZE = (T)0.01;
+
+            addVertex(center + rtvector<T, 3>({ 0,  0,  1 }) * POINT_SIZE);
+            addVertex(center + rtvector<T, 3>({ 1,  0, -1 }) * POINT_SIZE);
+            addVertex(center + rtvector<T, 3>({-1, -1, -1 }) * POINT_SIZE);
+            addVertex(center + rtvector<T, 3>({-1,  1, -1 }) * POINT_SIZE);
+
+            SurfaceMesh::Vertex v1(nVerts);
+            SurfaceMesh::Vertex v2(nVerts + 1);
+            SurfaceMesh::Vertex v3(nVerts + 2);
+            SurfaceMesh::Vertex v4(nVerts + 3);
+
+            add_triangle(v1, v2, v3);
+            add_triangle(v1, v3, v4);
+            add_triangle(v1, v4, v2);
+            add_triangle(v2, v3, v4);
+        }
+
+        int i = 0;
+        ++i;
     }
 
-    virtual std::vector<vec3>& points() override
-    {
-        return m_points;
-    }
-    virtual const std::vector<vec3>& points() const override
-    {
-        return m_points;
-    }
     /** prints the names of all properties to an output stream (e.g., std::cout). */
     virtual void property_stats(std::ostream& output) const override
     {
     }
 
 private:
-    std::vector<vec3> m_points;
+    void addVertex(const rtvector<T, 3>& v)
+    {
+        vec3 _v(v[0], v[1], v[2]);
+        add_vertex(_v);
+    }
+    Neuron<T> m_neuron;
 };
 
 int main(int argc, char** argv)
 {
+    DistributionsTest::test();
+
     // initialize logging
     logging::initialize();
 
@@ -59,7 +82,7 @@ int main(int argc, char** argv)
     // Note: a viewer must be created before creating any drawables.
     Viewer viewer("neuron");
 
-    MyModel* pMyModel = new MyModel;
+    MyModel<double>* pMyModel = new MyModel<double>;
     // Load point cloud data from a file
     viewer.add_model(pMyModel, false);
 
@@ -69,15 +92,7 @@ int main(int argc, char** argv)
     float length = box.diagonal() * 0.05f;
 
     // Create a drawable for rendering the normal vectors.
-    auto drawable = pMyModel->renderer()->add_lines_drawable("normals");
-    // Upload the data to the GPU.
-    drawable->update_vertex_buffer(pMyModel->points());
-
-    // We will draw the normal vectors in a uniform green color
-    drawable->set_uniform_coloring(vec4(1.0f, 0.0f, 0.0f, 1.0f));
-
-    // Set the line width
-    drawable->set_line_width(3.0f);
+    auto drawable = pMyModel->renderer()->add_triangles_drawable("faces");
 
     // Run the viewer
     return viewer.run();
