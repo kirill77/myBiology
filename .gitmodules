@@ -1,0 +1,12 @@
+[submodule "MonteCarlo"]
+	path = MonteCarlo
+	url = https://github.com/kirill77/MonteCarlo
+[submodule "ocTree"]
+	path = ocTree
+	url = https://github.com/kirill77/ocTree
+[submodule "Easy3D"]
+	path = Easy3D
+	url = https://github.com/LiangliangNan/Easy3D
+[submodule "basics"]
+	path = basics
+	url = https://github.com/kirill77/basics
