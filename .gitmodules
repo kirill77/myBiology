@@ -2,6 +2,7 @@
 	path = MonteCarlo
 	url = https://github.com/kirill77/MonteCarlo
 	master = master
+	branch = master
 [submodule "ocTree"]
 	path = ocTree
 	url = https://github.com/kirill77/ocTree
