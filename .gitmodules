@@ -7,3 +7,7 @@
 [submodule "basics"]
 	path = basics
 	url = https://github.com/kirill77/basics
+[submodule "MonteCarlo"]
+	path = MonteCarlo
+	url = https://github.com/kirill77/MonteCarlo.git
+	branch = master
