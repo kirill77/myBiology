@@ -1,10 +1,16 @@
-[submodule "ocTree"]
-	path = ocTree
-	url = https://github.com/kirill77/ocTree
-[submodule "basics"]
-	path = basics
-	url = https://github.com/kirill77/basics
 [submodule "MonteCarlo"]
 	path = MonteCarlo
 	url = https://github.com/kirill77/MonteCarlo.git
+	branch = master
+[submodule "Easy3D"]
+	path = Easy3D
+	url = https://github.com/kirill77/Easy3D.git
+	branch = master
+[submodule "basics"]
+	path = basics
+	url = https://github.com/kirill77/basics.git
+	branch = master
+[submodule "ocTree"]
+	path = ocTree
+	url = https://github.com/kirill77/ocTree.git
 	branch = master
