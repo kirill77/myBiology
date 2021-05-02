@@ -10,31 +10,65 @@
 
 using namespace easy3d;
 
-template <class T>
-struct MyModel : public PointsDrawable
+struct MyPointsDrawable : public PointsDrawable
 {
-    MyModel()
+    MyPointsDrawable()
     {
-        const auto& points = m_neuron.points();
-        for (NvU32 u = 0; u < points.size(); ++u)
-        {
-            auto& center = points[u].m_pos;
-            addVertex(center);
-        }
-        update_vertex_buffer(m_points);
-        set_uniform_coloring(vec4(1.0f, 0.0f, 0.0f, 1.0f));  // r, g, b, a
         set_impostor_type(PointsDrawable::SPHERE);
         set_point_size(10);
     }
-
-private:
+    template <class T>
     void addVertex(const rtvector<T, 3>& v)
     {
-        vec3 _v(v[0], v[1], v[2]);
+        vec3 _v((float)v[0], (float)v[1], (float)v[2]);
         m_points.push_back(_v);
     }
-    Neuron<T> m_neuron;
+    void updateVertexBuffer()
+    {
+        update_vertex_buffer(m_points);
+    }
+private:
     std::vector<vec3> m_points;
+};
+
+template <class T>
+struct MyModel
+{
+    MyModel()
+    {
+        m_pKDrawable = new MyPointsDrawable;
+        m_pNaDrawable = new MyPointsDrawable;
+
+        const auto& points = m_neuron.points();
+        for (NvU32 u = 0; u < points.size(); ++u)
+        {
+            if (points[u].m_flags & Neuron<T>::FLAG_K_ION)
+            {
+                m_pKDrawable->addVertex(points[u].m_pos);
+                continue;
+            }
+            if (points[u].m_flags & Neuron<T>::FLAG_NA_ION)
+            {
+                m_pNaDrawable->addVertex(points[u].m_pos);
+                continue;
+            }
+        }
+        m_pKDrawable->updateVertexBuffer();
+        m_pKDrawable->set_uniform_coloring(vec4(1.0f, 0.0f, 0.0f, 1.0f));  // r, g, b, a
+        m_pNaDrawable->updateVertexBuffer();
+        m_pNaDrawable->set_uniform_coloring(vec4(0.0f, 1.0f, 0.0f, 1.0f));  // r, g, b, a
+    }
+    void setViewer(Viewer *pViewer)
+    {
+        m_pViewer = pViewer;
+        pViewer->add_drawable(m_pKDrawable);
+        pViewer->add_drawable(m_pNaDrawable);
+    }
+
+private:
+    MyPointsDrawable *m_pKDrawable = nullptr, *m_pNaDrawable = nullptr; // pointers owned by viewer
+    Neuron<T> m_neuron;
+    Viewer* m_pViewer = nullptr;
 };
 
 int main(int argc, char** argv)
@@ -59,10 +93,8 @@ int main(int argc, char** argv)
     // Create the default Easy3D viewer.
     // Note: a viewer must be created before creating any drawables.
     Viewer viewer("neuron");
-
-    MyModel<double>* pMyModel = new MyModel<double>;
-    viewer.add_drawable(pMyModel);
-
+    MyModel<double> myModel;
+    myModel.setViewer(&viewer);
 
     auto result = viewer.run();
 

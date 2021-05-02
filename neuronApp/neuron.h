@@ -15,14 +15,13 @@ struct Neuron
         for (NvU32 u = 0; u < 1024; ++u)
         {
             Point point;
-            point.m_flags = Point::FLAG_ION;
             if ((u % 100) < 50) // percentage of K ions
             {
-                point.m_flags |= Point::FLAG_K;
+                point.m_flags |= FLAG_K_ION;
             }
             else
             {
-                point.m_flags |= Point::FLAG_NA;
+                point.m_flags |= FLAG_NA_ION;
             }
             for (NvU32 u = 0; u < 3; ++u)
             {
@@ -33,9 +32,9 @@ struct Neuron
         }
     }
 
+    enum FLAGS { FLAG_ION_PUMP = 1, FLAG_K_ION = 2, FLAG_NA_ION = 4 };
     struct Point
     {
-        enum FLAGS { FLAG_ION = 1, FLAG_ION_PUMP = 2, FLAG_K, FLAG_NA };
         NvU32 m_flags = 0;
         rtvector<T, 3> m_pos;
     };
