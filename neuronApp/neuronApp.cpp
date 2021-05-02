@@ -18,54 +18,63 @@ struct MyPointsDrawable : public PointsDrawable
         set_point_size(10);
     }
     template <class T>
-    void addVertex(const rtvector<T, 3>& v)
+    void setVertex(NvU32 index, const rtvector<T, 3>& v)
     {
-        vec3 _v((float)v[0], (float)v[1], (float)v[2]);
-        m_points.push_back(_v);
+        if (m_points.size() <= index)
+        {
+            m_points.resize(index + 1);
+        }
+        m_points[index] = vec3((float)v[0], (float)v[1], (float)v[2]);
     }
     void updateVertexBuffer()
     {
         update_vertex_buffer(m_points);
     }
-private:
     std::vector<vec3> m_points;
 };
 
 template <class T>
-struct MyModel
+struct MyViewer : public Viewer
 {
-    MyModel()
+    MyViewer() : Viewer("neuron")
     {
         m_pKDrawable = new MyPointsDrawable;
+        m_pKDrawable->set_uniform_coloring(vec4(1.0f, 0.0f, 0.0f, 1.0f));  // r, g, b, a
         m_pNaDrawable = new MyPointsDrawable;
+        m_pNaDrawable->set_uniform_coloring(vec4(0.0f, 1.0f, 0.0f, 1.0f));  // r, g, b, a
 
+        add_drawable(m_pKDrawable);
+        add_drawable(m_pNaDrawable);
+    }
+
+    void updateVertexBuffers()
+    {
         const auto& points = m_neuron.points();
-        for (NvU32 u = 0; u < points.size(); ++u)
+        for (NvU32 u = 0, nK = 0, nNa = 0; u < points.size(); ++u)
         {
             if (points[u].m_flags & Neuron<T>::FLAG_K_ION)
             {
-                m_pKDrawable->addVertex(points[u].m_pos);
+                m_pKDrawable->setVertex(nK++, points[u].m_pos);
                 continue;
             }
             if (points[u].m_flags & Neuron<T>::FLAG_NA_ION)
             {
-                m_pNaDrawable->addVertex(points[u].m_pos);
+                m_pNaDrawable->setVertex(nNa++, points[u].m_pos);
                 continue;
             }
         }
+
         m_pKDrawable->updateVertexBuffer();
-        m_pKDrawable->set_uniform_coloring(vec4(1.0f, 0.0f, 0.0f, 1.0f));  // r, g, b, a
         m_pNaDrawable->updateVertexBuffer();
-        m_pNaDrawable->set_uniform_coloring(vec4(0.0f, 1.0f, 0.0f, 1.0f));  // r, g, b, a
-    }
-    void setViewer(Viewer *pViewer)
-    {
-        m_pViewer = pViewer;
-        pViewer->add_drawable(m_pKDrawable);
-        pViewer->add_drawable(m_pNaDrawable);
     }
 
 private:
+    virtual void pre_draw() override
+    {
+        m_neuron.makeTimeStep(0.01);
+        updateVertexBuffers();
+        Viewer::pre_draw();
+    }
     MyPointsDrawable *m_pKDrawable = nullptr, *m_pNaDrawable = nullptr; // pointers owned by viewer
     Neuron<T> m_neuron;
     Viewer* m_pViewer = nullptr;
@@ -92,11 +101,8 @@ int main(int argc, char** argv)
 
     // Create the default Easy3D viewer.
     // Note: a viewer must be created before creating any drawables.
-    Viewer viewer("neuron");
-    MyModel<double> myModel;
-    myModel.setViewer(&viewer);
-
-    auto result = viewer.run();
+    MyViewer<double> myModel;
+    auto result = myModel.run();
 
     return result;
 }
