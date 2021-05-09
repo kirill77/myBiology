@@ -1,4 +1,5 @@
 #define NOMINMAX
+#include <chrono>
 #include <easy3d/viewer/viewer.h>
 #include <easy3d/renderer/drawable_points.h>
 #include <easy3d/renderer/renderer.h>
@@ -71,10 +72,19 @@ struct MyViewer : public Viewer
 private:
     virtual void pre_draw() override
     {
-        m_neuron.makeTimeStep(0.01);
+        auto curTS = std::chrono::high_resolution_clock::now();
+        if (!m_bIsFirstDraw)
+        {
+            auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
+            m_neuron.makeTimeStep(MyNumeric<double>::milliSecond() * 0.1);
+        }
+        else m_bIsFirstDraw = false;
+        m_prevDrawTS = curTS;
         updateVertexBuffers();
         Viewer::pre_draw();
     }
+    bool m_bIsFirstDraw = true;
+    std::chrono::high_resolution_clock::time_point m_prevDrawTS;
     MyPointsDrawable *m_pKDrawable = nullptr, *m_pNaDrawable = nullptr; // pointers owned by viewer
     Neuron<T> m_neuron;
     Viewer* m_pViewer = nullptr;
