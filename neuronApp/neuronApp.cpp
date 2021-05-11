@@ -11,6 +11,9 @@
 
 using namespace easy3d;
 
+// scale to get reasonable sizes for visualization
+static double m_gScaleFactor = 10000;
+
 struct MyPointsDrawable : public PointsDrawable
 {
     MyPointsDrawable()
@@ -25,12 +28,13 @@ struct MyPointsDrawable : public PointsDrawable
         {
             m_points.resize(index + 1);
         }
-        m_points[index] = vec3((float)v[0], (float)v[1], (float)v[2]);
+        m_points[index] = vec3((float)(v[0] * m_gScaleFactor), (float)(v[1] * m_gScaleFactor), (float)(v[2] * m_gScaleFactor));
     }
     void updateVertexBuffer()
     {
         update_vertex_buffer(m_points);
     }
+private:
     std::vector<vec3> m_points;
 };
 
@@ -55,12 +59,12 @@ struct MyViewer : public Viewer
         {
             if (points[u].m_flags & Neuron<T>::FLAG_K_ION)
             {
-                m_pKDrawable->setVertex(nK++, points[u].m_pos);
+                m_pKDrawable->setVertex(nK++, points[u].m_vPos);
                 continue;
             }
             if (points[u].m_flags & Neuron<T>::FLAG_NA_ION)
             {
-                m_pNaDrawable->setVertex(nNa++, points[u].m_pos);
+                m_pNaDrawable->setVertex(nNa++, points[u].m_vPos);
                 continue;
             }
         }
