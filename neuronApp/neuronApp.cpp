@@ -11,15 +11,12 @@
 
 using namespace easy3d;
 
-// scale to get reasonable sizes for visualization
-static double m_gScaleFactor = 10000;
-
 struct MyPointsDrawable : public PointsDrawable
 {
     MyPointsDrawable()
     {
         set_impostor_type(PointsDrawable::SPHERE);
-        set_point_size(10);
+        set_point_size(20);
     }
     template <class T>
     void setVertex(NvU32 index, const rtvector<T, 3>& v)
@@ -28,7 +25,7 @@ struct MyPointsDrawable : public PointsDrawable
         {
             m_points.resize(index + 1);
         }
-        m_points[index] = vec3((float)(v[0] * m_gScaleFactor), (float)(v[1] * m_gScaleFactor), (float)(v[2] * m_gScaleFactor));
+        m_points[index] = vec3((float)v[0], (float)v[1], (float)v[2]);
     }
     void updateVertexBuffer()
     {
@@ -50,6 +47,7 @@ struct MyViewer : public Viewer
 
         add_drawable(m_pKDrawable);
         add_drawable(m_pNaDrawable);
+        this->resize(3840, 2160);
     }
 
     void updateVertexBuffers()
@@ -59,12 +57,12 @@ struct MyViewer : public Viewer
         {
             if (points[u].m_flags & Neuron<T>::FLAG_K_ION)
             {
-                m_pKDrawable->setVertex(nK++, points[u].m_vPos);
+                m_pKDrawable->setVertex(nK++, removeUnits(points[u].m_vPos));
                 continue;
             }
             if (points[u].m_flags & Neuron<T>::FLAG_NA_ION)
             {
-                m_pNaDrawable->setVertex(nNa++, points[u].m_vPos);
+                m_pNaDrawable->setVertex(nNa++, removeUnits(points[u].m_vPos));
                 continue;
             }
         }
@@ -80,12 +78,16 @@ private:
         if (!m_bIsFirstDraw)
         {
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
-            m_neuron.makeTimeStep(MyNumeric<double>::milliSecond() * 0.1);
+            m_neuron.makeTimeStep(MyUnits<double>::nanoSecond());
         }
-        else m_bIsFirstDraw = false;
         m_prevDrawTS = curTS;
         updateVertexBuffers();
+        if (m_bIsFirstDraw)
+        {
+            this->fit_screen();
+        }
         Viewer::pre_draw();
+        m_bIsFirstDraw = false;
     }
     bool m_bIsFirstDraw = true;
     std::chrono::high_resolution_clock::time_point m_prevDrawTS;
@@ -97,6 +99,7 @@ private:
 int main(int argc, char** argv)
 {
     DistributionsTest::test();
+    MyUnitsTest::test();
 
     // initialize logging
     logging::initialize();

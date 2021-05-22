@@ -150,6 +150,9 @@
     <ClCompile Include="neuronApp.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\basics\basics.vcxproj">
+      <Project>{80055c89-fbeb-4a0c-ad51-58b5f8f98a93}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Easy3D\build\3rd_party\backward\3rd_backward.vcxproj">
       <Project>{87218235-8446-3cb0-a012-c136c683912d}</Project>
     </ProjectReference>
