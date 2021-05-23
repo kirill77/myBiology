@@ -119,7 +119,6 @@ struct Neuron
     OcTreeNode<Neuron>& accessNode(NvU32 index) { return m_ocTree[index]; }
     void resizeNodes(NvU32 nNodes) { m_ocTree.resize(nNodes); }
     const rtvector<T, 3>& getPoint(NvU32 u) const { return removeUnits(m_points[u].m_vPos); }
-    void swapPoints(NvU32 u1, NvU32 u2) { nvSwap(m_points[u1], m_points[u2]); }
     static T accuracyThreshold() { return (T)0.4; } // smaller -> more accurate. 0 means absolutely accurate O(N^2) algorithm
 
     // returns true if contributions between those two boxes are fully accounted for (either just now or before - at higher level of hierarchy)
@@ -213,8 +212,57 @@ struct Neuron
         }
         return true;
     }
+    void createChildrenPointIndices(const OcBoxStack<T>& stack, NvU32 firstPoint[8], NvU32 endPoint[8])
+    {
+        const auto& bbox = stack.getCurBox();
+        auto vCenter = bbox.computeCenter();
+        const auto& curNode = m_ocTree[stack.getCurNodeIndex()];
+        NvU32 uFirstPoint = curNode.getFirstPoint();
+        NvU32 uEndPoint = curNode.getEndPoint();
+
+        NvU32 splitZ = loosePointsSort(uFirstPoint, uEndPoint, vCenter[2], 2);
+        NvU32 splitY0 = loosePointsSort(uFirstPoint, splitZ, vCenter[1], 1);
+        NvU32 splitY1 = loosePointsSort(splitZ, uEndPoint, vCenter[1], 1);
+        NvU32 splitX0 = loosePointsSort(uFirstPoint, splitY0, vCenter[0], 0);
+        NvU32 splitX1 = loosePointsSort(splitY0, splitZ, vCenter[0], 0);
+        NvU32 splitX2 = loosePointsSort(splitZ, splitY1, vCenter[0], 0);
+        NvU32 splitX3 = loosePointsSort(splitY1, uEndPoint, vCenter[0], 0);
+
+        firstPoint[0] = uFirstPoint, endPoint[0] = splitX0;
+        firstPoint[1] = splitX0, endPoint[1] = splitY0;
+        firstPoint[2] = splitY0, endPoint[2] = splitX1;
+        firstPoint[3] = splitX1, endPoint[3] = splitZ;
+        firstPoint[4] = splitZ, endPoint[4] = splitX2;
+        firstPoint[5] = splitX2, endPoint[5] = splitY1;
+        firstPoint[6] = splitY1, endPoint[6] = splitX3;
+        firstPoint[7] = splitX3, endPoint[7] = uEndPoint;
+    }
 
 private:
+    // returns index of first point for which points[u][uDim] >= fSplit
+    NvU32 loosePointsSort(NvU32 uBegin, NvU32 uEnd, T fSplit, NvU32 uDim)
+    {
+        for (; ; ++uBegin)
+        {
+            nvAssert(uBegin <= uEnd);
+            if (uBegin == uEnd)
+                return uEnd;
+            T f1 = m_points[uBegin].m_vPos[uDim].m_value;
+            if (f1 < fSplit)
+                continue;
+            // search for element with which we can swap
+            for (--uEnd; ; --uEnd)
+            {
+                nvAssert(uBegin <= uEnd);
+                if (uBegin == uEnd)
+                    return uEnd;
+                T f2 = m_points[uEnd].m_vPos[uDim].m_value;
+                if (f2 < fSplit)
+                    break;
+            }
+            nvSwap(m_points[uBegin], m_points[uEnd]);
+        }
+    }
     void initForcesRecursive(NvU32 uNode)
     {
         auto& node = m_ocTree[uNode];
@@ -246,7 +294,7 @@ private:
 #if ASSERT_ONLY_CODE
             NvU32 dbgNPoints1 = pNode->getNPoints(), dbgNPoints2 = 0;
 #endif
-            pNode->split(stack.getBox(stack.getCurDepth()).computeCenter(), *this);
+            pNode->split(stack, *this);
             NvU32 uFirstChild = m_ocTree[uNode].getFirstChild();
             for (NvU32 uChild = 0; uChild < 8; ++uChild)
             {
