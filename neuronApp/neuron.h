@@ -39,14 +39,6 @@ struct Neuron
             nvAssert(m_bbox.includes(point.m_vPos));
             m_points.push_back(point);
         }
-
-        // create root oc-tree node
-        m_ocTree.resize(1);
-        m_ocTree[0].initLeaf(0, (NvU32)m_points.size());
-        // initialize stack
-        OcBoxStack<T> stack(0, removeUnits(m_bbox));
-        // split oc-tree recursively to get small number of points per leaf
-        splitRecursive(0, stack);
     }
 
     enum FLAGS { FLAG_ION_PUMP = 1, FLAG_K_ION = 2, FLAG_NA_ION = 4 };
@@ -77,6 +69,14 @@ struct Neuron
 
     void makeTimeStep(MyUnits<T> fDeltaT)
     {
+        // create root oc-tree node
+        m_ocTree.resize(1);
+        m_ocTree[0].initLeaf(0, (NvU32)m_points.size());
+        // initialize stack
+        OcBoxStack<T> stack(0, removeUnits(m_bbox));
+        // split oc-tree recursively to get small number of points per leaf
+        splitRecursive(0, stack);
+
         initForcesRecursive(0);
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
@@ -118,7 +118,6 @@ struct Neuron
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
     OcTreeNode<Neuron>& accessNode(NvU32 index) { return m_ocTree[index]; }
     void resizeNodes(NvU32 nNodes) { m_ocTree.resize(nNodes); }
-    const rtvector<T, 3>& getPoint(NvU32 u) const { return removeUnits(m_points[u].m_vPos); }
     static T accuracyThreshold() { return (T)0.4; } // smaller -> more accurate. 0 means absolutely accurate O(N^2) algorithm
 
     // returns true if contributions between those two boxes are fully accounted for (either just now or before - at higher level of hierarchy)
@@ -148,6 +147,7 @@ struct Neuron
                     for (NvU32 uDstPoint = dstNode.getFirstPoint(); uDstPoint < dstNode.getEndPoint(); ++uDstPoint)
                     {
                         Point& dstPoint = m_points[uDstPoint];
+                        nvAssert(dstBox.includes(dstPoint.m_vPos));
                         rtvector<MyUnits<T>,3> vForce = coloumbLaw(dstPoint.m_vPos, dstPoint.m_iCharge, srcBoxCenter, srcNode.m_nodeData.m_iTotalCharge);
                         dstPoint.m_vForce += vForce;
                     }
