@@ -52,8 +52,7 @@ struct Water
             atom.m_vPos[1] = m_bBox.m_vMin[1] + MyUnits<T>::angstrom() * (2 * uY + 1);
             atom.m_vPos[2] = m_bBox.m_vMin[2] + MyUnits<T>::angstrom() * (2 * uZ + 1);
 
-            // atom must be inside the bounding box
-            nvAssert(m_bBox.includes(atom.m_vPos));
+            nvAssert(m_bBox.includes(atom.m_vPos)); // atom must be inside the bounding box
         }
 
         updateForces();
@@ -294,7 +293,6 @@ private:
             {
                 auto vDeltaPos = point.m_vSpeed * m_fTimeStep;
                 point.m_vPos += vDeltaPos;
-                // nvAssert(m_points[1].m_vPos[0] > 0.9 || m_points[1].m_vPos[0] < m_points[2].m_vPos[0]);
 
                 // if the atom exits bounding box, it enters from the other side
                 for (NvU32 uDim = 0; uDim < 3; ++uDim)
@@ -315,6 +313,7 @@ private:
                         nvAssert(m_bBox.m_vMin[uDim] <= point.m_vPos[uDim] && point.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
                     }
                 }
+                nvAssert(m_bBox.includes(point.m_vPos)); // atom must be inside the bounding box
             }
         }
     }
