@@ -2,6 +2,7 @@
 #include <chrono>
 #include <easy3d/viewer/viewer.h>
 #include <easy3d/renderer/drawable_points.h>
+#include <easy3d/renderer/drawable_lines.h>
 #include <easy3d/renderer/renderer.h>
 #include <easy3d/fileio/resources.h>
 #include <easy3d/util/logging.h>
@@ -37,24 +38,45 @@ private:
     std::vector<vec3> m_points;
 };
 
+static vec3 getBoxVertex(const BBox3<MyUnits<double>>& bbox, NvU32 u)
+{
+    vec3 r;
+    for (NvU32 uBit = 0; uBit < 3; ++uBit)
+    {
+        r[uBit] = (float)removeUnits((u & (1 << uBit)) ? bbox.m_vMin[uBit] : bbox.m_vMax[uBit]);
+    }
+    return r;
+}
+static NvU32 countMatchingCoords(const vec3& v1, const vec3& v2)
+{
+    NvU32 n = 0;
+    for (NvU32 u = 0; u < 3; ++u)
+    {
+        if (v1[u] == v2[u]) ++n;
+    }
+    nvAssert(n != 3);
+    return n;
+}
+
 template <class T>
 struct MyViewer : public Viewer
 {
-    MyViewer() : Viewer("neuron")
+    MyViewer() : Viewer("water")
     {
         m_pODrawable = new MyPointsDrawable;
         m_pODrawable->set_uniform_coloring(vec4(1.0f, 0.0f, 0.0f, 1.0f));  // r, g, b, a
         m_pHDrawable = new MyPointsDrawable;
         m_pHDrawable->set_uniform_coloring(vec4(0.0f, 1.0f, 0.0f, 1.0f));  // r, g, b, a
 
-        add_drawable(m_pODrawable);
-        add_drawable(m_pHDrawable);
-        this->resize(3840, 2160);
+        Viewer::add_drawable(m_pODrawable);
+        Viewer::add_drawable(m_pHDrawable);
+
+        Viewer::resize(3840, 2160);
     }
 
     void updateVertexBuffers()
     {
-        const auto& points = m_neuron.points();
+        const auto& points = m_water.points();
         for (NvU32 u = 0, nO = 0, nH = 0; u < points.size(); ++u)
         {
             if (points[u].m_nProtons == 8)
@@ -72,6 +94,35 @@ struct MyViewer : public Viewer
 
         m_pODrawable->updateVertexBuffer();
         m_pHDrawable->updateVertexBuffer();
+
+        if (!m_pBoxDrawable)
+        {
+            m_pBoxDrawable = new LinesDrawable;
+            const auto &bbox = m_water.getBoundingBox();
+
+            std::vector<vec3> pBuffer;
+            for (NvU32 u1 = 0; u1 < 8; ++u1)
+            {
+                vec3 v1 = getBoxVertex(bbox, u1);
+                for (NvU32 u2 = u1 + 1; u2 < 8; ++u2)
+                {
+                    vec3 v2 = getBoxVertex(bbox, u2);
+                    if (countMatchingCoords(v1, v2) == 2)
+                    {
+                        pBuffer.push_back(v1);
+                        pBuffer.push_back(v2);
+                    }
+                }
+            }
+            m_pBoxDrawable->update_vertex_buffer(pBuffer);
+
+            // Draw the lines of the bounding box in blue.
+            m_pBoxDrawable->set_uniform_coloring(vec4(0.0f, 0.0f, 1.0f, 1.0f));    // r, g, b, a
+            // Draw the lines with a width of 5 pixels.
+            m_pBoxDrawable->set_line_width(5.0f);
+
+            Viewer::add_drawable(m_pBoxDrawable);
+        }
     }
 
 private:
@@ -81,7 +132,7 @@ private:
         if (!m_bIsFirstDraw)
         {
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
-            m_neuron.makeTimeStep();
+            m_water.makeTimeStep();
         }
         m_prevDrawTS = curTS;
         updateVertexBuffers();
@@ -96,7 +147,8 @@ private:
     bool m_bIsFirstDraw = true;
     std::chrono::high_resolution_clock::time_point m_prevDrawTS;
     MyPointsDrawable *m_pODrawable = nullptr, *m_pHDrawable = nullptr; // pointers owned by viewer
-    Water<T> m_neuron;
+    LinesDrawable* m_pBoxDrawable = nullptr;
+    Water<T> m_water;
     Viewer* m_pViewer = nullptr;
 };
 

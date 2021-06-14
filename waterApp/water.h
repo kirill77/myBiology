@@ -64,6 +64,7 @@ struct Water
         NvU32 m_nProtons : 8;
         MyUnits<float> m_fCharge; // m_fCharge is a partial charge that appears because of proximity of other atoms
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
+        MyUnits<double> m_fInaccuracy; // used as weight during energy equalization
     };
     inline std::vector<Atom>& points()
     {
@@ -171,40 +172,39 @@ struct Water
         firstPoint[7] = splitX3, endPoint[7] = uEndPoint;
     }
 
+    const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
+
 private:
     // the forces between atoms change rapidly depending on distance - so time discretization introduces significant errors into simulation. since we can't
     // make time step infinitely small - we compensate for inaccuracies by artificially changing speeds in such a way that total energy of the system is conserved
     void changeSpeedsToConserveEnery()
     {
-        // compute multiplier for speeds required to get the same total energy we had in the very beginning of simulation
-        MyUnits<T> fMultiplier;
-        if (m_fCurPot >= m_fInitialPot)
+        MyUnits<T> fEnergyToCompensate = (m_fCurPot + m_fCurKin) - m_fInitialPot;
+        // if we have less energy we're supposed to - do nothing
+        if (fEnergyToCompensate <= 0)
         {
-            // by changing speed we can't completely eliminate the difference between current and initial energies. the best we could do is to make speeds 0
+            return;
         }
-        else
+        // we have to reduce the speed of some atoms to keep total energy constant
+        MyUnits<T> fTotalWeight;
+        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
-            auto fDeltaKin = m_fInitialPot - (m_fCurPot + m_fCurKin);
-            fMultiplier = sqrt((m_fCurKin + fDeltaKin) / m_fCurKin);
+            fTotalWeight += m_points[uPoint].m_fInaccuracy;
         }
-#if ASSERT_ONLY_CODE
-        MyUnits<T> dbgKin;
-#endif
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
             auto& point = m_points[uPoint];
+            MyUnits<T> fCurWeight = point.m_fInaccuracy / fTotalWeight;
+            MyUnits<T> fCurCompensation = fEnergyToCompensate * fCurWeight;
+            MyUnits<T> fCurKineticEnergy = lengthSquared(point.m_vSpeed) * BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass / 2;
+            if (fCurKineticEnergy <= fCurCompensation)
+            {
+                point.m_vSpeed.set(MyUnits<T>(0));
+                continue;
+            }
+            auto fMultiplier = sqrt((fCurKineticEnergy - fCurCompensation) / fCurKineticEnergy);
             point.m_vSpeed *= fMultiplier;
-#if ASSERT_ONLY_CODE
-            dbgKin += lengthSquared(point.m_vSpeed) * BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass / 2;
-#endif
         }
-#if ASSERT_ONLY_CODE
-        if (fMultiplier > 0) // check that after adjustment we got approximately the same total energy we had in the beginning
-        {
-            auto fPercentDifference = (dbgKin + m_fCurPot - m_fInitialPot) / m_fInitialPot * 100;
-            nvAssert(std::abs(fPercentDifference) < 1);
-        }
-#endif
     }
     void updateForces()
     {
@@ -284,6 +284,7 @@ private:
             auto& point = m_points[uPoint];
             auto fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
             rtvector<MyUnits<T>, 3> vAcceleration = newtonLaw(fMass, point.m_vForce);
+            point.m_fInaccuracy = (point.m_fInaccuracy + lengthSquared(vAcceleration)) / 2;
             point.m_vSpeed += vAcceleration * fHalfTimeStep;
             if (VERLET_STEP_INDEX == 1)
             {
