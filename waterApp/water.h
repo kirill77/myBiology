@@ -147,31 +147,6 @@ struct Water
         }
         return true;
     }
-    void createChildrenPointIndices(const OcBoxStack<T>& stack, NvU32 firstPoint[8], NvU32 endPoint[8])
-    {
-        const auto& bbox = stack.getCurBox();
-        auto vCenter = bbox.computeCenter();
-        const auto& curNode = m_ocTree[stack.getCurNodeIndex()];
-        NvU32 uFirstPoint = curNode.getFirstPoint();
-        NvU32 uEndPoint = curNode.getEndPoint();
-
-        NvU32 splitZ = loosePointsSort(uFirstPoint, uEndPoint, vCenter[2], 2);
-        NvU32 splitY0 = loosePointsSort(uFirstPoint, splitZ, vCenter[1], 1);
-        NvU32 splitY1 = loosePointsSort(splitZ, uEndPoint, vCenter[1], 1);
-        NvU32 splitX0 = loosePointsSort(uFirstPoint, splitY0, vCenter[0], 0);
-        NvU32 splitX1 = loosePointsSort(splitY0, splitZ, vCenter[0], 0);
-        NvU32 splitX2 = loosePointsSort(splitZ, splitY1, vCenter[0], 0);
-        NvU32 splitX3 = loosePointsSort(splitY1, uEndPoint, vCenter[0], 0);
-
-        firstPoint[0] = uFirstPoint, endPoint[0] = splitX0;
-        firstPoint[1] = splitX0, endPoint[1] = splitY0;
-        firstPoint[2] = splitY0, endPoint[2] = splitX1;
-        firstPoint[3] = splitX1, endPoint[3] = splitZ;
-        firstPoint[4] = splitZ, endPoint[4] = splitX2;
-        firstPoint[5] = splitX2, endPoint[5] = splitY1;
-        firstPoint[6] = splitY1, endPoint[6] = splitX3;
-        firstPoint[7] = splitX3, endPoint[7] = uEndPoint;
-    }
 
     const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
 
@@ -184,6 +159,31 @@ struct Water
         return MyUnits<T>::evalPressure(m_fCurKin, m_bBox.evalVolume(), (NvU32)m_points.size());
     }
     const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
+
+    // returns index of first point for which points[u][uDim] >= fSplit
+    NvU32 loosePointsSort(NvU32 uBegin, NvU32 uEnd, T fSplit, NvU32 uDim)
+    {
+        for (; ; ++uBegin)
+        {
+            nvAssert(uBegin <= uEnd);
+            if (uBegin == uEnd)
+                return uEnd;
+            T f1 = m_points[uBegin].m_vPos[uDim].m_value;
+            if (f1 < fSplit)
+                continue;
+            // search for element with which we can swap
+            for (--uEnd; ; --uEnd)
+            {
+                nvAssert(uBegin <= uEnd);
+                if (uBegin == uEnd)
+                    return uEnd;
+                T f2 = m_points[uEnd].m_vPos[uDim].m_value;
+                if (f2 < fSplit)
+                    break;
+            }
+            nvSwap(m_points[uBegin], m_points[uEnd]);
+        }
+    }
 
 private:
     // the forces between atoms change rapidly depending on distance - so time discretization introduces significant errors into simulation. since we can't
@@ -329,30 +329,6 @@ private:
         }
     }
 
-    // returns index of first point for which points[u][uDim] >= fSplit
-    NvU32 loosePointsSort(NvU32 uBegin, NvU32 uEnd, T fSplit, NvU32 uDim)
-    {
-        for (; ; ++uBegin)
-        {
-            nvAssert(uBegin <= uEnd);
-            if (uBegin == uEnd)
-                return uEnd;
-            T f1 = m_points[uBegin].m_vPos[uDim].m_value;
-            if (f1 < fSplit)
-                continue;
-            // search for element with which we can swap
-            for (--uEnd; ; --uEnd)
-            {
-                nvAssert(uBegin <= uEnd);
-                if (uBegin == uEnd)
-                    return uEnd;
-                T f2 = m_points[uEnd].m_vPos[uDim].m_value;
-                if (f2 < fSplit)
-                    break;
-            }
-            nvSwap(m_points[uBegin], m_points[uEnd]);
-        }
-    }
     void splitRecursive(const NvU32 uNode, OcBoxStack<T> &stack)
     {
         auto* pNode = &m_ocTree[uNode];
