@@ -58,6 +58,40 @@ static NvU32 countMatchingCoords(const vec3& v1, const vec3& v2)
     return n;
 }
 
+template <NvU32 LOGN>
+struct MyFilter
+{
+    MyFilter() { memset(this, 0, sizeof(*this)); }
+
+    void addValue(double f)
+    {
+        NvU32 u = (m_nValues++) & MASK;
+        m_fSum -= m_fValues[u];
+        m_fValues[u] = f;
+        m_fSum += f;
+        if (u % 1024 == 0)
+        {
+            resetSum();
+        }
+    }
+    double getAverage() const
+    {
+        return m_nValues == 0 ? 0 : m_fSum / std::min(m_nValues, MASK);
+    }
+
+private:
+    void resetSum()
+    {
+        m_fSum = m_fValues[0];
+        for (NvU32 u = 1; u < N; ++u) m_fSum += m_fValues[u];
+    }
+    static const NvU32 N = (1 << LOGN);
+    static const NvU32 MASK = N - 1;
+    double m_fSum;
+    double m_fValues[N];
+    NvU32 m_nValues;
+};
+
 template <class T>
 struct MyViewer : public Viewer
 {
@@ -143,6 +177,35 @@ private:
         Viewer::pre_draw();
         m_bIsFirstDraw = false;
     }
+    virtual void draw() override
+    {
+        Viewer::draw();
+
+        const float font_size = 28.0f + font_size_delta_;
+        float x = 50.0f;
+        float y = 80.0f;
+
+        const int num_fonts = texter_->num_fonts();
+        const float font_height = texter_->font_height(font_size);
+
+        char sBuffer[32];
+        m_fTemp.addValue(m_water.evalTemperature().toCelcius());
+        sprintf_s(sBuffer, "T(C): %.1lf", m_fTemp.getAverage());
+        texter_->draw(sBuffer,
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 0, vec3(0, 0, 0),
+            line_spacing_, upper_left_);
+        x += 200;
+        m_fPressure.addValue(m_water.evalPressure().toAtmospheres());
+        sprintf_s(sBuffer, "P(atm): %.1lf", m_fPressure.getAverage());
+        texter_->draw(sBuffer,
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 0, vec3(0, 0, 0),
+            line_spacing_, upper_left_);
+        x += 200;
+        sprintf_s(sBuffer, "Tstep(fs): %.4lf", m_water.getCurTimeStep().toFemtoseconds());
+        texter_->draw(sBuffer,
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 0, vec3(0, 0, 0),
+            line_spacing_, upper_left_);
+    }
 
     bool m_bIsFirstDraw = true;
     std::chrono::high_resolution_clock::time_point m_prevDrawTS;
@@ -150,6 +213,14 @@ private:
     LinesDrawable* m_pBoxDrawable = nullptr;
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
+
+    MyFilter<7> m_fTemp, m_fPressure;
+
+    // for text rendering:
+    float font_size_delta_ = -20;
+    float line_spacing_ = 0;
+    int alignment_ = TextRenderer::ALIGN_CENTER;
+    bool upper_left_ = true;
 };
 
 int main(int argc, char** argv)

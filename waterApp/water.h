@@ -81,6 +81,7 @@ struct Water
 
         changeSpeedsToConserveEnery();
     }
+
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
     OcTreeNode<Water>& accessNode(NvU32 index) { return m_ocTree[index]; }
     void resizeNodes(NvU32 nNodes) { m_ocTree.resize(nNodes); }
@@ -174,6 +175,16 @@ struct Water
 
     const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
 
+    MyUnits<T> evalTemperature() const
+    {
+        return MyUnits<T>::evalTemperature(m_fCurKin / (NvU32)m_points.size());
+    }
+    MyUnits<T> evalPressure() const
+    {
+        return MyUnits<T>::evalPressure(m_fCurKin, m_bBox.evalVolume(), (NvU32)m_points.size());
+    }
+    const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
+
 private:
     // the forces between atoms change rapidly depending on distance - so time discretization introduces significant errors into simulation. since we can't
     // make time step infinitely small - we compensate for inaccuracies by artificially changing speeds in such a way that total energy of the system is conserved
@@ -191,6 +202,7 @@ private:
         {
             fTotalWeight += m_points[uPoint].m_fInaccuracy;
         }
+        m_fCurKin.clear();
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
             auto& point = m_points[uPoint];
@@ -202,8 +214,10 @@ private:
                 point.m_vSpeed.set(MyUnits<T>(0));
                 continue;
             }
-            auto fMultiplier = sqrt((fCurKineticEnergy - fCurCompensation) / fCurKineticEnergy);
+            auto fMultiplierSqr = (fCurKineticEnergy - fCurCompensation) / fCurKineticEnergy;
+            auto fMultiplier = sqrt(fMultiplierSqr);
             point.m_vSpeed *= fMultiplier;
+            m_fCurKin += fCurKineticEnergy * fMultiplierSqr;
         }
     }
     void updateForces()
@@ -230,10 +244,6 @@ private:
         m_ocTree[0].computeForces(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
     }
-
-    MyUnits<T> m_fCurPot, m_fCurKin, m_fInitialPot;
-    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
-    MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 40, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
     template <NvU32 VERLET_STEP_INDEX> 
     void advect()
@@ -282,7 +292,7 @@ private:
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
             auto& point = m_points[uPoint];
-            auto fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
+            MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
             rtvector<MyUnits<T>, 3> vAcceleration = newtonLaw(fMass, point.m_vForce);
             point.m_fInaccuracy = (point.m_fInaccuracy + lengthSquared(vAcceleration)) / 2;
             point.m_vSpeed += vAcceleration * fHalfTimeStep;
@@ -393,11 +403,18 @@ private:
         }
         nvAssert(dbgNPoints1 == dbgNPoints2);
     }
+
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
     std::vector<Atom> m_points;
     std::vector<OcTreeNode<Water>> m_ocTree;
     RNGUniform m_rng;
+
+    double m_fInitialTempC = 20; // initial temp we'd like to reach
+    MyUnits<T> m_fCurPot, m_fCurKin, m_fInitialPot; // energy conservation variables
+    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
+    MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 40, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
+
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions;
 #endif
