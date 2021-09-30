@@ -20,7 +20,7 @@ struct Water
         m_fBoxSize = MyUnits<T>::angstrom() * 10;
         m_fHalfBoxSize = m_fBoxSize / 2.;
         m_bBox.m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
-        m_bBox.m_vMax = makeVector<MyUnits<T>, 3>(m_fHalfBoxSize);
+        m_bBox.m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
 
         m_points.resize(64);// 1000 * 3);
         NvU32 nOs = 0, nHs = 0;
@@ -386,7 +386,6 @@ private:
     std::vector<OcTreeNode<Water>> m_ocTree;
     RNGUniform m_rng;
 
-    double m_fInitialTempC = 20; // initial temp we'd like to reach
     MyUnits<T> m_fCurPot, m_fCurKin, m_fInitialPot; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 40, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;

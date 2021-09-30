@@ -76,7 +76,7 @@ struct MyFilter
     }
     double getAverage() const
     {
-        return m_nValues == 0 ? 0 : m_fSum / std::min(m_nValues, MASK);
+        return m_nValues == 0 ? 0 : m_fSum / std::min(m_nValues, N);
     }
 
 private:
@@ -181,7 +181,7 @@ private:
     {
         Viewer::draw();
 
-        const float font_size = 28.0f + font_size_delta_;
+        const float font_size = 40.0f + font_size_delta_;
         float x = 50.0f;
         float y = 80.0f;
 
@@ -190,20 +190,21 @@ private:
 
         char sBuffer[32];
         m_fTemp.addValue(m_water.evalTemperature().toCelcius());
-        sprintf_s(sBuffer, "T(C): %.1lf", m_fTemp.getAverage());
+        double fAverageTempC = m_fTemp.getAverage();
+        sprintf_s(sBuffer, "T(C): %.1lf", fAverageTempC);
         texter_->draw(sBuffer,
-            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 0, vec3(0, 0, 0),
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
         m_fPressure.addValue(m_water.evalPressure().toAtmospheres());
         sprintf_s(sBuffer, "P(atm): %.1lf", m_fPressure.getAverage());
         texter_->draw(sBuffer,
-            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 0, vec3(0, 0, 0),
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
         sprintf_s(sBuffer, "Tstep(fs): %.4lf", m_water.getCurTimeStep().toFemtoseconds());
         texter_->draw(sBuffer,
-            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 0, vec3(0, 0, 0),
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
     }
 
