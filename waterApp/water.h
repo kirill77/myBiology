@@ -17,6 +17,9 @@ struct Water
 
     Water() : m_rng(1274)//(NvU32)time(nullptr))
     {
+        m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
+        m_fMaxAllowedKin = m_fWantedAverageKin * 10;
+
         m_fBoxSize = MyUnits<T>::angstrom() * 10;
         m_fHalfBoxSize = m_fBoxSize / 2.;
         m_bBox.m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
@@ -64,7 +67,6 @@ struct Water
         NvU32 m_nProtons : 8;
         MyUnits<float> m_fCharge; // m_fCharge is a partial charge that appears because of proximity of other atoms
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
-        MyUnits<double> m_fInaccuracy; // used as weight during energy equalization
     };
     inline std::vector<Atom>& points()
     {
@@ -79,7 +81,7 @@ struct Water
 
         advect<1>(); // advect velocities by half step
 
-        changeSpeedsToConserveEnery();
+        changeSpeedsToConserveTemp();
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
@@ -186,7 +188,50 @@ struct Water
     }
 
 private:
-    // the forces between atoms change rapidly depending on distance - so time discretization introduces significant errors into simulation. since we can't
+    // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation. since we can't
+    // make time step infinitely small - we compensate for inaccuracies by artificially changing speeds to have constant average temperature
+    void changeSpeedsToConserveTemp()
+    {
+#if ASSERT_ONLY_CODE
+        // check that speed isn't too high
+        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
+        {
+            Atom& point = m_points[uPoint];
+            MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
+            MyUnits<T> fCurKin = lengthSquared(point.m_vSpeed) * fMass / 2;
+            nvAssert(fCurKin.m_value <= m_fMaxAllowedKin.m_value * 1.00001);
+        }
+#endif
+        // multiply everything by a constant to achieve desired average temperature
+        MyUnits<T> fCurAverageKin = m_fCurKin / m_points.size();
+        T fMultiplier = sqrt(m_fWantedAverageKin.m_value / fCurAverageKin.m_value);
+#if ASSERT_ONLY_CODE
+        MyUnits<T> dbgKin;
+#endif
+        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
+        {
+            Atom& point = m_points[uPoint];
+            point.m_vSpeed *= fMultiplier;
+#if ASSERT_ONLY_CODE
+            dbgKin += lengthSquared(point.m_vSpeed) * BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass / 2;
+#endif
+        }
+        nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
+        m_fCurKin = m_fWantedAverageKin * m_points.size();
+    }
+    inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3> &vSpeed, MyUnits<T> fMass)
+    {
+        MyUnits<T> fKin = lengthSquared(vSpeed) * fMass / 2;
+        if (fKin <= m_fMaxAllowedKin)
+            return fKin;
+        vSpeed *= sqrt(m_fMaxAllowedKin / fKin);
+#if ASSERT_ONLY_CODE
+        fKin = lengthSquared(vSpeed) * fMass / 2;
+        nvAssert(aboutEqual(fKin.m_value, m_fMaxAllowedKin.m_value, 0.01));
+#endif
+        return m_fMaxAllowedKin;
+    }
+    // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation. since we can't
     // make time step infinitely small - we compensate for inaccuracies by artificially changing speeds in such a way that total energy of the system is conserved
     void changeSpeedsToConserveEnery()
     {
@@ -200,13 +245,13 @@ private:
         MyUnits<T> fTotalWeight;
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
-            fTotalWeight += m_points[uPoint].m_fInaccuracy;
+            fTotalWeight += length(m_points[uPoint].m_vForce);
         }
         m_fCurKin.clear();
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
             auto& point = m_points[uPoint];
-            MyUnits<T> fCurWeight = point.m_fInaccuracy / fTotalWeight;
+            MyUnits<T> fCurWeight = length(point.m_vForce) / fTotalWeight;
             MyUnits<T> fCurCompensation = fEnergyToCompensate * fCurWeight;
             MyUnits<T> fCurKineticEnergy = lengthSquared(point.m_vSpeed) * BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass / 2;
             if (fCurKineticEnergy <= fCurCompensation)
@@ -257,8 +302,10 @@ private:
             for (NvU32 uPoint = 0; ; )
             {
                 const auto& point = m_points[uPoint];
-                rtvector<MyUnits<T>, 3> vAcceleration = newtonLaw(BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass, point.m_vForce);
+                MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
+                rtvector<MyUnits<T>, 3> vAcceleration = newtonLaw(fMass, point.m_vForce);
                 rtvector<MyUnits<T>, 3> vNewSpeed = point.m_vSpeed + vAcceleration * fHalfTimeStep;
+                clampTheSpeed(vNewSpeed, fMass);
                 rtvector<MyUnits<T>, 3> vDeltaPos = vNewSpeed * m_fTimeStep;
                 MyUnits<T> fDeltaPosSqr = lengthSquared(vDeltaPos);
                 if (fDeltaPosSqr > m_fMaxSpaceStepSqr) // if delta pos is too large - decrease step size
@@ -294,11 +341,11 @@ private:
             auto& point = m_points[uPoint];
             MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
             rtvector<MyUnits<T>, 3> vAcceleration = newtonLaw(fMass, point.m_vForce);
-            point.m_fInaccuracy = (point.m_fInaccuracy + lengthSquared(vAcceleration)) / 2;
             point.m_vSpeed += vAcceleration * fHalfTimeStep;
+            MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed, fMass);
             if (VERLET_STEP_INDEX == 1)
             {
-                m_fCurKin += lengthSquared(point.m_vSpeed) * fMass / 2;
+                m_fCurKin += fKin;
             }
             if (VERLET_STEP_INDEX == 0)
             {
@@ -339,7 +386,7 @@ private:
             // update total node charge
             for (NvU32 uPoint = pNode->getFirstPoint(); uPoint < pNode->getEndPoint(); ++uPoint)
             {
-                auto& point = m_points[uPoint];
+                Atom& point = m_points[uPoint];
                 pNode->m_nodeData.m_fTotalCharge += point.m_fCharge;
             }
             return;
@@ -386,9 +433,11 @@ private:
     std::vector<OcTreeNode<Water>> m_ocTree;
     RNGUniform m_rng;
 
+    const double m_fWantedTempC = 20;
+    MyUnits<T> m_fWantedAverageKin, m_fMaxAllowedKin;
     MyUnits<T> m_fCurPot, m_fCurKin, m_fInitialPot; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
-    MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 40, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
+    MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions;
