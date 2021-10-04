@@ -18,6 +18,9 @@
     <ClCompile Include="waterApp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="water.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="water.h">

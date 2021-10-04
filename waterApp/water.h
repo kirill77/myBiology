@@ -17,15 +17,12 @@ struct Water
 
     Water() : m_rng(1274)//(NvU32)time(nullptr))
     {
-        m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
-        m_fMaxAllowedKin = m_fWantedAverageKin * 10;
-
         m_fBoxSize = MyUnits<T>::angstrom() * 10;
         m_fHalfBoxSize = m_fBoxSize / 2.;
         m_bBox.m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
         m_bBox.m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
 
-        m_points.resize(64);// 1000 * 3);
+        m_points.resize(3 * 60);
         NvU32 nOs = 0, nHs = 0;
 
         for (NvU32 u = 0; u < m_points.size(); ++u)
@@ -51,15 +48,20 @@ struct Water
                 uZ |= (_u & 4) ? (1 << uBit) : 0;
                 _u >>= 3;
             }
-            atom.m_vPos[0] = m_bBox.m_vMin[0] + MyUnits<T>::angstrom() * (2 * uX + 1);
-            atom.m_vPos[1] = m_bBox.m_vMin[1] + MyUnits<T>::angstrom() * (2 * uY + 1);
-            atom.m_vPos[2] = m_bBox.m_vMin[2] + MyUnits<T>::angstrom() * (2 * uZ + 1);
+            atom.m_vPos[0] = m_bBox.m_vMin[0] + MyUnits<T>::angstrom() * (uX + 1);
+            atom.m_vPos[1] = m_bBox.m_vMin[1] + MyUnits<T>::angstrom() * (uY + 1);
+            atom.m_vPos[2] = m_bBox.m_vMin[2] + MyUnits<T>::angstrom() * (uZ + 1);
 
             nvAssert(m_bBox.includes(atom.m_vPos)); // atom must be inside the bounding box
         }
 
         updateForces();
+
         m_fInitialPot = m_fCurPot;
+
+        m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
+        m_fMaxAllowedKin = m_fWantedAverageKin * 10;
+        m_fWantedTotalKin = m_fWantedAverageKin * (double)m_points.size();
     }
 
     struct Atom
@@ -203,8 +205,7 @@ private:
         }
 #endif
         // multiply everything by a constant to achieve desired average temperature
-        MyUnits<T> fCurAverageKin = m_fCurKin / m_points.size();
-        T fMultiplier = sqrt(m_fWantedAverageKin.m_value / fCurAverageKin.m_value);
+        T fMultiplier = sqrt(m_fWantedTotalKin.m_value / m_fCurKin.m_value);
 #if ASSERT_ONLY_CODE
         MyUnits<T> dbgKin;
 #endif
@@ -217,7 +218,7 @@ private:
 #endif
         }
         nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
-        m_fCurKin = m_fWantedAverageKin * m_points.size();
+        m_fCurKin = m_fWantedTotalKin;
     }
     inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3> &vSpeed, MyUnits<T> fMass)
     {
@@ -376,56 +377,7 @@ private:
         }
     }
 
-    void splitRecursive(const NvU32 uNode, OcBoxStack<T> &stack)
-    {
-        auto* pNode = &m_ocTree[uNode];
-        nvAssert(pNode->isLeaf());
-        pNode->m_nodeData.m_fTotalCharge.clear();
-        if (pNode->getNPoints() <= 16) // no need to split further?
-        {
-            // update total node charge
-            for (NvU32 uPoint = pNode->getFirstPoint(); uPoint < pNode->getEndPoint(); ++uPoint)
-            {
-                Atom& point = m_points[uPoint];
-                pNode->m_nodeData.m_fTotalCharge += point.m_fCharge;
-            }
-            return;
-        }
-#if ASSERT_ONLY_CODE
-        NvU32 dbgNPoints1 = pNode->getNPoints(), dbgNPoints2 = 0;
-#endif
-        pNode->split(stack, *this);
-        NvU32 uFirstChild = m_ocTree[uNode].getFirstChild();
-        for (NvU32 uChild = 0; uChild < 8; ++uChild)
-        {
-#if ASSERT_ONLY_CODE
-            NvU32 dbgDepth = stack.getCurDepth();
-            auto dbgBox = stack.getBox(dbgDepth);
-#endif
-            stack.push(uChild, uFirstChild + uChild);
-#if ASSERT_ONLY_CODE
-            nvAssert(stack.getCurDepth() == dbgDepth + 1);
-            auto& node = m_ocTree[uFirstChild + uChild];
-            dbgNPoints2 += node.getNPoints();
-            if (stack.getCurDepth() == 1)
-            {
-                for (NvU32 u = node.getFirstPoint(); u < node.getEndPoint(); ++u)
-                {
-                    nvAssert(stack.getBox(stack.getCurDepth()).includes(removeUnits(m_points[u].m_vPos)));
-                }
-            }
-#endif
-            splitRecursive(uFirstChild + uChild, stack);
-            m_ocTree[uNode].m_nodeData.m_fTotalCharge += m_ocTree[uFirstChild + uChild].m_nodeData.m_fTotalCharge;
-#if ASSERT_ONLY_CODE
-            NvU32 childIndex = stack.pop();
-            nvAssert(childIndex == uChild);
-            nvAssert(stack.getCurDepth() == dbgDepth);
-            nvAssert(stack.getBox(dbgDepth) == dbgBox);
-#endif
-        }
-        nvAssert(dbgNPoints1 == dbgNPoints2);
-    }
+    void splitRecursive(const NvU32 uNode, OcBoxStack<T>& stack);
 
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
@@ -433,8 +385,8 @@ private:
     std::vector<OcTreeNode<Water>> m_ocTree;
     RNGUniform m_rng;
 
-    const double m_fWantedTempC = 20;
-    MyUnits<T> m_fWantedAverageKin, m_fMaxAllowedKin;
+    const double m_fWantedTempC = 37;
+    MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
     MyUnits<T> m_fCurPot, m_fCurKin, m_fInitialPot; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
