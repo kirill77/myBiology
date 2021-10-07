@@ -42,8 +42,8 @@ void Water<_T>::splitRecursive(const NvU32 uNode, OcBoxStack<T>& stack)
 #endif
         splitRecursive(uFirstChild + uChild, stack);
         m_ocTree[uNode].m_nodeData.m_fTotalCharge += m_ocTree[uFirstChild + uChild].m_nodeData.m_fTotalCharge;
-#if ASSERT_ONLY_CODE
         NvU32 childIndex = stack.pop();
+#if ASSERT_ONLY_CODE
         nvAssert(childIndex == uChild);
         nvAssert(stack.getCurDepth() == dbgDepth);
         nvAssert(stack.getBox(dbgDepth) == dbgBox);

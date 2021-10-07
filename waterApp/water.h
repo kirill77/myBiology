@@ -2,7 +2,7 @@
 
 #include "basics/bonds.h"
 #include "ocTree/ocTree.h"
-#include "MonteCarlo/RNGUniform.h"
+#include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 
 template <class _T>
@@ -15,14 +15,23 @@ struct Water
         MyUnits<double> m_fTotalCharge;
     };
 
-    Water() : m_rng(1274)//(NvU32)time(nullptr))
+    Water()
     {
-        m_fBoxSize = MyUnits<T>::angstrom() * 10;
+        m_fBoxSize = MyUnits<T>::angstrom() * 20;
         m_fHalfBoxSize = m_fBoxSize / 2.;
         m_bBox.m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
         m_bBox.m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
 
-        m_points.resize(3 * 60);
+        MyUnits<T> volume = m_fBoxSize * m_fBoxSize * m_fBoxSize;
+        // one mole of water has volume of 18 milliliters
+        NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
+#ifdef NDEBUG
+        m_points.resize(3 * nWaterMolecules);
+#else
+        // debug can't simulate all molecules - too slow
+        m_points.resize(3 * 32);
+#endif
+
         NvU32 nOs = 0, nHs = 0;
 
         for (NvU32 u = 0; u < m_points.size(); ++u)
@@ -39,20 +48,17 @@ struct Water
                 ++nOs;
             }
 
-            // convert u into 3 coordinates (space-filling curve)
-            NvU32 uX = 0, uY = 0, uZ = 0;
-            for (NvU32 uBit = 0, _u = u; _u > 0; ++uBit)
+            for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
-                uX |= (_u & 1) ? (1 << uBit) : 0;
-                uY |= (_u & 2) ? (1 << uBit) : 0;
-                uZ |= (_u & 4) ? (1 << uBit) : 0;
-                _u >>= 3;
+                double f = m_rng.generate01();
+                atom.m_vPos[uDim] = m_bBox.m_vMin[uDim] * f + m_bBox.m_vMax[uDim] * (1 - f);
             }
-            atom.m_vPos[0] = m_bBox.m_vMin[0] + MyUnits<T>::angstrom() * (uX + 1);
-            atom.m_vPos[1] = m_bBox.m_vMin[1] + MyUnits<T>::angstrom() * (uY + 1);
-            atom.m_vPos[2] = m_bBox.m_vMin[2] + MyUnits<T>::angstrom() * (uZ + 1);
+            m_rng.nextSeed();
 
-            nvAssert(m_bBox.includes(atom.m_vPos)); // atom must be inside the bounding box
+            if (!m_bBox.includes(atom.m_vPos)) // atom must be inside the bounding box
+            {
+                __debugbreak();
+            }
         }
 
         updateForces();
@@ -383,7 +389,7 @@ private:
     BBox3<MyUnits<T>> m_bBox;
     std::vector<Atom> m_points;
     std::vector<OcTreeNode<Water>> m_ocTree;
-    RNGUniform m_rng;
+    RNGSobol m_rng;
 
     const double m_fWantedTempC = 37;
     MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
