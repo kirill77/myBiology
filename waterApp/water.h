@@ -92,65 +92,68 @@ struct Water
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
     OcTreeNode<Water>& accessNode(NvU32 index) { return m_ocTree[index]; }
+    bool isOkToBeNotLeaf(const OcTreeNode<Water>& node) const
+    {
+        return node.getNPoints() > 0; // we would we split node with 0 points in it?
+    }
+    bool canHaveInteraction(const OcTreeNode<Water>& node) const
+    {
+        return node.getNPoints() > 0;
+    }
     void resizeNodes(NvU32 nNodes) { m_ocTree.resize(nNodes); }
 
-    // returns true if contributions between those two boxes are fully accounted for (either just now or before - at higher level of hierarchy)
-    bool addNode2LeafContribution(NvU32 dstLeafIndex, const OcBoxStack<T>& dstLeafStack, NvU32 srcNodeIndex, const OcBoxStack<T>& srcNodeStack)
+    // returns true if after this call interaction between those two boxes are fully accounted for
+    bool addLeafAndNodeInteraction(NvU32 leafIndex, const OcBoxStack<T>& leafStack, NvU32 nodeIndex, const OcBoxStack<T>& nodeStack)
     {
-        nvAssert(m_ocTree[dstLeafIndex].getNPoints() && m_ocTree[srcNodeIndex].getNPoints());
+        nvAssert(m_ocTree[leafIndex].getNPoints() && m_ocTree[nodeIndex].getNPoints());
         // check if we can treat srcNode as one point as opposed to looking at its individual sub-boxes or points
-        if (!dstLeafStack.isDescendent(srcNodeStack))
+        if (leafIndex != nodeIndex)
         {
-            const auto& dstBox = setUnits<MyUnits<T>>(dstLeafStack.getCurBox());
-            const auto& srcBox = setUnits<MyUnits<T>>(srcNodeStack.getCurBox());
+            const auto& leafBox = setUnits<MyUnits<T>>(leafStack.getCurBox());
+            const auto& nodeBox = setUnits<MyUnits<T>>(nodeStack.getCurBox());
             // if boxes are too far - particles can't affect each other - rule that interactions are accounted for
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
-                if (dstBox.m_vMin[uDim] > srcBox.m_vMax[uDim] + BondsDataBase<T>::s_zeroForceDist ||
-                    srcBox.m_vMin[uDim] > dstBox.m_vMax[uDim] + BondsDataBase<T>::s_zeroForceDist)
+                if (leafBox.m_vMin[uDim] > nodeBox.m_vMax[uDim] + BondsDataBase<T>::s_zeroForceDist ||
+                    nodeBox.m_vMin[uDim] > leafBox.m_vMax[uDim] + BondsDataBase<T>::s_zeroForceDist)
                 {
 #if ASSERT_ONLY_CODE
-                    m_dbgNContributions += m_ocTree[dstLeafIndex].getNPoints() * m_ocTree[srcNodeIndex].getNPoints();
+                    m_dbgNContributions += m_ocTree[leafIndex].getNPoints() * m_ocTree[nodeIndex].getNPoints();
 #endif
                     return true;
                 }
             }
+            // we want to descend until leafs because it's possible some nodes will be cut off early that way
+            auto& node = m_ocTree[nodeIndex];
+            if (!node.isLeaf())
+                return false;
         }
-        auto& srcNode = m_ocTree[srcNodeIndex];
-        if (!srcNode.isLeaf())
-            return false;
-        // if srcNode is leaf, then go over all its points and compute point-to-point interactions. as optimization, we can apply those interaction
-        // in symmetric way - applying both force and counter-force at the same time. to avoid double-counting interactions, we only do that when:
-        if (dstLeafIndex <= srcNodeIndex)
+        auto& leafNode1 = m_ocTree[leafIndex];
+        nvAssert(leafNode1.getNPoints());
+        auto& leafNode2 = m_ocTree[nodeIndex];
+        for (NvU32 uPoint2 = leafNode2.getFirstPoint(); uPoint2 < leafNode2.getEndPoint(); ++uPoint2)
         {
-            auto& dstNode = m_ocTree[dstLeafIndex];
-            nvAssert(dstNode.getNPoints());
-            for (NvU32 uSrcPoint = srcNode.getFirstPoint(); uSrcPoint < srcNode.getEndPoint(); ++uSrcPoint)
+            auto& point2 = m_points[uPoint2];
+            for (NvU32 uPoint1 = (leafIndex == nodeIndex) ? uPoint2 + 1 : leafNode1.getFirstPoint(); uPoint1 < leafNode1.getEndPoint(); ++uPoint1)
             {
-                auto& srcPoint = m_points[uSrcPoint];
-                for (NvU32 uDstPoint = dstNode.getFirstPoint(); uDstPoint < dstNode.getEndPoint(); ++uDstPoint)
+                auto& point1 = m_points[uPoint1];
+                auto& eBond = BondsDataBase<T>::getEBond(point1.m_nProtons, point2.m_nProtons, 1);
+                typename BondsDataBase<T>::LJ_Out out;
+                out.vForce = point1.m_vPos - point2.m_vPos;
+                for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
                 {
-                    if (dstLeafIndex == srcNodeIndex && uDstPoint >= uSrcPoint) // avoid double-counting
-                        continue;
-                    auto& dstPoint = m_points[uDstPoint];
-                    auto& eBond = BondsDataBase<T>::getEBond(dstPoint.m_nProtons, srcPoint.m_nProtons, 1);
-                    typename BondsDataBase<T>::LJ_Out out;
-                    out.vForce = dstPoint.m_vPos - srcPoint.m_vPos;
-                    for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-                    {
-                        if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
-                        else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
-                    }
-                    if (eBond.lennardJones(out.vForce, out))
-                    {
-                        dstPoint.m_vForce += out.vForce;
-                        srcPoint.m_vForce -= out.vForce;
-                        m_fCurPot += out.fPotential;
-                    }
-#if ASSERT_ONLY_CODE
-                    m_dbgNContributions += 2;
-#endif
+                    if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
+                    else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
                 }
+                if (eBond.lennardJones(out.vForce, out))
+                {
+                    point1.m_vForce += out.vForce;
+                    point2.m_vForce -= out.vForce;
+                    m_fCurPot += out.fPotential;
+                }
+#if ASSERT_ONLY_CODE
+                m_dbgNContributions += 2;
+#endif
             }
         }
         return true;
@@ -292,7 +295,7 @@ private:
         m_dbgNContributions = 0;
 #endif
         m_fCurPot.clear(); // prepare for potential energy computation
-        m_ocTree[0].computeForces(0, removeUnits(m_bBox), *this);
+        m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
     }
 
