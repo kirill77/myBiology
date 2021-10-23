@@ -26,5 +26,8 @@
     <ClInclude Include="water.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\ocTree\ocTree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
