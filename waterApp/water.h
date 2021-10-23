@@ -12,7 +12,6 @@ struct Water
 
     struct NODE_DATA // data that we store in each node
     {
-        MyUnits<double> m_fTotalCharge;
     };
 
     Water()
@@ -73,7 +72,6 @@ struct Water
     struct Atom
     {
         NvU32 m_nProtons : 8;
-        MyUnits<float> m_fCharge; // m_fCharge is a partial charge that appears because of proximity of other atoms
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
     };
     inline std::vector<Atom>& points()

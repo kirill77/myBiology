@@ -6,15 +6,8 @@ void Water<_T>::splitRecursive(OcBoxStack<T>& curStack)
     NvU32 parentNodeIndex = curStack.getCurNodeIndex();
     auto* pNode = &m_ocTree[parentNodeIndex];
     nvAssert(pNode->isLeaf());
-    pNode->m_nodeData.m_fTotalCharge.clear();
     if (pNode->getNPoints() <= 16) // no need to split further?
     {
-        // update total node charge
-        for (NvU32 uPoint = pNode->getFirstPoint(); uPoint < pNode->getEndPoint(); ++uPoint)
-        {
-            Atom& point = m_points[uPoint];
-            pNode->m_nodeData.m_fTotalCharge += point.m_fCharge;
-        }
         return;
     }
 #if ASSERT_ONLY_CODE
@@ -43,7 +36,6 @@ void Water<_T>::splitRecursive(OcBoxStack<T>& curStack)
         }
 #endif
         splitRecursive(curStack);
-        m_ocTree[parentNodeIndex].m_nodeData.m_fTotalCharge += m_ocTree[childNodeIndex].m_nodeData.m_fTotalCharge;
         NvU32 childIndex = curStack.pop();
 #if ASSERT_ONLY_CODE
         // check that after we pop() we get the same box we had before push()
