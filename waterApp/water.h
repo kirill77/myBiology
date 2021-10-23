@@ -196,8 +196,9 @@ struct Water
     }
 
 private:
-    // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation. since we can't
-    // make time step infinitely small - we compensate for inaccuracies by artificially changing speeds to have constant average temperature
+    // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation.
+    // since we can't make time step infinitely small - we compensate for inaccuracies by artificially changing speeds to have constant average
+    // temperature
     void changeSpeedsToConserveTemp()
     {
 #if ASSERT_ONLY_CODE
@@ -279,9 +280,9 @@ private:
         m_ocTree[0].initLeaf(0, (NvU32)m_points.size());
 
         // initialize stack
-        OcBoxStack<T> stack(0, removeUnits(m_bBox));
+        OcBoxStack<T> curStack(0, removeUnits(m_bBox));
         // split oc-tree recursively to get small number of points per leaf
-        splitRecursive(0, stack);
+        splitRecursive(curStack);
 
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
@@ -383,7 +384,7 @@ private:
         }
     }
 
-    void splitRecursive(const NvU32 uNode, OcBoxStack<T>& stack);
+    void splitRecursive(OcBoxStack<T>& stack);
 
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
