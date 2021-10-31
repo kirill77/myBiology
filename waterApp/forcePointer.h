@@ -5,13 +5,13 @@
 
 struct ForcePointer
 {
-    ForcePointer() { }
+    ForcePointer() : m_uForce(~0U), m_uDist(0) { }
     template <class T>
     ForcePointer(NvU32 forceIndex, MyUnits<T> fDistance) : m_uForce(forceIndex)
     {
         nvAssert(m_uForce == forceIndex);
-        NvU32 uDist = (NvU32)(32 * fDistance.m_value / BondsDataBase<T>::s_zeroForceDist.m_value);
-        nvAssert(uDist <= 32);
+        NvU32 uDist = (NvU32)(64 * fDistance.m_value / BondsDataBase<T>::s_zeroForceDist.m_value);
+        nvAssert(uDist <= 64);
         m_uDist = std::min(uDist, 31U);
     }
     bool operator <=(const ForcePointer& other) const
@@ -24,8 +24,8 @@ struct ForcePointer
     }
     NvU32 getForceIndex() const { return m_uForce; }
 private:
-    NvU32 m_uForce : 27;
-    NvU32 m_uDist : 5;
+    NvU32 m_uForce : 26;
+    NvU32 m_uDist : 6;
 };
 
 // book-keeping for limited number forces that affect the atom
@@ -43,7 +43,7 @@ struct ForcePointers
             }
             return true;
         }
-        if (f <= m_forces[0]) // if the new force is weaker than weakest known force
+        if (f <= m_forces[0]) // if the new force is weaker than the weakest known force
         {
             if (m_nForces >= N) return false; // too many forces already and this one seems not that important
             m_forces[m_nForces++] = m_forces[0];
@@ -64,10 +64,10 @@ struct ForcePointers
         m_nForces = 0;
     }
     NvU32 size() const { return m_nForces; }
-    NvU32 operator[](const NvU32 u) const
+    const ForcePointer &operator[](const NvU32 u) const
     {
         nvAssert(u < m_nForces);
-        return m_forces[u].m_forceIndex;
+        return m_forces[u];
     }
 private:
     void bringMinToFront() // put weakest force into slot 0
@@ -84,6 +84,6 @@ private:
         }
         m_forces[uu] = tmp;
     }
-    NvU32 m_nForces;
+    NvU32 m_nForces = 0;
     ForcePointer m_forces[N];
 };

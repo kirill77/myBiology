@@ -313,26 +313,40 @@ private:
         m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
 
-        for (NvU32 uForce = 0; uForce < m_forces.size(); ++uForce)
+#if ASSERT_ONLY_CODE
+        NvU32 dbgNForces = 0;
+#endif
+        for (NvU32 uAtom1 = 0; uAtom1 < m_points.size(); ++uAtom1)
         {
-            const auto& force = m_forces[uForce];
-            auto& point1 = m_points[force.getAtom1Index()];
-            auto& point2 = m_points[force.getAtom2Index()];
-            auto& eBond = BondsDataBase<T>::getEBond(point1.m_nProtons, point2.m_nProtons, 1);
-            typename BondsDataBase<T>::LJ_Out out;
-            out.vForce = point1.m_vPos - point2.m_vPos;
-            for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+            auto& atom1 = m_points[uAtom1];
+            auto& forcePointers = atom1.m_forcePointers;
+            for (NvU32 uFP = 0; uFP < forcePointers.size(); ++uFP)
             {
-                if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
-                else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
-            }
-            if (eBond.lennardJones(out.vForce, out))
-            {
-                point1.m_vForce += out.vForce;
-                point2.m_vForce -= out.vForce;
-                m_fCurPot += out.fPotential;
+                NvU32 forceIndex = forcePointers[uFP].getForceIndex();
+                auto& force = m_forces[forceIndex];
+                if (force.isUsed()) // this force has already been applied?
+                    continue;
+                ++dbgNForces;
+                force.notifyUsed();
+                NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom1;
+                auto& atom2 = m_points[uAtom2];
+                auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+                typename BondsDataBase<T>::LJ_Out out;
+                out.vForce = atom1.m_vPos - atom2.m_vPos;
+                for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+                {
+                    if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
+                    else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
+                }
+                if (eBond.lennardJones(out.vForce, out))
+                {
+                    atom1.m_vForce += out.vForce;
+                    atom2.m_vForce -= out.vForce;
+                    m_fCurPot += out.fPotential;
+                }
             }
         }
+        nvAssert(dbgNForces <= m_forces.size());
     }
 
     template <NvU32 VERLET_STEP_INDEX> 
