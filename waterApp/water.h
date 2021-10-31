@@ -73,7 +73,7 @@ struct Water
     {
         NvU32 m_nProtons : 8;
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
-        ForcePointers<8> m_forcePointers;
+        ForcePointers<16> m_forcePointers;
     };
     inline std::vector<Atom>& points()
     {
@@ -166,9 +166,7 @@ struct Water
                 }
 
                 m_forces.resize(forceIndex + 1);
-                Force& force = m_forces[forceIndex];
-                force.m_atoms[0] = uPoint1;
-                force.m_atoms[1] = uPoint2;
+                m_forces[forceIndex] = Force(uPoint1, uPoint2);
             }
         }
         return true;
@@ -318,8 +316,8 @@ private:
         for (NvU32 uForce = 0; uForce < m_forces.size(); ++uForce)
         {
             const auto& force = m_forces[uForce];
-            auto& point1 = m_points[force.m_atoms[0]];
-            auto& point2 = m_points[force.m_atoms[1]];
+            auto& point1 = m_points[force.getAtom1Index()];
+            auto& point2 = m_points[force.getAtom2Index()];
             auto& eBond = BondsDataBase<T>::getEBond(point1.m_nProtons, point2.m_nProtons, 1);
             typename BondsDataBase<T>::LJ_Out out;
             out.vForce = point1.m_vPos - point2.m_vPos;
@@ -430,7 +428,21 @@ private:
     std::vector<Atom> m_points;
     struct Force
     {
-        std::array<NvU32, 2> m_atoms;
+        Force() { }
+        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2), m_isUsed(0)
+        {
+            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
+        }
+        void notifyUsed() { m_isUsed = 1; }
+        void clearUsed() { m_isUsed = 0; }
+        bool isUsed() const { return m_isUsed == 1; }
+        NvU32 getAtom1Index() const { return m_uAtom1; }
+        NvU32 getAtom2Index() const { return m_uAtom2; }
+
+    private:
+        NvU32 m_uAtom1 : 15;
+        NvU32 m_uAtom2 : 15;
+        NvU32 m_isUsed : 1;
     };
     std::vector<Force> m_forces;
     std::vector<OcTreeNode<Water>> m_ocTree;
