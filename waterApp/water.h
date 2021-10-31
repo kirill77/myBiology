@@ -28,7 +28,7 @@ struct Water
         m_points.resize(3 * nWaterMolecules);
 #else
         // debug can't simulate all molecules - too slow
-        m_points.resize(3 * 32);
+        m_points.resize(3 * 64);
 #endif
 
         NvU32 nOs = 0, nHs = 0;
@@ -73,7 +73,7 @@ struct Water
     {
         NvU32 m_nProtons : 8;
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
-        // AtomForcePointers<8> m_forcePointers;
+        ForcePointers<8> m_forcePointers;
     };
     inline std::vector<Atom>& points()
     {
@@ -144,13 +144,31 @@ struct Water
             auto& point2 = m_points[uPoint2];
             for (NvU32 uPoint1 = (leafIndex == nodeIndex) ? uPoint2 + 1 : leafNode1.getFirstPoint(); uPoint1 < leafNode1.getEndPoint(); ++uPoint1)
             {
-                m_forces.resize(m_forces.size() + 1);
-                Force& force = *m_forces.rbegin();
-                force.m_atoms[0] = uPoint1;
-                force.m_atoms[1] = uPoint2;
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
+                auto& point1 = m_points[uPoint1];
+                auto vDir = point2.m_vPos - point1.m_vPos;
+                auto fLengthSqr = lengthSquared(vDir);
+                if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
+                {
+                    continue;
+                }
+
+                NvU32 forceIndex = (NvU32)m_forces.size();
+                ForcePointer fp(forceIndex, sqrt(fLengthSqr));
+                bool bForceAdded = point1.m_forcePointers.addForcePointer(fp);
+                bForceAdded |= point2.m_forcePointers.addForcePointer(fp);
+                if (!bForceAdded)
+                {
+                    // if that force is too weak compared to other forces that those atoms have encountered so far - disregard
+                    continue;
+                }
+
+                m_forces.resize(forceIndex + 1);
+                Force& force = m_forces[forceIndex];
+                force.m_atoms[0] = uPoint1;
+                force.m_atoms[1] = uPoint2;
             }
         }
         return true;
@@ -286,6 +304,7 @@ private:
         {
             auto& point = m_points[uPoint];
             point.m_vForce.set(MyUnits<T>(0));
+            point.m_forcePointers.clear();
         }
 
 #if ASSERT_ONLY_CODE

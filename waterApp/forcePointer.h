@@ -7,49 +7,57 @@ struct ForcePointer
 {
     ForcePointer() { }
     template <class T>
-    ForcePointer(NvU32 forceIndex, MyUnits<T> fDistanceSqr) : m_uForce(forceIndex)
+    ForcePointer(NvU32 forceIndex, MyUnits<T> fDistance) : m_uForce(forceIndex)
     {
-        NvU32 uDist = (NvU32)(32 * sqrt(fDistanceSqr) / BondsDataBase<T>::s_zeroForceDist);
-        m_uDist = std::min(uDist, 31);
+        nvAssert(m_uForce == forceIndex);
+        NvU32 uDist = (NvU32)(32 * fDistance.m_value / BondsDataBase<T>::s_zeroForceDist.m_value);
+        nvAssert(uDist <= 32);
+        m_uDist = std::min(uDist, 31U);
     }
     bool operator <=(const ForcePointer& other) const
     {
         return m_uDist >= other.m_uDist;
     }
+    bool operator  <(const ForcePointer& other) const
+    {
+        return m_uDist > other.m_uDist;
+    }
+    NvU32 getForceIndex() const { return m_uForce; }
+private:
     NvU32 m_uForce : 27;
     NvU32 m_uDist : 5;
 };
 
 // book-keeping for limited number forces that affect the atom
 template <NvU32 N>
-struct AtomForcePointers
+struct ForcePointers
 {
-    void addForcePointer(ForcePointer f)
+    bool addForcePointer(ForcePointer f)
     {
         if (m_nForces < N)
         {
             m_forces[m_nForces++] = f;
-            // next force is going to compete with existing forces for slots - need to find the min
-            if (m_nForces == N)
+            if (m_nForces == N) // next force is going to compete with existing forces for slots - need to find the min
             {
                 bringMinToFront();
-                return;
             }
+            return true;
         }
         if (f <= m_forces[0]) // if the new force is weaker than weakest known force
         {
-            if (m_nForces >= N) return; // too many forces already and this one seems not that important
+            if (m_nForces >= N) return false; // too many forces already and this one seems not that important
             m_forces[m_nForces++] = m_forces[0];
             m_forces[0] = f;
-            return;
+            return true;
         }
         if (m_nForces >= N)
         {
             m_forces[0] = f; // not enough slots - have to forget the weakest force
             bringMinToFront();
-            return;
+            return true;
         }
         m_forces[m_nForces++] = f;
+        return true;
     }
     void clear()
     {
