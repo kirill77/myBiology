@@ -29,5 +29,8 @@
     <ClInclude Include="..\ocTree\ocTree.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="forcePointer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

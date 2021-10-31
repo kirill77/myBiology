@@ -1,6 +1,6 @@
 #pragma once
 
-#include "basics/bonds.h"
+#include "forcePointer.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
@@ -73,6 +73,7 @@ struct Water
     {
         NvU32 m_nProtons : 8;
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
+        // AtomForcePointers<8> m_forcePointers;
     };
     inline std::vector<Atom>& points()
     {
@@ -112,21 +113,28 @@ struct Water
             const auto& leafBox = setUnits<MyUnits<T>>(leafStack.getCurBox());
             const auto& nodeBox = setUnits<MyUnits<T>>(nodeStack.getCurBox());
             // if boxes are too far - particles can't affect each other - rule that interactions are accounted for
+            MyUnits<T> fDistSqr;
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
-                if (leafBox.m_vMin[uDim] > nodeBox.m_vMax[uDim] + BondsDataBase<T>::s_zeroForceDist ||
-                    nodeBox.m_vMin[uDim] > leafBox.m_vMax[uDim] + BondsDataBase<T>::s_zeroForceDist)
+                // add distance in this dimension to the square sum
+                if (leafBox.m_vMin[uDim] > nodeBox.m_vMax[uDim])
+                    fDistSqr += sqr(leafBox.m_vMin[uDim] - nodeBox.m_vMax[uDim]);
+                else if (nodeBox.m_vMin[uDim] > leafBox.m_vMax[uDim])
+                    fDistSqr += sqr(nodeBox.m_vMin[uDim] - leafBox.m_vMax[uDim]);
+                else continue;
+
+                // if result got too large - this means boxes are too far - bail out
+                if (fDistSqr >= BondsDataBase<T>::s_zeroForceDistSqr)
                 {
 #if ASSERT_ONLY_CODE
-                    m_dbgNContributions += m_ocTree[leafIndex].getNPoints() * m_ocTree[nodeIndex].getNPoints();
+                    m_dbgNContributions += 2 * m_ocTree[leafIndex].getNPoints() * m_ocTree[nodeIndex].getNPoints();
 #endif
                     return true;
                 }
             }
             // we want to descend until leafs because it's possible some nodes will be cut off early that way
             auto& node = m_ocTree[nodeIndex];
-            if (!node.isLeaf())
-                return false;
+            if (!node.isLeaf()) return false;
         }
         auto& leafNode1 = m_ocTree[leafIndex];
         nvAssert(leafNode1.getNPoints());
@@ -136,21 +144,10 @@ struct Water
             auto& point2 = m_points[uPoint2];
             for (NvU32 uPoint1 = (leafIndex == nodeIndex) ? uPoint2 + 1 : leafNode1.getFirstPoint(); uPoint1 < leafNode1.getEndPoint(); ++uPoint1)
             {
-                auto& point1 = m_points[uPoint1];
-                auto& eBond = BondsDataBase<T>::getEBond(point1.m_nProtons, point2.m_nProtons, 1);
-                typename BondsDataBase<T>::LJ_Out out;
-                out.vForce = point1.m_vPos - point2.m_vPos;
-                for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-                {
-                    if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
-                    else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
-                }
-                if (eBond.lennardJones(out.vForce, out))
-                {
-                    point1.m_vForce += out.vForce;
-                    point2.m_vForce -= out.vForce;
-                    m_fCurPot += out.fPotential;
-                }
+                m_forces.resize(m_forces.size() + 1);
+                Force& force = *m_forces.rbegin();
+                force.m_atoms[0] = uPoint1;
+                force.m_atoms[1] = uPoint2;
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
@@ -295,8 +292,30 @@ private:
         m_dbgNContributions = 0;
 #endif
         m_fCurPot.clear(); // prepare for potential energy computation
+        m_forces.resize(0);
         m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
+
+        for (NvU32 uForce = 0; uForce < m_forces.size(); ++uForce)
+        {
+            const auto& force = m_forces[uForce];
+            auto& point1 = m_points[force.m_atoms[0]];
+            auto& point2 = m_points[force.m_atoms[1]];
+            auto& eBond = BondsDataBase<T>::getEBond(point1.m_nProtons, point2.m_nProtons, 1);
+            typename BondsDataBase<T>::LJ_Out out;
+            out.vForce = point1.m_vPos - point2.m_vPos;
+            for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+            {
+                if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
+                else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
+            }
+            if (eBond.lennardJones(out.vForce, out))
+            {
+                point1.m_vForce += out.vForce;
+                point2.m_vForce -= out.vForce;
+                m_fCurPot += out.fPotential;
+            }
+        }
     }
 
     template <NvU32 VERLET_STEP_INDEX> 
@@ -390,6 +409,11 @@ private:
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
     std::vector<Atom> m_points;
+    struct Force
+    {
+        std::array<NvU32, 2> m_atoms;
+    };
+    std::vector<Force> m_forces;
     std::vector<OcTreeNode<Water>> m_ocTree;
     RNGSobol m_rng;
 
