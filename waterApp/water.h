@@ -60,11 +60,6 @@ struct Water
             }
         }
 
-        updateForcePointers();
-        updateForces();
-
-        m_fInitialPot = m_fCurPot;
-
         m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
         m_fMaxAllowedKin = m_fWantedAverageKin * 10;
         m_fWantedTotalKin = m_fWantedAverageKin * (double)m_points.size();
@@ -83,42 +78,22 @@ struct Water
 
     void makeTimeStep()
     {
-        findTimeStep(); // find optimal time step
-        advect<0>(); // advect velocities by half and positions by full step
-
         updateForcePointers();
-        updateForces();
+
+        findTimeStep(); // find optimal time step
+
+        advect<0>(); // advect velocities by half and positions by full step
 
         advect<1>(); // advect velocities by half step
 
-        m_fCurKin.clear(); // prepare for kinetic energy computation
+        // update kinetic energy
+        m_fCurKin.clear();
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             auto& point = m_points[uAtom];
             MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
             MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed, fMass);
             m_fCurKin += fKin;
-
-            // if the atom exits bounding box, it enters from the other side
-            for (NvU32 uDim = 0; uDim < 3; ++uDim)
-            {
-                if (point.m_vPos[uDim] < m_bBox.m_vMin[uDim])
-                {
-                    auto fOvershoot = (m_bBox.m_vMin[uDim] - point.m_vPos[uDim]);
-                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                    point.m_vPos[uDim] += m_fBoxSize * nBoxSizes;
-                    nvAssert(m_bBox.m_vMin[uDim] <= point.m_vPos[uDim] && point.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
-                    continue;
-                }
-                if (point.m_vPos[uDim] > m_bBox.m_vMax[uDim])
-                {
-                    auto fOvershoot = (point.m_vPos[uDim] - m_bBox.m_vMax[uDim]);
-                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                    point.m_vPos[uDim] -= m_fBoxSize * nBoxSizes;
-                    nvAssert(m_bBox.m_vMin[uDim] <= point.m_vPos[uDim] && point.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
-                }
-            }
-            nvAssert(m_bBox.includes(point.m_vPos)); // atom must be inside the bounding box
         }
         changeSpeedsToConserveTemp();
     }
@@ -285,40 +260,6 @@ private:
 #endif
         return m_fMaxAllowedKin;
     }
-    // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation. since we can't
-    // make time step infinitely small - we compensate for inaccuracies by artificially changing speeds in such a way that total energy of the system is conserved
-    void changeSpeedsToConserveEnery()
-    {
-        MyUnits<T> fEnergyToCompensate = (m_fCurPot + m_fCurKin) - m_fInitialPot;
-        // if we have less energy we're supposed to - do nothing
-        if (fEnergyToCompensate <= 0)
-        {
-            return;
-        }
-        // we have to reduce the speed of some atoms to keep total energy constant
-        MyUnits<T> fTotalWeight;
-        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
-        {
-            fTotalWeight += length(m_points[uPoint].m_vForce);
-        }
-        m_fCurKin.clear();
-        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
-        {
-            auto& point = m_points[uPoint];
-            MyUnits<T> fCurWeight = length(point.m_vForce) / fTotalWeight;
-            MyUnits<T> fCurCompensation = fEnergyToCompensate * fCurWeight;
-            MyUnits<T> fCurKineticEnergy = lengthSquared(point.m_vSpeed) * BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass / 2;
-            if (fCurKineticEnergy <= fCurCompensation)
-            {
-                point.m_vSpeed.set(MyUnits<T>(0));
-                continue;
-            }
-            auto fMultiplierSqr = (fCurKineticEnergy - fCurCompensation) / fCurKineticEnergy;
-            auto fMultiplier = sqrt(fMultiplierSqr);
-            point.m_vSpeed *= fMultiplier;
-            m_fCurKin += fCurKineticEnergy * fMultiplierSqr;
-        }
-    }
     void updateForcePointers()
     {
         // create root oc-tree node
@@ -344,43 +285,6 @@ private:
         m_forces.resize(0);
         m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
-    }
-    void updateForces()
-    {
-#if ASSERT_ONLY_CODE
-        NvU32 dbgNForces = 0;
-#endif
-        for (NvU32 uAtom1 = 0; uAtom1 < m_points.size(); ++uAtom1)
-        {
-            auto& atom1 = m_points[uAtom1];
-            auto& forcePointers = atom1.m_forcePointers;
-            for (NvU32 uFP = 0; uFP < forcePointers.size(); ++uFP)
-            {
-                NvU32 forceIndex = forcePointers[uFP].getForceIndex();
-                auto& force = m_forces[forceIndex];
-                if (force.isUsed()) // this force has already been applied?
-                    continue;
-                ++dbgNForces;
-                force.notifyUsed();
-                NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom1;
-                auto& atom2 = m_points[uAtom2];
-                auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
-                typename BondsDataBase<T>::LJ_Out out;
-                out.vForce = atom1.m_vPos - atom2.m_vPos;
-                for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-                {
-                    if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
-                    else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
-                }
-                if (eBond.lennardJones(out.vForce, out))
-                {
-                    atom1.m_vForce += out.vForce;
-                    atom2.m_vForce -= out.vForce;
-                    m_fCurPot += out.fPotential;
-                }
-            }
-        }
-        nvAssert(dbgNForces <= m_forces.size());
     }
 
     void findTimeStep()
@@ -421,21 +325,80 @@ private:
     template <NvU32 VERLET_STEP_INDEX> 
     void advect()
     {
-        MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
-
-        // change speed of each point according to force and advect points according to new speed
-        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
+        // drop 'used' bit on the forces
+        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            auto& point = m_points[uPoint];
-            MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
-            rtvector<MyUnits<T>, 3> vAcceleration = newtonLaw(fMass, point.m_vForce);
-            point.m_vSpeed += vAcceleration * fHalfTimeStep;
+            m_forces[forceIndex].clearUsed();
+        }
+
+        MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
+#if ASSERT_ONLY_CODE
+        NvU32 dbgNForces = 0;
+#endif
+        // change speed of each atom according to forces
+        for (NvU32 uAtom1 = 0; uAtom1 < m_points.size(); ++uAtom1)
+        {
+            auto& atom1 = m_points[uAtom1];
+            MyUnits<T> fMass1 = BondsDataBase<T>::getAtom(atom1.m_nProtons).m_fMass;
+            auto& forcePointers = atom1.m_forcePointers;
+            for (NvU32 uFP = 0; uFP < forcePointers.size(); ++uFP)
+            {
+                NvU32 forceIndex = forcePointers[uFP].getForceIndex();
+                auto& force = m_forces[forceIndex];
+                if (force.isUsed()) // this force has already been applied when looking at other atom?
+                    continue;
+                ++dbgNForces;
+                force.notifyUsed();
+                NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom1;
+                auto& atom2 = m_points[uAtom2];
+                MyUnits<T> fMass2 = BondsDataBase<T>::getAtom(atom2.m_nProtons).m_fMass;
+
+                auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+                typename BondsDataBase<T>::LJ_Out out;
+                out.vForce = atom1.m_vPos - atom2.m_vPos;
+                for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+                {
+                    if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
+                    else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
+                }
+
+                if (eBond.lennardJones(out.vForce, out))
+                {
+                    atom1.m_vSpeed += out.vForce / fMass1 * fHalfTimeStep;
+                    atom2.m_vSpeed -= out.vForce / fMass2 * fHalfTimeStep;
+                    m_fCurPot += out.fPotential;
+                }
+            }
+
             if (VERLET_STEP_INDEX == 0)
             {
-                auto vDeltaPos = point.m_vSpeed * m_fTimeStep;
-                point.m_vPos += vDeltaPos;
+                clampTheSpeed(atom1.m_vSpeed, fMass1);
+                auto vDeltaPos = atom1.m_vSpeed * m_fTimeStep;
+                atom1.m_vPos += vDeltaPos;
+
+                // if the atom exits bounding box, it enters from the other side
+                for (NvU32 uDim = 0; uDim < 3; ++uDim)
+                {
+                    if (atom1.m_vPos[uDim] < m_bBox.m_vMin[uDim])
+                    {
+                        auto fOvershoot = (m_bBox.m_vMin[uDim] - atom1.m_vPos[uDim]);
+                        int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                        atom1.m_vPos[uDim] += m_fBoxSize * nBoxSizes;
+                        nvAssert(m_bBox.m_vMin[uDim] <= atom1.m_vPos[uDim] && atom1.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
+                        continue;
+                    }
+                    if (atom1.m_vPos[uDim] > m_bBox.m_vMax[uDim])
+                    {
+                        auto fOvershoot = (atom1.m_vPos[uDim] - m_bBox.m_vMax[uDim]);
+                        int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                        atom1.m_vPos[uDim] -= m_fBoxSize * nBoxSizes;
+                        nvAssert(m_bBox.m_vMin[uDim] <= atom1.m_vPos[uDim] && atom1.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
+                    }
+                }
+                nvAssert(m_bBox.includes(atom1.m_vPos)); // atom must be inside the bounding box
             }
         }
+        nvAssert(dbgNForces > 0 && dbgNForces <= m_forces.size());
     }
 
     void splitRecursive(OcBoxStack<T>& stack);
@@ -467,7 +430,7 @@ private:
 
     const double m_fWantedTempC = 37;
     MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
-    MyUnits<T> m_fCurPot, m_fCurKin, m_fInitialPot; // energy conservation variables
+    MyUnits<T> m_fCurPot, m_fCurKin; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
