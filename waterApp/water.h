@@ -87,15 +87,15 @@ struct Water
         advect<1>(); // advect velocities by half step
 
         // update kinetic energy
-        m_fCurKin.clear();
+        m_fCurTotalKin.clear();
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             auto& point = m_points[uAtom];
             MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
             MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed, fMass);
-            m_fCurKin += fKin;
+            m_fCurTotalKin += fKin;
         }
-        changeSpeedsToConserveTemp();
+        //changeSpeedsToConserveTemp();
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
@@ -183,11 +183,11 @@ struct Water
 
     MyUnits<T> evalTemperature() const
     {
-        return MyUnits<T>::evalTemperature(m_fCurKin / (NvU32)m_points.size());
+        return MyUnits<T>::evalTemperature(m_fCurTotalKin / (NvU32)m_points.size());
     }
     MyUnits<T> evalPressure() const
     {
-        return MyUnits<T>::evalPressure(m_fCurKin, m_bBox.evalVolume(), (NvU32)m_points.size());
+        return MyUnits<T>::evalPressure(m_fCurTotalKin, m_bBox.evalVolume(), (NvU32)m_points.size());
     }
     const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
 
@@ -233,7 +233,7 @@ private:
         }
 #endif
         // multiply everything by a constant to achieve desired average temperature
-        T fMultiplier = sqrt(m_fWantedTotalKin.m_value / m_fCurKin.m_value);
+        T fMultiplier = sqrt(m_fWantedTotalKin.m_value / m_fCurTotalKin.m_value);
 #if ASSERT_ONLY_CODE
         MyUnits<T> dbgKin;
 #endif
@@ -246,7 +246,7 @@ private:
 #endif
         }
         nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
-        m_fCurKin = m_fWantedTotalKin;
+        m_fCurTotalKin = m_fWantedTotalKin;
     }
     inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3> &vSpeed, MyUnits<T> fMass)
     {
@@ -347,7 +347,7 @@ private:
                 auto& force = m_forces[forceIndex];
                 if (force.isUsed()) // this force has already been applied when looking at other atom?
                     continue;
-                ++dbgNForces;
+                nvAssert(++dbgNForces <= m_forces.size());
                 force.notifyUsed();
                 NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom1;
                 auto& atom2 = m_points[uAtom2];
@@ -398,7 +398,7 @@ private:
                 nvAssert(m_bBox.includes(atom1.m_vPos)); // atom must be inside the bounding box
             }
         }
-        nvAssert(dbgNForces > 0 && dbgNForces <= m_forces.size());
+        nvAssert(dbgNForces > 0);
     }
 
     void splitRecursive(OcBoxStack<T>& stack);
@@ -430,7 +430,7 @@ private:
 
     const double m_fWantedTempC = 37;
     MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
-    MyUnits<T> m_fCurPot, m_fCurKin; // energy conservation variables
+    MyUnits<T> m_fCurPot, m_fCurTotalKin; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
