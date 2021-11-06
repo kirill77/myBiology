@@ -95,7 +95,6 @@ struct Water
             MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed, fMass);
             m_fCurTotalKin += fKin;
         }
-        //changeSpeedsToConserveTemp();
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
@@ -281,7 +280,6 @@ private:
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
 #endif
-        m_fCurPot.clear(); // prepare for potential energy computation
         m_forces.resize(0);
         m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
@@ -364,9 +362,9 @@ private:
 
                 if (eBond.lennardJones(out.vForce, out))
                 {
-                    atom1.m_vSpeed += out.vForce / fMass1 * fHalfTimeStep;
-                    atom2.m_vSpeed -= out.vForce / fMass2 * fHalfTimeStep;
-                    m_fCurPot += out.fPotential;
+                    // symmetric addition ensures conservation of momentum
+                    atom1.m_vSpeed += out.vForce * (fHalfTimeStep / fMass1);
+                    atom2.m_vSpeed -= out.vForce * (fHalfTimeStep / fMass2);
                 }
             }
 
@@ -430,7 +428,7 @@ private:
 
     const double m_fWantedTempC = 37;
     MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
-    MyUnits<T> m_fCurPot, m_fCurTotalKin; // energy conservation variables
+    MyUnits<T> m_fCurTotalKin; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
