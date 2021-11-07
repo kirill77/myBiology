@@ -82,19 +82,25 @@ struct Water
 
         adjustTimeStep(); // find optimal time step
 
-        // drop 'used' bit on the forces
+#if ASSERT_ONLY_CODE
+        // check that none of the forces have 'used' bit set
+        nvAssert(m_forces.size() > 0);
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            m_forces[forceIndex].clearUsed();
+            nvAssert(!m_forces[forceIndex].isUsed());
         }
-#if ASSERT_ONLY_CODE
         m_dbgNForces = 0;
 #endif
+        MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advect<0>(uAtom); // advect velocities by half and positions by full step
+            advectSpeeds(uAtom, fHalfTimeStep);
         }
         nvAssert(m_dbgNForces > 0);
+        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        {
+            advectPositions(uAtom, m_fTimeStep);
+        }
 
         // drop 'used' bit on the forces
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
@@ -106,7 +112,7 @@ struct Water
 #endif
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advect<1>(uAtom); // advect velocities by half step
+            advectSpeeds(uAtom, fHalfTimeStep);
         }
         nvAssert(m_dbgNForces > 0);
 
@@ -271,7 +277,7 @@ private:
         nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
         m_fCurTotalKin = m_fWantedTotalKin;
     }
-    inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3> &vSpeed, MyUnits<T> fMass)
+    inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3>& vSpeed, MyUnits<T> fMass)
     {
         MyUnits<T> fKin = lengthSquared(vSpeed) * fMass / 2;
         if (fKin <= m_fMaxAllowedKin)
@@ -340,15 +346,10 @@ private:
         }
     }
 
-    template <NvU32 VERLET_STEP_INDEX> 
-    void advect(NvU32 uAtom)
+    void advectSpeeds(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
-        MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
-
-        NvU32 uAtom1 = uAtom;
-
         // change speed of each atom according to forces
-        auto& atom1 = m_points[uAtom1];
+        auto& atom1 = m_points[uAtom];
         MyUnits<T> fMass1 = BondsDataBase<T>::getAtom(atom1.m_nProtons).m_fMass;
         auto& forcePointers = atom1.m_forcePointers;
         for (NvU32 uFP = 0; uFP < forcePointers.size(); ++uFP)
@@ -359,7 +360,8 @@ private:
                 continue;
             nvAssert(++m_dbgNForces <= m_forces.size());
             force.notifyUsed();
-            NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom1;
+
+            NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom;
             auto& atom2 = m_points[uAtom2];
             MyUnits<T> fMass2 = BondsDataBase<T>::getAtom(atom2.m_nProtons).m_fMass;
 
@@ -375,38 +377,40 @@ private:
             if (eBond.lennardJones(out.vForce, out))
             {
                 // symmetric addition ensures conservation of momentum
-                atom1.m_vSpeed += out.vForce * (fHalfTimeStep / fMass1);
-                atom2.m_vSpeed -= out.vForce * (fHalfTimeStep / fMass2);
+                atom1.m_vSpeed += out.vForce * (fTimeStep / fMass1);
+                atom2.m_vSpeed -= out.vForce * (fTimeStep / fMass2);
             }
         }
+    }
+    void advectPositions(NvU32 uAtom, MyUnits<T> fTimeStep)
+    {
+        auto& atom = m_points[uAtom];
+        MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+        clampTheSpeed(atom.m_vSpeed, fMass);
 
-        if (VERLET_STEP_INDEX == 0)
+        auto vDeltaPos = atom.m_vSpeed * fTimeStep;
+        atom.m_vPos += vDeltaPos;
+
+        // if the atom exits bounding box, it enters from the other side
+        for (NvU32 uDim = 0; uDim < 3; ++uDim)
         {
-            clampTheSpeed(atom1.m_vSpeed, fMass1);
-            auto vDeltaPos = atom1.m_vSpeed * m_fTimeStep;
-            atom1.m_vPos += vDeltaPos;
-
-            // if the atom exits bounding box, it enters from the other side
-            for (NvU32 uDim = 0; uDim < 3; ++uDim)
+            if (atom.m_vPos[uDim] < m_bBox.m_vMin[uDim])
             {
-                if (atom1.m_vPos[uDim] < m_bBox.m_vMin[uDim])
-                {
-                    auto fOvershoot = (m_bBox.m_vMin[uDim] - atom1.m_vPos[uDim]);
-                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                    atom1.m_vPos[uDim] += m_fBoxSize * nBoxSizes;
-                    nvAssert(m_bBox.m_vMin[uDim] <= atom1.m_vPos[uDim] && atom1.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
-                    continue;
-                }
-                if (atom1.m_vPos[uDim] > m_bBox.m_vMax[uDim])
-                {
-                    auto fOvershoot = (atom1.m_vPos[uDim] - m_bBox.m_vMax[uDim]);
-                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                    atom1.m_vPos[uDim] -= m_fBoxSize * nBoxSizes;
-                    nvAssert(m_bBox.m_vMin[uDim] <= atom1.m_vPos[uDim] && atom1.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
-                }
+                auto fOvershoot = (m_bBox.m_vMin[uDim] - atom.m_vPos[uDim]);
+                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                atom.m_vPos[uDim] += m_fBoxSize * nBoxSizes;
+                nvAssert(m_bBox.m_vMin[uDim] <= atom.m_vPos[uDim] && atom.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
+                continue;
             }
-            nvAssert(m_bBox.includes(atom1.m_vPos)); // atom must be inside the bounding box
+            if (atom.m_vPos[uDim] > m_bBox.m_vMax[uDim])
+            {
+                auto fOvershoot = (atom.m_vPos[uDim] - m_bBox.m_vMax[uDim]);
+                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                atom.m_vPos[uDim] -= m_fBoxSize * nBoxSizes;
+                nvAssert(m_bBox.m_vMin[uDim] <= atom.m_vPos[uDim] && atom.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
+            }
         }
+        nvAssert(m_bBox.includes(atom.m_vPos)); // atom must be inside the bounding box
     }
 
     void splitRecursive(OcBoxStack<T>& stack);
