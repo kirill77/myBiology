@@ -80,8 +80,6 @@ struct Water
     {
         prepareAtomsForAdvection();
 
-        adjustTimeStep(); // find optimal time step
-
 #if ASSERT_ONLY_CODE
         // check that none of the forces have 'used' bit set
         nvAssert(m_forces.size() > 0);
@@ -101,6 +99,9 @@ struct Water
             updateForces(uAtom);
         }
         nvAssert(m_dbgNForces > 0);
+
+        adjustTimeStep(); // find optimal time step
+
         MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
@@ -331,18 +332,17 @@ private:
 
     void adjustTimeStep()
     {
-        MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
         bool bDenyStepIncrease = false;
         for (NvU32 uPoint = 0; ; )
         {
-            const auto& point = m_points[uPoint];
-            rtvector<MyUnits<T>, 3> vSpeed = point.m_vSpeed;
+            const auto& atom = m_points[uPoint];
+            MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+            rtvector<MyUnits<T>, 3> vSpeed = atom.m_vSpeed + atom.m_vForce * (m_fTimeStep / fMass);
             rtvector<MyUnits<T>, 3> vDeltaPos = vSpeed * m_fTimeStep;
             MyUnits<T> fDeltaPosSqr = lengthSquared(vDeltaPos);
             if (fDeltaPosSqr > m_fMaxSpaceStepSqr) // if delta pos is too large - decrease step size
             {
                 m_fTimeStep *= 0.5;
-                fHalfTimeStep *= 0.5;
                 uPoint = 0;
                 bDenyStepIncrease = true;
                 continue;
@@ -357,7 +357,6 @@ private:
         if (!bDenyStepIncrease)
         {
             m_fTimeStep *= 2;
-            fHalfTimeStep *= 2;
         }
     }
 
