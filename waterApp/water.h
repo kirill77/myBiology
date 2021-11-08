@@ -100,8 +100,6 @@ struct Water
         }
         nvAssert(m_dbgNForces > 0);
 
-        adjustTimeStep(); // find optimal time step
-
         MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
@@ -462,7 +460,7 @@ private:
     const double m_fWantedTempC = 37;
     MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
     MyUnits<T> m_fCurTotalKin; // energy conservation variables
-    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.000001;
+    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
 #if ASSERT_ONLY_CODE
