@@ -68,7 +68,7 @@ struct Water
     struct Atom
     {
         NvU32 m_nProtons : 8;
-        rtvector<MyUnits<T>,3> m_vPos, m_vSpeed;
+        rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
         ForcePointers<16> m_forcePointers;
     };
     inline std::vector<Atom>& points()
@@ -91,15 +91,21 @@ struct Water
         }
         m_dbgNForces = 0;
 #endif
+        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        {
+            m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
+        }
+        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        {
+            // this affects forces in nearby atoms too - that's why we have to clear m_vForce outside of this loop
+            updateForces(uAtom);
+        }
+        nvAssert(m_dbgNForces > 0);
         MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advectSpeeds(uAtom, fHalfTimeStep);
-        }
-        nvAssert(m_dbgNForces > 0);
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
-        {
-            advectPositions(uAtom, m_fTimeStep);
+            advectSpeed(uAtom, fHalfTimeStep);
+            advectPosition(uAtom, m_fTimeStep);
         }
 
         // drop 'used' bit on the forces
@@ -112,9 +118,18 @@ struct Water
 #endif
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advectSpeeds(uAtom, fHalfTimeStep);
+            m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
+        }
+        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        {
+            // this affects forces in nearby atoms too - that's why we have to clear m_vForce outside of this loop
+            updateForces(uAtom);
         }
         nvAssert(m_dbgNForces > 0);
+        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        {
+            advectSpeed(uAtom, fHalfTimeStep);
+        }
 
         // update kinetic energy
         m_fCurTotalKin.clear();
@@ -346,7 +361,7 @@ private:
         }
     }
 
-    void advectSpeeds(NvU32 uAtom, MyUnits<T> fTimeStep)
+    void updateForces(NvU32 uAtom)
     {
         // change speed of each atom according to forces
         auto& atom1 = m_points[uAtom];
@@ -377,16 +392,21 @@ private:
             if (eBond.lennardJones(out.vForce, out))
             {
                 // symmetric addition ensures conservation of momentum
-                atom1.m_vSpeed += out.vForce * (fTimeStep / fMass1);
-                atom2.m_vSpeed -= out.vForce * (fTimeStep / fMass2);
+                atom1.m_vForce += out.vForce;
+                atom2.m_vForce -= out.vForce;
             }
         }
     }
-    void advectPositions(NvU32 uAtom, MyUnits<T> fTimeStep)
+    void advectSpeed(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
         auto& atom = m_points[uAtom];
         MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+        atom.m_vSpeed += atom.m_vForce * (fTimeStep / fMass);
         clampTheSpeed(atom.m_vSpeed, fMass);
+    }
+    void advectPosition(NvU32 uAtom, MyUnits<T> fTimeStep)
+    {
+        auto& atom = m_points[uAtom];
 
         auto vDeltaPos = atom.m_vSpeed * fTimeStep;
         atom.m_vPos += vDeltaPos;
