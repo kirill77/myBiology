@@ -68,7 +68,7 @@ struct Water
     struct Atom
     {
         NvU32 m_nProtons : 8;
-        rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce;
+        rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce, m_vPrevForce;
         ForcePointers<16> m_forcePointers;
     };
     inline std::vector<Atom>& points()
@@ -100,10 +100,8 @@ struct Water
         }
         nvAssert(m_dbgNForces > 0);
 
-        MyUnits<T> fHalfTimeStep = m_fTimeStep * 0.5;
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advectSpeed(uAtom, fHalfTimeStep);
             advectPosition(uAtom, m_fTimeStep);
         }
 
@@ -117,6 +115,7 @@ struct Water
 #endif
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
+            m_points[uAtom].m_vPrevForce = m_points[uAtom].m_vForce;
             m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
         }
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
@@ -127,7 +126,7 @@ struct Water
         nvAssert(m_dbgNForces > 0);
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advectSpeed(uAtom, fHalfTimeStep);
+            advectSpeed(uAtom, m_fTimeStep);
         }
 
         // update kinetic energy
@@ -398,15 +397,17 @@ private:
     {
         auto& atom = m_points[uAtom];
         MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
-        atom.m_vSpeed += atom.m_vForce * (fTimeStep / fMass);
+        atom.m_vSpeed += (atom.m_vForce + atom.m_vPrevForce) * (fTimeStep / 2 / fMass);
         clampTheSpeed(atom.m_vSpeed, fMass);
     }
     void advectPosition(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
         auto& atom = m_points[uAtom];
 
-        auto vDeltaPos = atom.m_vSpeed * fTimeStep;
-        atom.m_vPos += vDeltaPos;
+        MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+        auto vAvgSpeed = atom.m_vSpeed + atom.m_vForce * (fTimeStep / 2 / fMass);
+        clampTheSpeed(vAvgSpeed, fMass);
+        atom.m_vPos += vAvgSpeed * fTimeStep;
 
         // if the atom exits bounding box, it enters from the other side
         for (NvU32 uDim = 0; uDim < 3; ++uDim)
