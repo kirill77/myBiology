@@ -1,6 +1,6 @@
 #pragma once
 
-#include "forcePointer.h"
+#include "basics/bonds.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
@@ -70,7 +70,6 @@ struct Water
         inline MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
         NvU32 m_nProtons : 8;
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce, m_vPrevForce;
-        ForcePointers<16> m_forcePointers;
     };
     inline std::vector<Atom>& points()
     {
@@ -185,15 +184,6 @@ struct Water
                 }
 
                 NvU32 forceIndex = (NvU32)m_forces.size();
-                ForcePointer fp(forceIndex, sqrt(fLengthSqr));
-                bool bForceAdded = point1.m_forcePointers.addForcePointer(fp);
-                bForceAdded |= point2.m_forcePointers.addForcePointer(fp);
-                if (!bForceAdded)
-                {
-                    // if that force is too weak compared to other forces that those atoms have encountered so far - disregard
-                    continue;
-                }
-
                 m_forces.resize(forceIndex + 1);
                 m_forces[forceIndex] = Force(uPoint1, uPoint2);
             }
@@ -292,12 +282,6 @@ private:
         OcBoxStack<T> curStack(0, removeUnits(m_bBox));
         // split oc-tree recursively to get small number of points per leaf
         splitRecursive(curStack);
-
-        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
-        {
-            auto& point = m_points[uPoint];
-            point.m_forcePointers.clear();
-        }
 
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
