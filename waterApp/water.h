@@ -81,50 +81,29 @@ struct Water
     {
         prepareAtomsForAdvection();
 
-#if ASSERT_ONLY_CODE
-        // check that none of the forces have 'used' bit set
-        nvAssert(m_forces.size() > 0);
-        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
-        {
-            nvAssert(!m_forces[forceIndex].isUsed());
-        }
-        m_dbgNForces = 0;
-#endif
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
         }
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            // this affects forces in nearby atoms too - that's why we have to clear m_vForce outside of this loop
-            updateForces(uAtom);
+            updateForces(forceIndex);
         }
-        nvAssert(m_dbgNForces > 0);
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             advectPosition(uAtom, m_fTimeStep);
         }
 
-        // drop 'used' bit on the forces
-        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
-        {
-            m_forces[forceIndex].clearUsed();
-        }
-#if ASSERT_ONLY_CODE
-        m_dbgNForces = 0;
-#endif
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             m_points[uAtom].m_vPrevForce = m_points[uAtom].m_vForce;
             m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
         }
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            // this affects forces in nearby atoms too - that's why we have to clear m_vForce outside of this loop
-            updateForces(uAtom);
+            updateForces(forceIndex);
         }
-        nvAssert(m_dbgNForces > 0);
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             advectSpeed(uAtom, m_fTimeStep);
@@ -358,40 +337,31 @@ private:
         }
     }
 
-    void updateForces(NvU32 uAtom)
+    void updateForces(NvU32 forceIndex)
     {
-        // change speed of each atom according to forces
-        auto& atom1 = m_points[uAtom];
+        auto& force = m_forces[forceIndex];
+
+        NvU32 uAtom1 = force.getAtom1Index();
+        auto& atom1 = m_points[uAtom1];
         MyUnits<T> fMass1 = atom1.getMass();
-        auto& forcePointers = atom1.m_forcePointers;
-        for (NvU32 uFP = 0; uFP < forcePointers.size(); ++uFP)
+        NvU32 uAtom2 = force.getAtom2Index();
+        auto& atom2 = m_points[uAtom2];
+        MyUnits<T> fMass2 = atom2.getMass();
+
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+        auto vR = atom1.m_vPos - atom2.m_vPos;
+        for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
         {
-            NvU32 forceIndex = forcePointers[uFP].getForceIndex();
-            auto& force = m_forces[forceIndex];
-            if (force.isUsed()) // this force has already been applied when looking at other atom?
-                continue;
-            nvAssert(++m_dbgNForces <= m_forces.size());
-            force.notifyUsed();
+            if (vR[uDim] < -m_fHalfBoxSize) vR[uDim] += m_fBoxSize;
+            else if (vR[uDim] > m_fHalfBoxSize) vR[uDim] -= m_fBoxSize;
+        }
 
-            NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom;
-            auto& atom2 = m_points[uAtom2];
-            MyUnits<T> fMass2 = atom2.getMass();
-
-            auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
-            auto vR = atom1.m_vPos - atom2.m_vPos;
-            for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-            {
-                if (vR[uDim] < -m_fHalfBoxSize) vR[uDim] += m_fBoxSize;
-                else if (vR[uDim] > m_fHalfBoxSize) vR[uDim] -= m_fBoxSize;
-            }
-
-            typename BondsDataBase<T>::LJ_Out out;
-            if (eBond.lennardJones(vR, out))
-            {
-                // symmetric addition ensures conservation of momentum
-                atom1.m_vForce += out.vForce;
-                atom2.m_vForce -= out.vForce;
-            }
+        typename BondsDataBase<T>::LJ_Out out;
+        if (eBond.lennardJones(vR, out))
+        {
+            // symmetric addition ensures conservation of momentum
+            atom1.m_vForce += out.vForce;
+            atom2.m_vForce -= out.vForce;
         }
     }
     void advectSpeed(NvU32 uAtom, MyUnits<T> fTimeStep)
@@ -440,20 +410,16 @@ private:
     struct Force
     {
         Force() { }
-        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2), m_isUsed(0)
+        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2)
         {
             nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
         }
-        void notifyUsed() { m_isUsed = 1; }
-        void clearUsed() { m_isUsed = 0; }
-        bool isUsed() const { return m_isUsed == 1; }
         NvU32 getAtom1Index() const { return m_uAtom1; }
         NvU32 getAtom2Index() const { return m_uAtom2; }
 
     private:
-        NvU32 m_uAtom1 : 15;
-        NvU32 m_uAtom2 : 15;
-        NvU32 m_isUsed : 1;
+        NvU32 m_uAtom1 : 16;
+        NvU32 m_uAtom2 : 16;
     };
     std::vector<Force> m_forces;
     std::vector<OcTreeNode<Water>> m_ocTree;
@@ -467,6 +433,5 @@ private:
 
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions = 0;
-    NvU32 m_dbgNForces = 0;
 #endif
 };
