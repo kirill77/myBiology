@@ -67,6 +67,7 @@ struct Water
 
     struct Atom
     {
+        inline MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
         NvU32 m_nProtons : 8;
         rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce, m_vPrevForce;
         ForcePointers<16> m_forcePointers;
@@ -134,7 +135,7 @@ struct Water
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             auto& point = m_points[uAtom];
-            MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
+            MyUnits<T> fMass = point.getMass();
             MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed, fMass);
             m_fCurTotalKin += fKin;
         }
@@ -269,7 +270,7 @@ private:
         for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
         {
             Atom& point = m_points[uPoint];
-            MyUnits<T> fMass = BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass;
+            MyUnits<T> fMass = point.getMass();
             MyUnits<T> fCurKin = lengthSquared(point.m_vSpeed) * fMass / 2;
             nvAssert(fCurKin.m_value <= m_fMaxAllowedKin.m_value * 1.00001);
         }
@@ -284,7 +285,7 @@ private:
             Atom& point = m_points[uPoint];
             point.m_vSpeed *= fMultiplier;
 #if ASSERT_ONLY_CODE
-            dbgKin += lengthSquared(point.m_vSpeed) * BondsDataBase<T>::getAtom(point.m_nProtons).m_fMass / 2;
+            dbgKin += lengthSquared(point.m_vSpeed) * point.getMass() / 2;
 #endif
         }
         nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
@@ -333,7 +334,7 @@ private:
         for (NvU32 uPoint = 0; ; )
         {
             const auto& atom = m_points[uPoint];
-            MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+            MyUnits<T> fMass = atom.getMass();
             rtvector<MyUnits<T>, 3> vSpeed = atom.m_vSpeed + atom.m_vForce * (m_fTimeStep / fMass);
             rtvector<MyUnits<T>, 3> vDeltaPos = vSpeed * m_fTimeStep;
             MyUnits<T> fDeltaPosSqr = lengthSquared(vDeltaPos);
@@ -361,7 +362,7 @@ private:
     {
         // change speed of each atom according to forces
         auto& atom1 = m_points[uAtom];
-        MyUnits<T> fMass1 = BondsDataBase<T>::getAtom(atom1.m_nProtons).m_fMass;
+        MyUnits<T> fMass1 = atom1.getMass();
         auto& forcePointers = atom1.m_forcePointers;
         for (NvU32 uFP = 0; uFP < forcePointers.size(); ++uFP)
         {
@@ -374,18 +375,18 @@ private:
 
             NvU32 uAtom2 = force.getAtom1Index() ^ force.getAtom2Index() ^ uAtom;
             auto& atom2 = m_points[uAtom2];
-            MyUnits<T> fMass2 = BondsDataBase<T>::getAtom(atom2.m_nProtons).m_fMass;
+            MyUnits<T> fMass2 = atom2.getMass();
 
             auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
-            typename BondsDataBase<T>::LJ_Out out;
-            out.vForce = atom1.m_vPos - atom2.m_vPos;
+            auto vR = atom1.m_vPos - atom2.m_vPos;
             for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
             {
-                if (out.vForce[uDim] < -m_fHalfBoxSize) out.vForce[uDim] += m_fBoxSize;
-                else if (out.vForce[uDim] > m_fHalfBoxSize) out.vForce[uDim] -= m_fBoxSize;
+                if (vR[uDim] < -m_fHalfBoxSize) vR[uDim] += m_fBoxSize;
+                else if (vR[uDim] > m_fHalfBoxSize) vR[uDim] -= m_fBoxSize;
             }
 
-            if (eBond.lennardJones(out.vForce, out))
+            typename BondsDataBase<T>::LJ_Out out;
+            if (eBond.lennardJones(vR, out))
             {
                 // symmetric addition ensures conservation of momentum
                 atom1.m_vForce += out.vForce;
@@ -396,7 +397,7 @@ private:
     void advectSpeed(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
         auto& atom = m_points[uAtom];
-        MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+        MyUnits<T> fMass = atom.getMass();
         atom.m_vSpeed += (atom.m_vForce + atom.m_vPrevForce) * (fTimeStep / 2 / fMass);
         clampTheSpeed(atom.m_vSpeed, fMass);
     }
@@ -404,7 +405,7 @@ private:
     {
         auto& atom = m_points[uAtom];
 
-        MyUnits<T> fMass = BondsDataBase<T>::getAtom(atom.m_nProtons).m_fMass;
+        MyUnits<T> fMass = atom.getMass();
         auto vAvgSpeed = atom.m_vSpeed + atom.m_vForce * (fTimeStep / 2 / fMass);
         clampTheSpeed(vAvgSpeed, fMass);
         atom.m_vPos += vAvgSpeed * fTimeStep;
