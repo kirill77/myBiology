@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include "basics/bonds.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
@@ -76,6 +77,11 @@ struct Water
         return m_points;
     }
 
+    void sortForces()
+    {
+        std::sort(m_forces.begin(), m_forces.end());
+    }
+
     void makeTimeStep()
     {
         prepareAtomsForAdvection();
@@ -86,8 +92,12 @@ struct Water
         }
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            updateForces(forceIndex);
+            auto& force = m_forces[forceIndex];
+            updateForces(force);
         }
+
+        // we want to process strong forces first - so sort all forces
+        sortForces();
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
@@ -101,7 +111,8 @@ struct Water
         }
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            updateForces(forceIndex);
+            auto& force = m_forces[forceIndex];
+            updateForces(force);
         }
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
@@ -321,10 +332,38 @@ private:
         }
     }
 
-    void updateForces(NvU32 forceIndex)
+    inline bool computeForce(const Atom &atom1, const Atom &atom2, rtvector<MyUnits<T>, 3> &vOutDir, typename BondsDataBase<T>::LJ_Out &out) const
     {
-        auto& force = m_forces[forceIndex];
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+        vOutDir = atom1.m_vPos - atom2.m_vPos;
+        for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+        {
+            if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
+            else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
+        }
+        return eBond.lennardJones(vOutDir, out);
+    }
 
+    struct Force
+    {
+        Force() { }
+        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2)
+        {
+            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
+        }
+        inline bool operator < (const Force& other) const { return m_fPotential < other.m_fPotential; }
+        NvU32 getAtom1Index() const { return m_uAtom1; }
+        NvU32 getAtom2Index() const { return m_uAtom2; }
+
+        MyUnits<T> m_fPotential;
+
+    private:
+        NvU32 m_uAtom1 : 16;
+        NvU32 m_uAtom2 : 16;
+    };
+
+    void updateForces(Force &force)
+    {
         NvU32 uAtom1 = force.getAtom1Index();
         auto& atom1 = m_points[uAtom1];
         MyUnits<T> fMass1 = atom1.getMass();
@@ -332,21 +371,18 @@ private:
         auto& atom2 = m_points[uAtom2];
         MyUnits<T> fMass2 = atom2.getMass();
 
-        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
-        auto vR = atom1.m_vPos - atom2.m_vPos;
-        for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-        {
-            if (vR[uDim] < -m_fHalfBoxSize) vR[uDim] += m_fBoxSize;
-            else if (vR[uDim] > m_fHalfBoxSize) vR[uDim] -= m_fBoxSize;
-        }
-
+        rtvector<MyUnits<T>, 3> vR;
         typename BondsDataBase<T>::LJ_Out out;
-        if (eBond.lennardJones(vR, out))
+        if (computeForce(atom1, atom2, vR, out))
         {
             // symmetric addition ensures conservation of momentum
             atom1.m_vForce += out.vForce;
             atom2.m_vForce -= out.vForce;
+            force.m_fPotential = out.fPotential;
+            return;
         }
+        // force is too weak - assume it's zero
+        force.m_fPotential = MyUnits<T>();
     }
     void advectSpeed(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
@@ -391,20 +427,6 @@ private:
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
     std::vector<Atom> m_points;
-    struct Force
-    {
-        Force() { }
-        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2)
-        {
-            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
-        }
-        NvU32 getAtom1Index() const { return m_uAtom1; }
-        NvU32 getAtom2Index() const { return m_uAtom2; }
-
-    private:
-        NvU32 m_uAtom1 : 16;
-        NvU32 m_uAtom2 : 16;
-    };
     std::vector<Force> m_forces;
     std::vector<OcTreeNode<Water>> m_ocTree;
     RNGSobol m_rng;
