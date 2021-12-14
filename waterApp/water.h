@@ -11,6 +11,23 @@ struct Water
 {
     typedef _T T;
 
+    struct Force
+    {
+        Force() { }
+        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2)
+        {
+            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
+        }
+        NvU32 getAtom1Index() const { return m_uAtom1; }
+        NvU32 getAtom2Index() const { return m_uAtom2; }
+
+        MyUnits<T> m_fPotential[2];
+
+    private:
+        NvU32 m_uAtom1 : 16;
+        NvU32 m_uAtom2 : 16;
+    };
+
     struct NODE_DATA // data that we store in each node
     {
     };
@@ -51,11 +68,11 @@ struct Water
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
                 double f = m_rng.generate01();
-                atom.m_vPos[uDim] = m_bBox.m_vMin[uDim] * f + m_bBox.m_vMax[uDim] * (1 - f);
+                atom.m_vPos[0][uDim] = m_bBox.m_vMin[uDim] * f + m_bBox.m_vMax[uDim] * (1 - f);
             }
             m_rng.nextSeed();
 
-            if (!m_bBox.includes(atom.m_vPos)) // atom must be inside the bounding box
+            if (!m_bBox.includes(atom.m_vPos[0])) // atom must be inside the bounding box
             {
                 __debugbreak();
             }
@@ -70,17 +87,19 @@ struct Water
     {
         inline MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
         NvU32 m_nProtons : 8;
-        rtvector<MyUnits<T>,3> m_vPos, m_vSpeed, m_vForce, m_vPrevForce;
+        rtvector<MyUnits<T>,3> m_vPos[2], m_vSpeed[2], m_vForce[2];
     };
     inline std::vector<Atom>& points()
     {
         return m_points;
     }
 
+#if 0
     void sortForces()
     {
         std::sort(m_forces.begin(), m_forces.end());
     }
+#endif
 
     void makeTimeStep()
     {
@@ -88,31 +107,26 @@ struct Water
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
+            m_points[uAtom].m_vForce[0] = rtvector<MyUnits<T>, 3>();
+            m_points[uAtom].m_vForce[1] = rtvector<MyUnits<T>, 3>();
         }
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
             auto& force = m_forces[forceIndex];
-            updateForces(force);
+            force.m_fPotential[0] = MyUnits<T>();
+            updateForces<0>(force);
         }
-
-        // we want to process strong forces first - so sort all forces
-        sortForces();
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
             advectPosition(uAtom, m_fTimeStep);
         }
 
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
-        {
-            m_points[uAtom].m_vPrevForce = m_points[uAtom].m_vForce;
-            m_points[uAtom].m_vForce = rtvector<MyUnits<T>, 3>();
-        }
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
             auto& force = m_forces[forceIndex];
-            updateForces(force);
+            force.m_fPotential[1] = MyUnits<T>();
+            updateForces<1>(force);
         }
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
@@ -125,7 +139,9 @@ struct Water
         {
             auto& point = m_points[uAtom];
             MyUnits<T> fMass = point.getMass();
-            MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed, fMass);
+            point.m_vPos[0] = point.m_vPos[1];
+            point.m_vSpeed[0] = point.m_vSpeed[1];
+            MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed[0], fMass);
             m_fCurTotalKin += fKin;
         }
     }
@@ -187,7 +203,7 @@ struct Water
                 m_dbgNContributions += 2;
 #endif
                 auto& point1 = m_points[uPoint1];
-                auto vDir = point2.m_vPos - point1.m_vPos;
+                auto vDir = point2.m_vPos[0] - point1.m_vPos[0];
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
@@ -222,7 +238,7 @@ struct Water
             nvAssert(uBegin <= uEnd);
             if (uBegin == uEnd)
                 return uEnd;
-            T f1 = m_points[uBegin].m_vPos[uDim].m_value;
+            T f1 = m_points[uBegin].m_vPos[0][uDim].m_value;
             if (f1 < fSplit)
                 continue;
             // search for element with which we can swap
@@ -231,7 +247,7 @@ struct Water
                 nvAssert(uBegin <= uEnd);
                 if (uBegin == uEnd)
                     return uEnd;
-                T f2 = m_points[uEnd].m_vPos[uDim].m_value;
+                T f2 = m_points[uEnd].m_vPos[0][uDim].m_value;
                 if (f2 < fSplit)
                     break;
             }
@@ -243,6 +259,7 @@ private:
     // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation.
     // since we can't make time step infinitely small - we compensate for inaccuracies by artificially changing speeds to have constant average
     // temperature
+#if 0
     void changeSpeedsToConserveTemp()
     {
 #if ASSERT_ONLY_CODE
@@ -271,6 +288,7 @@ private:
         nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
         m_fCurTotalKin = m_fWantedTotalKin;
     }
+#endif
     inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3>& vSpeed, MyUnits<T> fMass)
     {
         MyUnits<T> fKin = lengthSquared(vSpeed) * fMass / 2;
@@ -302,6 +320,7 @@ private:
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
     }
 
+#if 0
     void adjustTimeStep()
     {
         bool bDenyStepIncrease = false;
@@ -331,11 +350,13 @@ private:
             m_fTimeStep *= 2;
         }
     }
+#endif
 
+    template <NvU32 index>
     inline bool computeForce(const Atom &atom1, const Atom &atom2, rtvector<MyUnits<T>, 3> &vOutDir, typename BondsDataBase<T>::LJ_Out &out) const
     {
         auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
-        vOutDir = atom1.m_vPos - atom2.m_vPos;
+        vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
         for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
         {
             if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
@@ -344,24 +365,7 @@ private:
         return eBond.lennardJones(vOutDir, out);
     }
 
-    struct Force
-    {
-        Force() { }
-        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2)
-        {
-            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
-        }
-        inline bool operator < (const Force& other) const { return m_fPotential < other.m_fPotential; }
-        NvU32 getAtom1Index() const { return m_uAtom1; }
-        NvU32 getAtom2Index() const { return m_uAtom2; }
-
-        MyUnits<T> m_fPotential;
-
-    private:
-        NvU32 m_uAtom1 : 16;
-        NvU32 m_uAtom2 : 16;
-    };
-
+    template <NvU32 index>
     void updateForces(Force &force)
     {
         NvU32 uAtom1 = force.getAtom1Index();
@@ -373,53 +377,51 @@ private:
 
         rtvector<MyUnits<T>, 3> vR;
         typename BondsDataBase<T>::LJ_Out out;
-        if (computeForce(atom1, atom2, vR, out))
+        if (computeForce<index>(atom1, atom2, vR, out))
         {
             // symmetric addition ensures conservation of momentum
-            atom1.m_vForce += out.vForce;
-            atom2.m_vForce -= out.vForce;
-            force.m_fPotential = out.fPotential;
-            return;
+            atom1.m_vForce[index] += out.vForce;
+            atom2.m_vForce[index] -= out.vForce;
+            force.m_fPotential[index] = out.fPotential;
         }
-        // force is too weak - assume it's zero
-        force.m_fPotential = MyUnits<T>();
     }
     void advectSpeed(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
         auto& atom = m_points[uAtom];
         MyUnits<T> fMass = atom.getMass();
-        atom.m_vSpeed += (atom.m_vForce + atom.m_vPrevForce) * (fTimeStep / 2 / fMass);
-        clampTheSpeed(atom.m_vSpeed, fMass);
+        atom.m_vSpeed[1] = atom.m_vSpeed[0] + (atom.m_vForce[0] + atom.m_vForce[1]) * (fTimeStep / 2 / fMass);
+        clampTheSpeed(atom.m_vSpeed[1], fMass);
     }
     void advectPosition(NvU32 uAtom, MyUnits<T> fTimeStep)
     {
         auto& atom = m_points[uAtom];
 
         MyUnits<T> fMass = atom.getMass();
-        auto vAvgSpeed = atom.m_vSpeed + atom.m_vForce * (fTimeStep / 2 / fMass);
+        auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce[0] * (fTimeStep / 2 / fMass);
         clampTheSpeed(vAvgSpeed, fMass);
-        atom.m_vPos += vAvgSpeed * fTimeStep;
+        atom.m_vPos[1] = atom.m_vPos[0] + vAvgSpeed * fTimeStep;
 
         // if the atom exits bounding box, it enters from the other side
+        auto& vNewPos = atom.m_vPos[1];
         for (NvU32 uDim = 0; uDim < 3; ++uDim)
         {
-            if (atom.m_vPos[uDim] < m_bBox.m_vMin[uDim])
+            if (vNewPos[uDim] < m_bBox.m_vMin[uDim])
             {
-                auto fOvershoot = (m_bBox.m_vMin[uDim] - atom.m_vPos[uDim]);
+                auto fOvershoot = (m_bBox.m_vMin[uDim] - vNewPos[uDim]);
                 int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                atom.m_vPos[uDim] += m_fBoxSize * nBoxSizes;
-                nvAssert(m_bBox.m_vMin[uDim] <= atom.m_vPos[uDim] && atom.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
+                vNewPos[uDim] += m_fBoxSize * nBoxSizes;
+                nvAssert(m_bBox.m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= m_bBox.m_vMax[uDim]);
                 continue;
             }
-            if (atom.m_vPos[uDim] > m_bBox.m_vMax[uDim])
+            if (vNewPos[uDim] > m_bBox.m_vMax[uDim])
             {
-                auto fOvershoot = (atom.m_vPos[uDim] - m_bBox.m_vMax[uDim]);
+                auto fOvershoot = (vNewPos[uDim] - m_bBox.m_vMax[uDim]);
                 int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                atom.m_vPos[uDim] -= m_fBoxSize * nBoxSizes;
-                nvAssert(m_bBox.m_vMin[uDim] <= atom.m_vPos[uDim] && atom.m_vPos[uDim] <= m_bBox.m_vMax[uDim]);
+                vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
+                nvAssert(m_bBox.m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= m_bBox.m_vMax[uDim]);
             }
         }
-        nvAssert(m_bBox.includes(atom.m_vPos)); // atom must be inside the bounding box
+        nvAssert(m_bBox.includes(vNewPos)); // atom must be inside the bounding box
     }
 
     void splitRecursive(OcBoxStack<T>& stack);

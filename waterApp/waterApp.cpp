@@ -115,12 +115,12 @@ struct MyViewer : public Viewer
         {
             if (points[u].m_nProtons == 8)
             {
-                m_pODrawable->setVertex(nO++, removeUnits(points[u].m_vPos));
+                m_pODrawable->setVertex(nO++, removeUnits(points[u].m_vPos[0]));
                 continue;
             }
             if (points[u].m_nProtons == 1)
             {
-                m_pHDrawable->setVertex(nH++, removeUnits(points[u].m_vPos));
+                m_pHDrawable->setVertex(nH++, removeUnits(points[u].m_vPos[0]));
                 continue;
             }
             nvAssert(false);

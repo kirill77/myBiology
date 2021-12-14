@@ -31,7 +31,7 @@ void Water<_T>::splitRecursive(OcBoxStack<T>& curStack)
         {
             for (NvU32 u = node.getFirstPoint(); u < node.getEndPoint(); ++u)
             {
-                nvAssert(curStack.getBox(curStack.getCurDepth()).includes(removeUnits(m_points[u].m_vPos)));
+                nvAssert(curStack.getBox(curStack.getCurDepth()).includes(removeUnits(m_points[u].m_vPos[0])));
             }
         }
 #endif
