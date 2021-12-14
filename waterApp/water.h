@@ -21,6 +21,11 @@ struct Water
         NvU32 getAtom1Index() const { return m_uAtom1; }
         NvU32 getAtom2Index() const { return m_uAtom2; }
 
+        inline bool operator <(const Force& other) const
+        {
+            return m_fPotential[1] - m_fPotential[0] < other.m_fPotential[1] - other.m_fPotential[0];
+        }
+
         MyUnits<T> m_fPotential[2];
 
     private:
@@ -122,6 +127,22 @@ struct Water
             advectPosition(uAtom, m_fTimeStep);
         }
 
+        // don't let atoms come closer than the bond length - otherwise enormous repulsive force explodes the simulation
+        for ( ; ; )
+        {
+            int nAdjustments = 0;
+            for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
+            {
+                auto& force = m_forces[forceIndex];
+                nAdjustments += adjustForceDistance(force);
+            }
+            // if nothing has been adjusted - break
+            if (nAdjustments == 0)
+            {
+                break;
+            }
+        }
+
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
             auto& force = m_forces[forceIndex];
@@ -144,6 +165,32 @@ struct Water
             MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed[0], fMass);
             m_fCurTotalKin += fKin;
         }
+    }
+
+    int adjustForceDistance(Force& force)
+    {
+        NvU32 uAtom1 = force.getAtom1Index();
+        auto& atom1 = m_points[uAtom1];
+        NvU32 uAtom2 = force.getAtom2Index();
+        auto& atom2 = m_points[uAtom2];
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+        auto vDir = computeDir<1>(atom1, atom2);
+        auto fDistSqr = lengthSquared(vDir);
+        // is distance between the atoms larger than the bonth length? then we don't have to do anything
+        if (fDistSqr > eBond.m_fLengthSqr)
+            return 0;
+
+        MyUnits<T> fMass1 = atom1.getMass();
+        MyUnits<T> fMass2 = atom2.getMass();
+        auto fDist = sqrt(fDistSqr);
+        // make slightly larger adjustment than necessary to account for floating point errors
+        auto fAdjustment = (eBond.m_fLength - sqrt(fDistSqr)) + MyUnits<T>::angstrom() / 1024;
+        // massive atom is adjusted by a smaller amount
+        double fWeight = removeUnits(fMass2 / (fMass1 + fMass2));
+        atom1.m_vPos[1] = wrapThePos(atom1.m_vPos[1] + vDir * (fAdjustment / fDist * fWeight));
+        atom2.m_vPos[1] = wrapThePos(atom2.m_vPos[1] - vDir * (fAdjustment / fDist * (1 - fWeight)));
+
+        return 1;
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
@@ -353,15 +400,22 @@ private:
 #endif
 
     template <NvU32 index>
-    inline bool computeForce(const Atom &atom1, const Atom &atom2, rtvector<MyUnits<T>, 3> &vOutDir, typename BondsDataBase<T>::LJ_Out &out) const
+    rtvector<MyUnits<T>, 3> computeDir(const Atom &atom1, const Atom &atom2) const
     {
-        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
-        vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
+        rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
         for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
         {
             if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
             else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
         }
+        return vOutDir;
+    }
+
+    template <NvU32 index>
+    inline bool computeForce(const Atom &atom1, const Atom &atom2, rtvector<MyUnits<T>, 3> &vOutDir, typename BondsDataBase<T>::LJ_Out &out) const
+    {
+        vOutDir = computeDir<index>(atom1, atom2);
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
         return eBond.lennardJones(vOutDir, out);
     }
 
@@ -392,17 +446,10 @@ private:
         atom.m_vSpeed[1] = atom.m_vSpeed[0] + (atom.m_vForce[0] + atom.m_vForce[1]) * (fTimeStep / 2 / fMass);
         clampTheSpeed(atom.m_vSpeed[1], fMass);
     }
-    void advectPosition(NvU32 uAtom, MyUnits<T> fTimeStep)
+    // if the atom exits bounding box, it enters from the other side
+    rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3> &vOldPos)
     {
-        auto& atom = m_points[uAtom];
-
-        MyUnits<T> fMass = atom.getMass();
-        auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce[0] * (fTimeStep / 2 / fMass);
-        clampTheSpeed(vAvgSpeed, fMass);
-        atom.m_vPos[1] = atom.m_vPos[0] + vAvgSpeed * fTimeStep;
-
-        // if the atom exits bounding box, it enters from the other side
-        auto& vNewPos = atom.m_vPos[1];
+        auto vNewPos = vOldPos;
         for (NvU32 uDim = 0; uDim < 3; ++uDim)
         {
             if (vNewPos[uDim] < m_bBox.m_vMin[uDim])
@@ -422,6 +469,17 @@ private:
             }
         }
         nvAssert(m_bBox.includes(vNewPos)); // atom must be inside the bounding box
+        return vNewPos;
+    }
+
+    void advectPosition(NvU32 uAtom, MyUnits<T> fTimeStep)
+    {
+        auto& atom = m_points[uAtom];
+
+        MyUnits<T> fMass = atom.getMass();
+        auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce[0] * (fTimeStep / 2 / fMass);
+        clampTheSpeed(vAvgSpeed, fMass);
+        atom.m_vPos[1] = wrapThePos(atom.m_vPos[0] + vAvgSpeed * fTimeStep);
     }
 
     void splitRecursive(OcBoxStack<T>& stack);
