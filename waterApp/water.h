@@ -108,7 +108,7 @@ struct Water
 
     void makeTimeStep()
     {
-        prepareAtomsForAdvection();
+        createListOfForces();
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
@@ -250,7 +250,7 @@ struct Water
                 m_dbgNContributions += 2;
 #endif
                 auto& point1 = m_points[uPoint1];
-                auto vDir = point2.m_vPos[0] - point1.m_vPos[0];
+                auto vDir = computeDir<0>(point2, point1);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
@@ -348,7 +348,7 @@ private:
 #endif
         return m_fMaxAllowedKin;
     }
-    void prepareAtomsForAdvection()
+    void createListOfForces()
     {
         // create root oc-tree node
         m_ocTree.resize(1);
