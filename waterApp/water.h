@@ -14,23 +14,27 @@ struct Water
     struct Force
     {
         Force() { }
-        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2)
+        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2), m_collisionDetected(0)
         {
             nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
         }
         NvU32 getAtom1Index() const { return m_uAtom1; }
         NvU32 getAtom2Index() const { return m_uAtom2; }
+        bool hadCollision() const { return m_collisionDetected; }
+        void notifyCollision() { m_collisionDetected = 1; }
 
         inline bool operator <(const Force& other) const
         {
             return m_fPotential[1] - m_fPotential[0] < other.m_fPotential[1] - other.m_fPotential[0];
         }
 
-        MyUnits<T> m_fPotential[2];
+        MyUnits<T> m_fPotential[2]; // potentials corresponding to vPos[0] and vPos[1] respectively
+        MyUnits<T> m_fDistSqr[2]; // distances between atoms corresponding to vPos[0] and vPos[1] respectively
 
     private:
-        NvU32 m_uAtom1 : 16;
-        NvU32 m_uAtom2 : 16;
+        NvU32 m_uAtom1 : 15;
+        NvU32 m_uAtom2 : 15;
+        NvU32 m_collisionDetected : 1; // collision detected during time step
     };
 
     struct NODE_DATA // data that we store in each node
@@ -92,19 +96,17 @@ struct Water
     {
         inline MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
         NvU32 m_nProtons : 8;
-        rtvector<MyUnits<T>,3> m_vPos[2], m_vSpeed[2], m_vForce[2];
+        rtvector<MyUnits<T>,3> m_vPos[2], m_vSpeed[2], m_vForce;
     };
     inline std::vector<Atom>& points()
     {
         return m_points;
     }
 
-#if 0
     void sortForces()
     {
         std::sort(m_forces.begin(), m_forces.end());
     }
-#endif
 
     void makeTimeStep()
     {
@@ -112,8 +114,8 @@ struct Water
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            m_points[uAtom].m_vForce[0] = rtvector<MyUnits<T>, 3>();
-            m_points[uAtom].m_vForce[1] = rtvector<MyUnits<T>, 3>();
+            auto& atom = m_points[uAtom];
+            atom.m_vForce = rtvector<MyUnits<T>, 3>();
         }
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
@@ -124,7 +126,9 @@ struct Water
 
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            advectPosition(uAtom, m_fTimeStep);
+            auto& atom = m_points[uAtom];
+            advectPosition(atom, m_fTimeStep);
+            atom.m_vSpeed[1] = atom.m_vSpeed[0];
         }
 
         // don't let atoms come closer than the bond length - otherwise enormous repulsive force explodes the simulation
@@ -149,20 +153,26 @@ struct Water
             force.m_fPotential[1] = MyUnits<T>();
             updateForces<1>(force);
         }
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+
+        // sort forces according to change of potential because we want to first process the forces with decreasing potential
+        sortForces();
+
+        // update m_vSpeed[1] in each atom based on change of force potentials
+        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
-            advectSpeed(uAtom, m_fTimeStep);
+            auto& force = m_forces[forceIndex];
+            updateSpeeds(force);
         }
 
         // update kinetic energy
-        m_fCurTotalKin.clear();
+        m_fCurTotalKin = MyUnits<T>();
         for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
         {
-            auto& point = m_points[uAtom];
-            MyUnits<T> fMass = point.getMass();
-            point.m_vPos[0] = point.m_vPos[1];
-            point.m_vSpeed[0] = point.m_vSpeed[1];
-            MyUnits<T> fKin = clampTheSpeed(point.m_vSpeed[0], fMass);
+            auto& atom = m_points[uAtom];
+            MyUnits<T> fMass = atom.getMass();
+            atom.m_vPos[0] = atom.m_vPos[1];
+            atom.m_vSpeed[0] = atom.m_vSpeed[1];
+            MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
             m_fCurTotalKin += fKin;
         }
     }
@@ -180,6 +190,7 @@ struct Water
         if (fDistSqr > eBond.m_fLengthSqr)
             return 0;
 
+        force.notifyCollision();
         MyUnits<T> fMass1 = atom1.getMass();
         MyUnits<T> fMass2 = atom2.getMass();
         auto fDist = sqrt(fDistSqr);
@@ -336,18 +347,6 @@ private:
         m_fCurTotalKin = m_fWantedTotalKin;
     }
 #endif
-    inline MyUnits<T> clampTheSpeed(rtvector<MyUnits<T>, 3>& vSpeed, MyUnits<T> fMass)
-    {
-        MyUnits<T> fKin = lengthSquared(vSpeed) * fMass / 2;
-        if (fKin <= m_fMaxAllowedKin)
-            return fKin;
-        vSpeed *= sqrt(m_fMaxAllowedKin / fKin);
-#if ASSERT_ONLY_CODE
-        fKin = lengthSquared(vSpeed) * fMass / 2;
-        nvAssert(aboutEqual(fKin.m_value, m_fMaxAllowedKin.m_value, 0.01));
-#endif
-        return m_fMaxAllowedKin;
-    }
     void createListOfForces()
     {
         // create root oc-tree node
@@ -424,27 +423,70 @@ private:
     {
         NvU32 uAtom1 = force.getAtom1Index();
         auto& atom1 = m_points[uAtom1];
-        MyUnits<T> fMass1 = atom1.getMass();
         NvU32 uAtom2 = force.getAtom2Index();
         auto& atom2 = m_points[uAtom2];
-        MyUnits<T> fMass2 = atom2.getMass();
 
         rtvector<MyUnits<T>, 3> vR;
         typename BondsDataBase<T>::LJ_Out out;
         if (computeForce<index>(atom1, atom2, vR, out))
         {
-            // symmetric addition ensures conservation of momentum
-            atom1.m_vForce[index] += out.vForce;
-            atom2.m_vForce[index] -= out.vForce;
+            // symmetric addition should ensure conservation of momentum
+            if (index == 0)
+            {
+                atom1.m_vForce += out.vForce;
+                atom2.m_vForce -= out.vForce;
+            }
             force.m_fPotential[index] = out.fPotential;
         }
+        force.m_fDistSqr[index] = out.fDistSqr; // this is needed even if force is 0
     }
-    void advectSpeed(NvU32 uAtom, MyUnits<T> fTimeStep)
+    void updateSpeeds(Force &force)
     {
-        auto& atom = m_points[uAtom];
-        MyUnits<T> fMass = atom.getMass();
-        atom.m_vSpeed[1] = atom.m_vSpeed[0] + (atom.m_vForce[0] + atom.m_vForce[1]) * (fTimeStep / 2 / fMass);
-        clampTheSpeed(atom.m_vSpeed[1], fMass);
+        NvU32 uAtom1 = force.getAtom1Index();
+        auto& atom1 = m_points[uAtom1];
+        MyUnits<T> fMass1 = atom1.getMass();
+        NvU32 uAtom2 = force.getAtom2Index();
+        auto& atom2 = m_points[uAtom2];
+        MyUnits<T> fMass2 = atom2.getMass();
+
+        auto vDir = computeDir<1>(atom2, atom1);
+        nvAssert(dot(vDir, vDir) == force.m_fDistSqr[1]);
+        vDir /= sqrt(force.m_fDistSqr[1]);
+        auto fV1 = dot(atom1.m_vSpeed[0], vDir);
+        auto fV2 = dot(atom2.m_vSpeed[0], vDir);
+
+        auto fCommonTerm = fMass1 * fMass2 * (fV1 - fV2);
+        auto fSqrtTerm = (force.m_fPotential[0] - force.m_fPotential[1]) * 2 * (fMass1 + fMass2) + fMass1 * fMass2 * sqr(fV1 - fV2);
+        // if that term is negative, this means atoms were moving against the force and their speed must have decreased, however
+        // their speed was too small to start with and it can't decrease enough to compensate for increase in potential energy
+        if (fSqrtTerm < 0)
+        {
+            fSqrtTerm = MyUnits<T>();
+        }
+        else
+        {
+            fSqrtTerm = sqrt(fSqrtTerm * fMass1 * fMass2);
+        }
+        // Equations for wolfram cloud:
+        // E1:=m1/2*V1^2+m2/2*V2^2+fPotPrev== m1/2*(V1+dV1)^2+m2/2*(V2+dV2)^2+fPotNext (* conservation of energy *)
+        // E2:=m1*V1+m2*V2==m1*(V1+dV1)+m2*(V2+dV2) (* conservation of momentum *)
+        // E3:=FullSimplify[Solve[E1&&E2,{dV1,dV2}]]
+        // This yields two solutions:
+        // - solution1 is where final speeds are directed towards each other (atoms will be getting closer)
+        // - solution2 is where final speeds are directed away from each other (atoms will be getting farther apart)
+        double fSign = 1.; // corresponds to solution1
+        // solution2 happens in either of two cases:
+        // - atoms have just collided and thus must now start moving away from each other
+        // - atoms were moving away from each other on the previous time step, and distance between them has again increased on this time step
+        nvAssert(force.m_fDistSqr > 0);
+        if (force.hadCollision() || (fV1 - fV2 < 0 && force.m_fDistSqr[1] > force.m_fDistSqr[0]))
+        {
+            fSign = -1; // corresponds to solution 2
+        }
+        auto fDeltaV1 = ( fSqrtTerm * fSign - fCommonTerm) / (fMass1 * (fMass1 + fMass2));
+        auto fDeltaV2 = (-fSqrtTerm * fSign + fCommonTerm) / (fMass2 * (fMass1 + fMass2));
+        atom1.m_vSpeed[1] += vDir * fDeltaV1;
+        atom2.m_vSpeed[1] += vDir * fDeltaV2;
     }
     // if the atom exits bounding box, it enters from the other side
     rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3> &vOldPos)
@@ -472,13 +514,10 @@ private:
         return vNewPos;
     }
 
-    void advectPosition(NvU32 uAtom, MyUnits<T> fTimeStep)
+    void advectPosition(Atom &atom, MyUnits<T> fTimeStep)
     {
-        auto& atom = m_points[uAtom];
-
         MyUnits<T> fMass = atom.getMass();
-        auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce[0] * (fTimeStep / 2 / fMass);
-        clampTheSpeed(vAvgSpeed, fMass);
+        auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
         atom.m_vPos[1] = wrapThePos(atom.m_vPos[0] + vAvgSpeed * fTimeStep);
     }
 
