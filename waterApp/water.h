@@ -88,8 +88,6 @@ struct Water
         }
 
         m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
-        m_fMaxAllowedKin = m_fWantedAverageKin * 10;
-        m_fWantedTotalKin = m_fWantedAverageKin * (double)m_points.size();
     }
 
     struct Atom
@@ -101,11 +99,6 @@ struct Water
     inline std::vector<Atom>& points()
     {
         return m_points;
-    }
-
-    void sortForces()
-    {
-        std::sort(m_forces.begin(), m_forces.end());
     }
 
     void makeTimeStep()
@@ -154,9 +147,6 @@ struct Water
             updateForces<1>(force);
         }
 
-        // sort forces according to change of potential because we want to first process the forces with decreasing potential
-        sortForces();
-
         // update m_vSpeed[1] in each atom based on change of force potentials
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
@@ -174,6 +164,22 @@ struct Water
             atom.m_vSpeed[0] = atom.m_vSpeed[1];
             MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
             m_fCurTotalKin += fKin;
+        }
+
+        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
+        auto fScaleCoeff = (m_fWantedAverageKin / (m_fCurTotalKin / (T)m_points.size())).m_value;
+        if (fScaleCoeff < 1)
+        {
+            double fScaleCoeffSqrt = sqrt(fScaleCoeff);
+            for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+            {
+                auto& atom = m_points[uAtom];
+                // kinetic energy is computed using the following equation:
+                // fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
+                // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
+                atom.m_vSpeed[0] *= fScaleCoeffSqrt;
+            }
+            m_fCurTotalKin *= fScaleCoeff;
         }
     }
 
@@ -314,39 +320,6 @@ struct Water
     }
 
 private:
-    // the forces between atoms change rapidly depending on the distance - so time discretization introduces significant errors into simulation.
-    // since we can't make time step infinitely small - we compensate for inaccuracies by artificially changing speeds to have constant average
-    // temperature
-#if 0
-    void changeSpeedsToConserveTemp()
-    {
-#if ASSERT_ONLY_CODE
-        // check that speed isn't too high
-        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
-        {
-            Atom& point = m_points[uPoint];
-            MyUnits<T> fMass = point.getMass();
-            MyUnits<T> fCurKin = lengthSquared(point.m_vSpeed) * fMass / 2;
-            nvAssert(fCurKin.m_value <= m_fMaxAllowedKin.m_value * 1.00001);
-        }
-#endif
-        // multiply everything by a constant to achieve desired average temperature
-        T fMultiplier = sqrt(m_fWantedTotalKin.m_value / m_fCurTotalKin.m_value);
-#if ASSERT_ONLY_CODE
-        MyUnits<T> dbgKin;
-#endif
-        for (NvU32 uPoint = 0; uPoint < m_points.size(); ++uPoint)
-        {
-            Atom& point = m_points[uPoint];
-            point.m_vSpeed *= fMultiplier;
-#if ASSERT_ONLY_CODE
-            dbgKin += lengthSquared(point.m_vSpeed) * point.getMass() / 2;
-#endif
-        }
-        nvAssert(aboutEqual(dbgKin.m_value / m_points.size(), m_fWantedAverageKin.m_value, 0.01));
-        m_fCurTotalKin = m_fWantedTotalKin;
-    }
-#endif
     void createListOfForces()
     {
         // create root oc-tree node
@@ -365,38 +338,6 @@ private:
         m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
     }
-
-#if 0
-    void adjustTimeStep()
-    {
-        bool bDenyStepIncrease = false;
-        for (NvU32 uPoint = 0; ; )
-        {
-            const auto& atom = m_points[uPoint];
-            MyUnits<T> fMass = atom.getMass();
-            rtvector<MyUnits<T>, 3> vSpeed = atom.m_vSpeed + atom.m_vForce * (m_fTimeStep / fMass);
-            rtvector<MyUnits<T>, 3> vDeltaPos = vSpeed * m_fTimeStep;
-            MyUnits<T> fDeltaPosSqr = lengthSquared(vDeltaPos);
-            if (fDeltaPosSqr > m_fMaxSpaceStepSqr) // if delta pos is too large - decrease step size
-            {
-                m_fTimeStep *= 0.5;
-                uPoint = 0;
-                bDenyStepIncrease = true;
-                continue;
-            }
-            if (fDeltaPosSqr * 4 > m_fMaxSpaceStepSqr)
-                bDenyStepIncrease = true;
-            if (++uPoint >= m_points.size())
-            {
-                break;
-            }
-        }
-        if (!bDenyStepIncrease)
-        {
-            m_fTimeStep *= 2;
-        }
-    }
-#endif
 
     template <NvU32 index>
     rtvector<MyUnits<T>, 3> computeDir(const Atom &atom1, const Atom &atom2) const
@@ -531,7 +472,7 @@ private:
     RNGSobol m_rng;
 
     const double m_fWantedTempC = 37;
-    MyUnits<T> m_fWantedAverageKin, m_fWantedTotalKin, m_fMaxAllowedKin;
+    MyUnits<T> m_fWantedAverageKin;
     MyUnits<T> m_fCurTotalKin; // energy conservation variables
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
     MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
