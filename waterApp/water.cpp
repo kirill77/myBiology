@@ -4,7 +4,7 @@ template <class _T>
 void Water<_T>::splitRecursive(OcBoxStack<T>& curStack)
 {
     NvU32 parentNodeIndex = curStack.getCurNodeIndex();
-    auto* pNode = &m_ocTree[parentNodeIndex];
+    auto* pNode = &m_ocTree.m_nodes[parentNodeIndex];
     nvAssert(pNode->isLeaf());
     if (pNode->getNPoints() <= 16) // no need to split further?
     {
@@ -13,8 +13,8 @@ void Water<_T>::splitRecursive(OcBoxStack<T>& curStack)
 #if ASSERT_ONLY_CODE
     NvU32 dbgNPoints1 = pNode->getNPoints(), dbgNPoints2 = 0;
 #endif
-    pNode->split(curStack, *this);
-    NvU32 uFirstChild = m_ocTree[parentNodeIndex].getFirstChild();
+    m_ocTree.split(curStack);
+    NvU32 uFirstChild = m_ocTree.m_nodes[parentNodeIndex].getFirstChild();
     for (NvU32 uChild = 0; uChild < 8; ++uChild)
     {
 #if ASSERT_ONLY_CODE
@@ -25,7 +25,7 @@ void Water<_T>::splitRecursive(OcBoxStack<T>& curStack)
         curStack.push(uChild, childNodeIndex);
 #if ASSERT_ONLY_CODE
         nvAssert(curStack.getCurDepth() == dbgDepth + 1);
-        auto& node = m_ocTree[childNodeIndex];
+        auto& node = m_ocTree.m_nodes[childNodeIndex];
         dbgNPoints2 += node.getNPoints();
         if (curStack.getCurDepth() == 1)
         {

@@ -41,7 +41,7 @@ struct Water
     {
     };
 
-    Water()
+    Water() : m_ocTree(*this)
     {
         m_fBoxSize = MyUnits<T>::angstrom() * 20;
         m_fHalfBoxSize = m_fBoxSize / 2.;
@@ -210,8 +210,8 @@ struct Water
         return 1;
     }
 
-    NvU32 getNNodes() const { return (NvU32)m_ocTree.size(); }
-    OcTreeNode<Water>& accessNode(NvU32 index) { return m_ocTree[index]; }
+    NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
+    OcTreeNode<Water>& accessNode(NvU32 index) { return m_ocTree.m_nodes[index]; }
     bool isOkToBeNotLeaf(const OcTreeNode<Water>& node) const
     {
         return node.getNPoints() > 0; // we would we split node with 0 points in it?
@@ -220,12 +220,11 @@ struct Water
     {
         return node.getNPoints() > 0;
     }
-    void resizeNodes(NvU32 nNodes) { m_ocTree.resize(nNodes); }
 
     // returns true if after this call interaction between those two boxes are fully accounted for
     bool addLeafAndNodeInteraction(NvU32 leafIndex, const OcBoxStack<T>& leafStack, NvU32 nodeIndex, const OcBoxStack<T>& nodeStack)
     {
-        nvAssert(m_ocTree[leafIndex].getNPoints() && m_ocTree[nodeIndex].getNPoints());
+        nvAssert(m_ocTree.m_nodes[leafIndex].getNPoints() && m_ocTree.m_nodes[nodeIndex].getNPoints());
         // check if we can treat srcNode as one point as opposed to looking at its individual sub-boxes or points
         if (leafIndex != nodeIndex)
         {
@@ -246,18 +245,18 @@ struct Water
                 if (fDistSqr >= BondsDataBase<T>::s_zeroForceDistSqr)
                 {
 #if ASSERT_ONLY_CODE
-                    m_dbgNContributions += 2 * m_ocTree[leafIndex].getNPoints() * m_ocTree[nodeIndex].getNPoints();
+                    m_dbgNContributions += 2 * m_ocTree.m_nodes[leafIndex].getNPoints() * m_ocTree.m_nodes[nodeIndex].getNPoints();
 #endif
                     return true;
                 }
             }
             // we want to descend until leafs because it's possible some nodes will be cut off early that way
-            auto& node = m_ocTree[nodeIndex];
+            auto& node = m_ocTree.m_nodes[nodeIndex];
             if (!node.isLeaf()) return false;
         }
-        auto& leafNode1 = m_ocTree[leafIndex];
+        auto& leafNode1 = m_ocTree.m_nodes[leafIndex];
         nvAssert(leafNode1.getNPoints());
-        auto& leafNode2 = m_ocTree[nodeIndex];
+        auto& leafNode2 = m_ocTree.m_nodes[nodeIndex];
         for (NvU32 uPoint2 = leafNode2.getFirstPoint(); uPoint2 < leafNode2.getEndPoint(); ++uPoint2)
         {
             auto& point2 = m_points[uPoint2];
@@ -323,8 +322,8 @@ private:
     void createListOfForces()
     {
         // create root oc-tree node
-        m_ocTree.resize(1);
-        m_ocTree[0].initLeaf(0, (NvU32)m_points.size());
+        m_ocTree.m_nodes.resize(1);
+        m_ocTree.m_nodes[0].initLeaf(0, (NvU32)m_points.size());
 
         // initialize stack
         OcBoxStack<T> curStack(0, removeUnits(m_bBox));
@@ -335,7 +334,7 @@ private:
         m_dbgNContributions = 0;
 #endif
         m_forces.resize(0);
-        m_ocTree[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
+        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
     }
 
@@ -468,7 +467,7 @@ private:
     BBox3<MyUnits<T>> m_bBox;
     std::vector<Atom> m_points;
     std::vector<Force> m_forces;
-    std::vector<OcTreeNode<Water>> m_ocTree;
+    OcTree<Water> m_ocTree;
     RNGSobol m_rng;
 
     const double m_fWantedTempC = 37;
