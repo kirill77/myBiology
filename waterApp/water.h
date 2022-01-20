@@ -292,43 +292,12 @@ struct Water
         return MyUnits<T>::evalPressure(m_fCurTotalKin, m_bBox.evalVolume(), (NvU32)m_points.size());
     }
     const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
-
-    // returns index of first point for which points[u][uDim] >= fSplit
-    NvU32 loosePointsSort(NvU32 uBegin, NvU32 uEnd, T fSplit, NvU32 uDim)
-    {
-        for (; ; ++uBegin)
-        {
-            nvAssert(uBegin <= uEnd);
-            if (uBegin == uEnd)
-                return uEnd;
-            T f1 = m_points[uBegin].m_vPos[0][uDim].m_value;
-            if (f1 < fSplit)
-                continue;
-            // search for element with which we can swap
-            for (--uEnd; ; --uEnd)
-            {
-                nvAssert(uBegin <= uEnd);
-                if (uBegin == uEnd)
-                    return uEnd;
-                T f2 = m_points[uEnd].m_vPos[0][uDim].m_value;
-                if (f2 < fSplit)
-                    break;
-            }
-            nvSwap(m_points[uBegin], m_points[uEnd]);
-        }
-    }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_points[index].m_vPos[0]); }
 
 private:
     void createListOfForces()
     {
-        // create root oc-tree node
-        m_ocTree.m_nodes.resize(1);
-        m_ocTree.m_nodes[0].initLeaf(0, (NvU32)m_points.size());
-
-        // initialize stack
-        OcBoxStack<T> curStack(0, removeUnits(m_bBox));
-        // split oc-tree recursively to get small number of points per leaf
-        splitRecursive(curStack);
+        m_ocTree.rebuild(removeUnits(m_bBox), (NvU32)m_points.size());
 
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
@@ -460,8 +429,6 @@ private:
         auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
         atom.m_vPos[1] = wrapThePos(atom.m_vPos[0] + vAvgSpeed * fTimeStep);
     }
-
-    void splitRecursive(OcBoxStack<T>& stack);
 
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
