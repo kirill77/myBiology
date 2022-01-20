@@ -257,14 +257,16 @@ struct Water
         auto& leafNode1 = m_ocTree.m_nodes[leafIndex];
         nvAssert(leafNode1.getNPoints());
         auto& leafNode2 = m_ocTree.m_nodes[nodeIndex];
-        for (NvU32 uPoint2 = leafNode2.getFirstPoint(); uPoint2 < leafNode2.getEndPoint(); ++uPoint2)
+        for (NvU32 uTreePoint2 = leafNode2.getFirstTreePoint(); uTreePoint2 < leafNode2.getEndTreePoint(); ++uTreePoint2)
         {
+            NvU32 uPoint2 = m_ocTree.getPointIndex(uTreePoint2);
             auto& point2 = m_points[uPoint2];
-            for (NvU32 uPoint1 = (leafIndex == nodeIndex) ? uPoint2 + 1 : leafNode1.getFirstPoint(); uPoint1 < leafNode1.getEndPoint(); ++uPoint1)
+            for (NvU32 uTreePoint1 = (leafIndex == nodeIndex) ? uTreePoint2 + 1 : leafNode1.getFirstTreePoint(); uTreePoint1 < leafNode1.getEndTreePoint(); ++uTreePoint1)
             {
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
+                NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
                 auto& point1 = m_points[uPoint1];
                 auto vDir = computeDir<0>(point2, point1);
                 auto fLengthSqr = lengthSquared(vDir);
