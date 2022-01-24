@@ -14,14 +14,18 @@ struct Water
     struct Force
     {
         Force() { }
-        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2), m_collisionDetected(0)
+        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2), m_collisionDetected(0), m_isCovalentBond(0)
         {
             nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
         }
         NvU32 getAtom1Index() const { return m_uAtom1; }
         NvU32 getAtom2Index() const { return m_uAtom2; }
         bool hadCollision() const { return m_collisionDetected; }
+        bool isCovalentBond() const { return m_isCovalentBond; }
+
         void notifyCollision() { m_collisionDetected = 1; }
+        void dropCovalentBond() { nvAssert(m_isCovalentBond == 1); m_isCovalentBond = 0; }
+        void setCovalentBond() { nvAssert(m_isCovalentBond == 0); m_isCovalentBond = 1; }
 
         inline bool operator <(const Force& other) const
         {
@@ -35,6 +39,7 @@ struct Water
         NvU32 m_uAtom1 : 15;
         NvU32 m_uAtom2 : 15;
         NvU32 m_collisionDetected : 1; // collision detected during time step
+        NvU32 m_isCovalentBond : 1;
     };
 
     struct NODE_DATA // data that we store in each node
@@ -65,12 +70,12 @@ struct Water
             Atom& atom = m_points[u];
             if (nHs < nOs * 2)
             {
-                atom.m_nProtons = NPROTONS_H;
+                atom = Atom(NPROTONS_H);
                 ++nHs;
             }
             else
             {
-                atom.m_nProtons = NPROTONS_O;
+                atom = Atom(NPROTONS_O);
                 ++nOs;
             }
 
@@ -92,9 +97,51 @@ struct Water
 
     struct Atom
     {
-        inline MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
-        NvU32 m_nProtons : 8;
+        Atom(NvU32 nProtons = 1) : m_nBondedAtoms(0), m_nProtons(nProtons), m_uValence(BondsDataBase<T>::getAtom(m_nProtons).m_uValence)
+        {
+            for (NvU32 u = 0; u < m_bondedAtoms.size(); ++u) m_bondedAtoms[u] = -1;
+            nvAssert(m_uValence != 0); // we don't work with noble gasses
+        }
+
+        NvU32 getNProtons() const { return m_nProtons; }
+        MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
+        NvU32 getValence() const { return m_uValence; }
+        NvU32 getNBonds() const { return m_nBondedAtoms; }
+        NvU32 getBond(NvU32 uBond) const { nvAssert(uBond < m_nBondedAtoms); return m_bondedAtoms[uBond]; }
+
+        void addBond(NvU32 uAtom)
+        {
+            nvAssert(m_nBondedAtoms < m_uValence);
+            m_bondedAtoms[m_nBondedAtoms] = uAtom;
+            nvAssert(m_bondedAtoms[m_nBondedAtoms] == uAtom); // check that type conversion didn't loose information
+            ++m_nBondedAtoms;
+        }
+        void removeBond(NvU32 uAtom)
+        {
+            for (NvU32 u = 0; ; ++u)
+            {
+                nvAssert(u < m_nBondedAtoms);
+                if (m_bondedAtoms[u] == uAtom)
+                {
+                    m_bondedAtoms[u] = m_bondedAtoms[--m_nBondedAtoms];
+                }
+            }
+        }
+
         rtvector<MyUnits<T>,3> m_vPos[2], m_vSpeed[2], m_vForce;
+
+        private:
+            union
+            {
+                NvU32 flags;
+                struct
+                {
+                    NvU32 m_nProtons : 8;
+                    NvU32 m_nBondedAtoms : 3;
+                    NvU32 m_uValence : 3;
+                };
+            };
+            std::array<unsigned short, 4> m_bondedAtoms;
     };
     inline std::vector<Atom>& points()
     {
@@ -140,6 +187,8 @@ struct Water
             }
         }
 
+        dissociateWeakBonds();
+
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
         {
             auto& force = m_forces[forceIndex];
@@ -183,13 +232,39 @@ struct Water
         }
     }
 
+    void dissociateWeakBonds()
+    {
+        for (NvU32 uForce = 0; uForce < m_forces.size(); ++uForce)
+        {
+            auto& force = m_forces[uForce];
+            // all forces that are covalent bonds must be in the beginning of the list - so as soon as we've found first
+            // force that isn't a covalent bond - we know that all other forces will also be not covalent bonds
+            if (!force.isCovalentBond())
+                return;
+
+            // compute current bond length
+            auto &atom1 = m_points[force.getAtom1Index()];
+            auto &atom2 = m_points[force.getAtom2Index()];
+            auto vDir = computeDir<1>(atom1, atom2);
+            auto fDistSqr = dot(vDir, vDir);
+            // if bond got too long - dissociate it
+            auto& bond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
+            if (fDistSqr >= bond.m_fDissocLengthSqr)
+            {
+                force.dropCovalentBond();
+                atom1.removeBond(force.getAtom2Index());
+                atom2.removeBond(force.getAtom1Index());
+            }
+        }
+    }
+
     int adjustForceDistance(Force& force)
     {
         NvU32 uAtom1 = force.getAtom1Index();
         auto& atom1 = m_points[uAtom1];
         NvU32 uAtom2 = force.getAtom2Index();
         auto& atom2 = m_points[uAtom2];
-        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
         auto vDir = computeDir<1>(atom1, atom2);
         auto fDistSqr = lengthSquared(vDir);
         // is distance between the atoms larger than the bonth length? then we don't have to do anything
@@ -197,6 +272,15 @@ struct Water
             return 0;
 
         force.notifyCollision();
+
+        // if this force is not yet covalent bond and atoms have vacant orbitals - we make this force a covalent bond here
+        if (!force.isCovalentBond() && atom1.getNBonds() < atom1.getValence() && atom2.getNBonds() < atom2.getValence())
+        {
+            atom1.addBond(uAtom2);
+            atom2.addBond(uAtom1);
+            force.setCovalentBond();
+        }
+
         MyUnits<T> fMass1 = atom1.getMass();
         MyUnits<T> fMass2 = atom2.getMass();
         auto fDist = sqrt(fDistSqr);
@@ -260,24 +344,34 @@ struct Water
         for (NvU32 uTreePoint2 = leafNode2.getFirstTreePoint(); uTreePoint2 < leafNode2.getEndTreePoint(); ++uTreePoint2)
         {
             NvU32 uPoint2 = m_ocTree.getPointIndex(uTreePoint2);
-            auto& point2 = m_points[uPoint2];
+            auto& atom2 = m_points[uPoint2];
             for (NvU32 uTreePoint1 = (leafIndex == nodeIndex) ? uTreePoint2 + 1 : leafNode1.getFirstTreePoint(); uTreePoint1 < leafNode1.getEndTreePoint(); ++uTreePoint1)
             {
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
-                auto& point1 = m_points[uPoint1];
-                auto vDir = computeDir<0>(point2, point1);
+                auto& atom1 = m_points[uPoint1];
+                auto vDir = computeDir<0>(atom2, atom1);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
                     continue;
                 }
 
-                NvU32 forceIndex = (NvU32)m_forces.size();
-                m_forces.resize(forceIndex + 1);
-                m_forces[forceIndex] = Force(uPoint1, uPoint2);
+                for (NvU32 uBond1 = 0; ; ++uBond1)
+                {
+                    if (uBond1 >= atom1.getNBonds())
+                    {
+                        m_forces.push_back(Force(uPoint1, uPoint2));
+                        break;
+                    }
+                    // if this is covalent bond - we don't need to add it - it must already be in the list of forces
+                    if (atom1.getBond(uBond1) == uPoint2)
+                    {
+                        break;
+                    }
+                }
             }
         }
         return true;
@@ -305,6 +399,22 @@ private:
         m_dbgNContributions = 0;
 #endif
         m_forces.resize(0);
+
+        // push all covalent bonds - they will be in the beginning of forces list
+        for (NvU32 uAtom1 = 0; uAtom1 < m_points.size(); ++uAtom1)
+        {
+            auto& atom1 = m_points[uAtom1];
+            for (NvU32 uBond1 = 0; uBond1 < atom1.getNBonds(); ++uBond1)
+            {
+                NvU32 uAtom2 = atom1.getBond(uBond1);
+                if (uAtom2 < uAtom1) // already took care of this one
+                    continue;
+                Force force(uAtom1, uAtom2);
+                force.setCovalentBond();
+                m_forces.push_back(force);
+            }
+        }
+
         m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
     }
@@ -325,7 +435,7 @@ private:
     inline bool computeForce(const Atom &atom1, const Atom &atom2, rtvector<MyUnits<T>, 3> &vOutDir, typename BondsDataBase<T>::LJ_Out &out) const
     {
         vOutDir = computeDir<index>(atom1, atom2);
-        auto& eBond = BondsDataBase<T>::getEBond(atom1.m_nProtons, atom2.m_nProtons, 1);
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
         return eBond.lennardJones(vOutDir, out);
     }
 
@@ -366,6 +476,15 @@ private:
         auto fV1 = dot(atom1.m_vSpeed[0], vDir);
         auto fV2 = dot(atom2.m_vSpeed[0], vDir);
 
+        // if this is covalent bond and atoms had collision - we expect atoms to stick together (inelastic collission)
+        if (force.isCovalentBond() && force.hadCollision())
+        {
+            auto fV = (fV1 * fMass1 + fV2 * fMass2) / (fMass1 + fMass2);
+            atom1.m_vSpeed[1] += vDir * (fV - fV1);
+            atom2.m_vSpeed[2] += vDir * (fV - fV2);
+            return;
+        }
+
         auto fCommonTerm = fMass1 * fMass2 * (fV1 - fV2);
         auto fSqrtTerm = (force.m_fPotential[0] - force.m_fPotential[1]) * 2 * (fMass1 + fMass2) + fMass1 * fMass2 * sqr(fV1 - fV2);
         // if that term is negative, this means atoms were moving against the force and their speed must have decreased, however
@@ -379,7 +498,7 @@ private:
             fSqrtTerm = sqrt(fSqrtTerm * fMass1 * fMass2);
         }
         // Equations for wolfram cloud:
-        // E1:=m1/2*V1^2+m2/2*V2^2+fPotPrev== m1/2*(V1+dV1)^2+m2/2*(V2+dV2)^2+fPotNext (* conservation of energy *)
+        // E1:=m1/2*V1^2+m2/2*V2^2+fPotPrev==m1/2*(V1+dV1)^2+m2/2*(V2+dV2)^2+fPotNext (* conservation of energy *)
         // E2:=m1*V1+m2*V2==m1*(V1+dV1)+m2*(V2+dV2) (* conservation of momentum *)
         // E3:=FullSimplify[Solve[E1&&E2,{dV1,dV2}]]
         // This yields two solutions:
