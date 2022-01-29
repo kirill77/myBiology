@@ -42,6 +42,8 @@ struct Water
         NvU32 m_isCovalentBond : 1;
     };
 
+    const std::vector<Force>& getForces() const { return m_forces; }
+
     struct NODE_DATA // data that we store in each node
     {
     };

@@ -14,6 +14,11 @@
 
 using namespace easy3d;
 
+inline static vec3 toVec3(const rtvector<MyUnits<double>, 3>& v)
+{
+    return vec3((float)v[0].m_value, (float)v[1].m_value, (float)v[2].m_value);
+}
+
 struct MyPointsDrawable : public PointsDrawable
 {
     MyPointsDrawable()
@@ -22,13 +27,13 @@ struct MyPointsDrawable : public PointsDrawable
         set_point_size(20);
     }
     template <class T>
-    void setVertex(NvU32 index, const rtvector<T, 3>& v)
+    void setVertex(NvU32 index, const rtvector<MyUnits<T>, 3>& v)
     {
         if (m_points.size() <= index)
         {
             m_points.resize(index + 1);
         }
-        m_points[index] = vec3((float)v[0], (float)v[1], (float)v[2]);
+        m_points[index] = toVec3(v);
     }
     void updateVertexBuffer()
     {
@@ -105,22 +110,27 @@ struct MyViewer : public Viewer
         Viewer::add_drawable(m_pODrawable);
         Viewer::add_drawable(m_pHDrawable);
 
+        m_pBondsDrawable = new LinesDrawable;
+        Viewer::add_drawable(m_pBondsDrawable);
+
         Viewer::resize(3840, 2160);
     }
 
     void updateVertexBuffers()
     {
-        const auto& points = m_water.points();
-        for (NvU32 u = 0, nO = 0, nH = 0; u < points.size(); ++u)
+        // update vertex buffer for atom drawables
+        const auto& atoms = m_water.points();
+        for (NvU32 u = 0, nO = 0, nH = 0; u < atoms.size(); ++u)
         {
-            if (points[u].m_nProtons == 8)
+            const auto& atom = atoms[u];
+            if (atom.m_nProtons == 8)
             {
-                m_pODrawable->setVertex(nO++, removeUnits(points[u].m_vPos[0]));
+                m_pODrawable->setVertex(nO++, atom.m_vPos[0]);
                 continue;
             }
-            if (points[u].m_nProtons == 1)
+            if (atom.m_nProtons == 1)
             {
-                m_pHDrawable->setVertex(nH++, removeUnits(points[u].m_vPos[0]));
+                m_pHDrawable->setVertex(nH++, atom.m_vPos[0]);
                 continue;
             }
             nvAssert(false);
@@ -129,6 +139,7 @@ struct MyViewer : public Viewer
         m_pODrawable->updateVertexBuffer();
         m_pHDrawable->updateVertexBuffer();
 
+        // create drawable for bounding box (done only once)
         if (!m_pBoxDrawable)
         {
             m_pBoxDrawable = new LinesDrawable;
@@ -157,6 +168,22 @@ struct MyViewer : public Viewer
 
             Viewer::add_drawable(m_pBoxDrawable);
         }
+
+        // update vertex buffer for bonds drawable
+        const auto& forces = m_water.getForces();
+        m_pBondPoints.resize(0);
+        for (NvU32 u = 0; u < forces.size(); ++u)
+        {
+            const auto& force = forces[u];
+            // all covalent bonds are supposed to be in the beginning of the array
+            if (!force.isCovalentBond())
+                break;
+            const auto& atom1 = atoms[force.getAtom1Index()];
+            const auto& atom2 = atoms[force.getAtom2Index()];
+            m_pBondPoints.push_back(toVec3(atom1.m_vPos[0]));
+            m_pBondPoints.push_back(toVec3(atom2.m_vPos[0]));
+        }
+        m_pBondsDrawable->update_vertex_buffer(m_pBondPoints);
     }
 
 private:
@@ -211,7 +238,8 @@ private:
     bool m_bIsFirstDraw = true;
     std::chrono::high_resolution_clock::time_point m_prevDrawTS;
     MyPointsDrawable *m_pODrawable = nullptr, *m_pHDrawable = nullptr; // pointers owned by viewer
-    LinesDrawable* m_pBoxDrawable = nullptr;
+    std::vector<vec3> m_pBondPoints; // to avoid allocating every time - we just keep this array around
+    LinesDrawable* m_pBoxDrawable = nullptr, *m_pBondsDrawable = nullptr;
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
 
