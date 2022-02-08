@@ -62,14 +62,14 @@ struct Water
         m_points.resize(3 * nWaterMolecules);
 #else
         // debug can't simulate all molecules - too slow
-        m_points.resize(3 * 64);
+        m_atoms.resize(3 * 64);
 #endif
 
         NvU32 nOs = 0, nHs = 0;
 
-        for (NvU32 u = 0; u < m_points.size(); ++u)
+        for (NvU32 u = 0; u < m_atoms.size(); ++u)
         {
-            Atom& atom = m_points[u];
+            Atom& atom = m_atoms[u];
             if (nHs < nOs * 2)
             {
                 atom = Atom(NPROTONS_H);
@@ -147,16 +147,16 @@ struct Water
     };
     inline std::vector<Atom>& points()
     {
-        return m_points;
+        return m_atoms;
     }
 
     void makeTimeStep()
     {
         createListOfForces();
 
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
-            auto& atom = m_points[uAtom];
+            auto& atom = m_atoms[uAtom];
             atom.m_vForce = rtvector<MyUnits<T>, 3>();
         }
         for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
@@ -166,9 +166,9 @@ struct Water
             updateForces<0>(force);
         }
 
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
-            auto& atom = m_points[uAtom];
+            auto& atom = m_atoms[uAtom];
             advectPosition(atom, m_fTimeStep);
             atom.m_vSpeed[1] = atom.m_vSpeed[0];
         }
@@ -207,9 +207,9 @@ struct Water
 
         // update kinetic energy
         m_fCurTotalKin = MyUnits<T>();
-        for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
-            auto& atom = m_points[uAtom];
+            auto& atom = m_atoms[uAtom];
             MyUnits<T> fMass = atom.getMass();
             atom.m_vPos[0] = atom.m_vPos[1];
             atom.m_vSpeed[0] = atom.m_vSpeed[1];
@@ -218,13 +218,13 @@ struct Water
         }
 
         // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
-        auto fScaleCoeff = (m_fWantedAverageKin / (m_fCurTotalKin / (T)m_points.size())).m_value;
+        auto fScaleCoeff = (m_fWantedAverageKin / (m_fCurTotalKin / (T)m_atoms.size())).m_value;
         if (fScaleCoeff < 1)
         {
             double fScaleCoeffSqrt = sqrt(fScaleCoeff);
-            for (NvU32 uAtom = 0; uAtom < m_points.size(); ++uAtom)
+            for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
             {
-                auto& atom = m_points[uAtom];
+                auto& atom = m_atoms[uAtom];
                 // kinetic energy is computed using the following equation:
                 // fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
                 // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
@@ -245,8 +245,8 @@ struct Water
                 return;
 
             // compute current bond length
-            auto &atom1 = m_points[force.getAtom1Index()];
-            auto &atom2 = m_points[force.getAtom2Index()];
+            auto &atom1 = m_atoms[force.getAtom1Index()];
+            auto &atom2 = m_atoms[force.getAtom2Index()];
             auto vDir = computeDir<1>(atom1, atom2);
             auto fDistSqr = dot(vDir, vDir);
             // if bond got too long - dissociate it
@@ -263,9 +263,9 @@ struct Water
     int adjustForceDistance(Force& force)
     {
         NvU32 uAtom1 = force.getAtom1Index();
-        auto& atom1 = m_points[uAtom1];
+        auto& atom1 = m_atoms[uAtom1];
         NvU32 uAtom2 = force.getAtom2Index();
-        auto& atom2 = m_points[uAtom2];
+        auto& atom2 = m_atoms[uAtom2];
         auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
         auto vDir = computeDir<1>(atom1, atom2);
         auto fDistSqr = lengthSquared(vDir);
@@ -346,14 +346,14 @@ struct Water
         for (NvU32 uTreePoint2 = leafNode2.getFirstTreePoint(); uTreePoint2 < leafNode2.getEndTreePoint(); ++uTreePoint2)
         {
             NvU32 uPoint2 = m_ocTree.getPointIndex(uTreePoint2);
-            auto& atom2 = m_points[uPoint2];
+            auto& atom2 = m_atoms[uPoint2];
             for (NvU32 uTreePoint1 = (leafIndex == nodeIndex) ? uTreePoint2 + 1 : leafNode1.getFirstTreePoint(); uTreePoint1 < leafNode1.getEndTreePoint(); ++uTreePoint1)
             {
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
-                auto& atom1 = m_points[uPoint1];
+                auto& atom1 = m_atoms[uPoint1];
                 auto vDir = computeDir<0>(atom2, atom1);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
@@ -383,19 +383,19 @@ struct Water
 
     MyUnits<T> evalTemperature() const
     {
-        return MyUnits<T>::evalTemperature(m_fCurTotalKin / (NvU32)m_points.size());
+        return MyUnits<T>::evalTemperature(m_fCurTotalKin / (NvU32)m_atoms.size());
     }
     MyUnits<T> evalPressure() const
     {
-        return MyUnits<T>::evalPressure(m_fCurTotalKin, m_bBox.evalVolume(), (NvU32)m_points.size());
+        return MyUnits<T>::evalPressure(m_fCurTotalKin, m_bBox.evalVolume(), (NvU32)m_atoms.size());
     }
     const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
-    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_points[index].m_vPos[0]); }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].m_vPos[0]); }
 
 private:
     void createListOfForces()
     {
-        m_ocTree.rebuild(removeUnits(m_bBox), (NvU32)m_points.size());
+        m_ocTree.rebuild(removeUnits(m_bBox), (NvU32)m_atoms.size());
 
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
@@ -403,9 +403,9 @@ private:
         m_forces.resize(0);
 
         // push all covalent bonds - they will be in the beginning of forces list
-        for (NvU32 uAtom1 = 0; uAtom1 < m_points.size(); ++uAtom1)
+        for (NvU32 uAtom1 = 0; uAtom1 < m_atoms.size(); ++uAtom1)
         {
-            auto& atom1 = m_points[uAtom1];
+            auto& atom1 = m_atoms[uAtom1];
             for (NvU32 uBond1 = 0; uBond1 < atom1.getNBonds(); ++uBond1)
             {
                 NvU32 uAtom2 = atom1.getBond(uBond1);
@@ -418,7 +418,7 @@ private:
         }
 
         m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
-        nvAssert(m_dbgNContributions == m_points.size() * (m_points.size() - 1));
+        nvAssert(m_dbgNContributions == m_atoms.size() * (m_atoms.size() - 1));
     }
 
     template <NvU32 index>
@@ -445,9 +445,9 @@ private:
     void updateForces(Force &force)
     {
         NvU32 uAtom1 = force.getAtom1Index();
-        auto& atom1 = m_points[uAtom1];
+        auto& atom1 = m_atoms[uAtom1];
         NvU32 uAtom2 = force.getAtom2Index();
-        auto& atom2 = m_points[uAtom2];
+        auto& atom2 = m_atoms[uAtom2];
 
         rtvector<MyUnits<T>, 3> vR;
         typename BondsDataBase<T>::LJ_Out out;
@@ -466,10 +466,10 @@ private:
     void updateSpeeds(Force &force)
     {
         NvU32 uAtom1 = force.getAtom1Index();
-        auto& atom1 = m_points[uAtom1];
+        auto& atom1 = m_atoms[uAtom1];
         MyUnits<T> fMass1 = atom1.getMass();
         NvU32 uAtom2 = force.getAtom2Index();
-        auto& atom2 = m_points[uAtom2];
+        auto& atom2 = m_atoms[uAtom2];
         MyUnits<T> fMass2 = atom2.getMass();
 
         auto vDir = computeDir<1>(atom2, atom1);
@@ -555,7 +555,7 @@ private:
 
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
-    std::vector<Atom> m_points;
+    std::vector<Atom> m_atoms;
     std::vector<Force> m_forces;
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
