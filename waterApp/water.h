@@ -393,14 +393,6 @@ private:
     }
 
     template <NvU32 index>
-    inline bool computeForce(const Atom &atom1, const Atom &atom2, rtvector<MyUnits<T>, 3> &vOutDir, typename BondsDataBase<T>::LJ_Out &out) const
-    {
-        vOutDir = computeDir<index>(atom1, atom2);
-        auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
-        return eBond.lennardJones(vOutDir, out);
-    }
-
-    template <NvU32 index>
     void updateForces(ForceKey forceKey, Force<T> &force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
@@ -408,9 +400,10 @@ private:
         NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
 
-        rtvector<MyUnits<T>, 3> vR;
+        rtvector<MyUnits<T>, 3> vR = computeDir<index>(atom1, atom2);
         typename BondsDataBase<T>::LJ_Out out;
-        if (computeForce<index>(atom1, atom2, vR, out))
+        auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
+        if (eBond.lennardJones(vR, out))
         {
             // symmetric addition should ensure conservation of momentum
             if (index == 0)
