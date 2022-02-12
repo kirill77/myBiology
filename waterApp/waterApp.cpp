@@ -172,14 +172,14 @@ struct MyViewer : public Viewer
         // update vertex buffer for bonds drawable
         const auto& forces = m_water.getForces();
         m_pBondPoints.resize(0);
-        for (NvU32 u = 0; u < forces.size(); ++u)
+        for (auto _if = forces.begin(); _if != forces.end(); ++_if)
         {
-            const auto& force = forces[u];
-            // all covalent bonds are supposed to be in the beginning of the array
+            auto& force = _if->second;
             if (!force.isCovalentBond())
-                break;
-            const auto& atom1 = atoms[force.getAtom1Index()];
-            const auto& atom2 = atoms[force.getAtom2Index()];
+                continue;
+            auto& forceKey = _if->first;
+            const auto& atom1 = atoms[forceKey.getAtom1Index()];
+            const auto& atom2 = atoms[forceKey.getAtom2Index()];
             m_pBondPoints.push_back(toVec3(atom1.m_vPos[0]));
             m_pBondPoints.push_back(toVec3(atom2.m_vPos[0]));
         }
@@ -215,7 +215,7 @@ private:
         const int num_fonts = texter_->num_fonts();
         const float font_height = texter_->font_height(font_size);
 
-        char sBuffer[32];
+        char sBuffer[64];
         m_fTemp.addValue(m_water.evalTemperature().toCelcius());
         double fAverageTempC = m_fTemp.getAverage();
         sprintf_s(sBuffer, "T(C): %.1lf", fAverageTempC);
@@ -229,7 +229,7 @@ private:
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        sprintf_s(sBuffer, "Tstep(fs): %.4lf", m_water.getCurTimeStep().toFemtoseconds());
+        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", m_water.getCurTimeStep().toFemtoseconds(), (NvU32)m_water.getForces().size());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);

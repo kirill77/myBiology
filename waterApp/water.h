@@ -6,6 +6,40 @@
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 
+struct ForceKey
+{
+    ForceKey(NvU32 uAtom1, NvU32 uAtom2)
+    {
+        if (uAtom1 < uAtom2) // sort indices to avoid duplicate forces 1<->2 and 2<->1
+        {
+            m_uAtom1 = uAtom1;
+            m_uAtom2 = uAtom2;
+            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
+            return;
+        }
+        m_uAtom1 = uAtom2;
+        m_uAtom2 = uAtom1;
+        nvAssert(m_uAtom1 == uAtom2 && m_uAtom2 == uAtom1 && m_uAtom1 != m_uAtom2);
+    }
+    bool operator ==(const ForceKey& other) const { return m_uAtom1 == other.m_uAtom1 && m_uAtom2 == other.m_uAtom2; }
+    NvU32 getAtom1Index() const { return m_uAtom1; }
+    NvU32 getAtom2Index() const { return m_uAtom2; }
+private:
+    NvU32 m_uAtom1 : 16;
+    NvU32 m_uAtom2 : 16;
+};
+
+// custom specialization of std::hash can be injected in namespace std
+template<>
+struct std::hash<ForceKey>
+{
+    std::size_t operator()(ForceKey const& s) const noexcept
+    {
+        static_assert(sizeof(s) == sizeof(NvU32), "error: wrong ForceKey size");
+        return std::hash<NvU32>{}((NvU32&)s);
+    }
+};
+
 template <class _T>
 struct Water
 {
@@ -13,13 +47,8 @@ struct Water
 
     struct Force
     {
-        Force() { }
-        Force(NvU32 uAtom1, NvU32 uAtom2) : m_uAtom1(uAtom1), m_uAtom2(uAtom2), m_collisionDetected(0), m_isCovalentBond(0)
-        {
-            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
-        }
-        NvU32 getAtom1Index() const { return m_uAtom1; }
-        NvU32 getAtom2Index() const { return m_uAtom2; }
+        Force() : m_collisionDetected(0), m_isCovalentBond(0) { }
+
         bool hadCollision() const { return m_collisionDetected; }
         bool isCovalentBond() const { return m_isCovalentBond; }
 
@@ -36,13 +65,12 @@ struct Water
         MyUnits<T> m_fDistSqr[2]; // distances between atoms corresponding to vPos[0] and vPos[1] respectively
 
     private:
-        NvU32 m_uAtom1 : 15;
-        NvU32 m_uAtom2 : 15;
         NvU32 m_collisionDetected : 1; // collision detected during time step
         NvU32 m_isCovalentBond : 1;
     };
+    typedef std::unordered_map<ForceKey, Force> ForceMap;
 
-    const std::vector<Force>& getForces() const { return m_forces; }
+    const ForceMap &getForces() const { return m_forces; }
 
     struct NODE_DATA // data that we store in each node
     {
@@ -126,6 +154,7 @@ struct Water
                 if (m_bondedAtoms[u] == uAtom)
                 {
                     m_bondedAtoms[u] = m_bondedAtoms[--m_nBondedAtoms];
+                    return;
                 }
             }
         }
@@ -159,11 +188,11 @@ struct Water
             auto& atom = m_atoms[uAtom];
             atom.m_vForce = rtvector<MyUnits<T>, 3>();
         }
-        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
+        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            auto& force = m_forces[forceIndex];
+            Force &force = _if->second;
             force.m_fPotential[0] = MyUnits<T>();
-            updateForces<0>(force);
+            updateForces<0>(_if->first, force);
         }
 
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
@@ -177,10 +206,9 @@ struct Water
         for ( ; ; )
         {
             int nAdjustments = 0;
-            for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
+            for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
             {
-                auto& force = m_forces[forceIndex];
-                nAdjustments += adjustForceDistance(force);
+                nAdjustments += adjustForceDistance(_if->first, _if->second);
             }
             // if nothing has been adjusted - break
             if (nAdjustments == 0)
@@ -191,18 +219,17 @@ struct Water
 
         dissociateWeakBonds();
 
-        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
+        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            auto& force = m_forces[forceIndex];
+            Force &force = _if->second;
             force.m_fPotential[1] = MyUnits<T>();
-            updateForces<1>(force);
+            updateForces<1>(_if->first, force);
         }
 
         // update m_vSpeed[1] in each atom based on change of force potentials
-        for (NvU32 forceIndex = 0; forceIndex < m_forces.size(); ++forceIndex)
+        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            auto& force = m_forces[forceIndex];
-            updateSpeeds(force);
+            updateSpeeds(_if->first, _if->second);
         }
 
         // update kinetic energy
@@ -236,35 +263,40 @@ struct Water
 
     void dissociateWeakBonds()
     {
-        for (NvU32 uForce = 0; uForce < m_forces.size(); ++uForce)
+        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            auto& force = m_forces[uForce];
-            // all forces that are covalent bonds must be in the beginning of the list - so as soon as we've found first
-            // force that isn't a covalent bond - we know that all other forces will also be not covalent bonds
-            if (!force.isCovalentBond())
-                return;
+            Force &force = _if->second;
 
             // compute current bond length
-            auto &atom1 = m_atoms[force.getAtom1Index()];
-            auto &atom2 = m_atoms[force.getAtom2Index()];
+            auto& forceKey = _if->first;
+            auto &atom1 = m_atoms[forceKey.getAtom1Index()];
+            auto &atom2 = m_atoms[forceKey.getAtom2Index()];
             auto vDir = computeDir<1>(atom1, atom2);
             auto fDistSqr = dot(vDir, vDir);
-            // if bond got too long - dissociate it
+
             auto& bond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
-            if (fDistSqr >= bond.m_fDissocLengthSqr)
+            // if atoms are too far apart - erase the force
+            if (fDistSqr >= BondsDataBase<T>::s_zeroForceDistSqr)
+            {
+                _if = m_forces.erase(_if);
+                if (_if == m_forces.end())
+                    break;
+            }
+            // check covalent bond threshold - it's smaller than global zero-force threshold
+            else if (force.isCovalentBond() && fDistSqr >= bond.m_fDissocLengthSqr)
             {
                 force.dropCovalentBond();
-                atom1.removeBond(force.getAtom2Index());
-                atom2.removeBond(force.getAtom1Index());
+                atom1.removeBond(forceKey.getAtom2Index());
+                atom2.removeBond(forceKey.getAtom1Index());
             }
         }
     }
 
-    int adjustForceDistance(Force& force)
+    int adjustForceDistance(ForceKey forceKey, Force& force)
     {
-        NvU32 uAtom1 = force.getAtom1Index();
+        NvU32 uAtom1 = forceKey.getAtom1Index();
         auto& atom1 = m_atoms[uAtom1];
-        NvU32 uAtom2 = force.getAtom2Index();
+        NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
         auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
         auto vDir = computeDir<1>(atom1, atom2);
@@ -365,7 +397,7 @@ struct Water
                 {
                     if (uBond1 >= atom1.getNBonds())
                     {
-                        m_forces.push_back(Force(uPoint1, uPoint2));
+                        m_forces[ForceKey(uPoint1, uPoint2)]; // this adds default force between those two atoms into ForceMap
                         break;
                     }
                     // if this is covalent bond - we don't need to add it - it must already be in the list of forces
@@ -400,22 +432,6 @@ private:
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
 #endif
-        m_forces.resize(0);
-
-        // push all covalent bonds - they will be in the beginning of forces list
-        for (NvU32 uAtom1 = 0; uAtom1 < m_atoms.size(); ++uAtom1)
-        {
-            auto& atom1 = m_atoms[uAtom1];
-            for (NvU32 uBond1 = 0; uBond1 < atom1.getNBonds(); ++uBond1)
-            {
-                NvU32 uAtom2 = atom1.getBond(uBond1);
-                if (uAtom2 < uAtom1) // already took care of this one
-                    continue;
-                Force force(uAtom1, uAtom2);
-                force.setCovalentBond();
-                m_forces.push_back(force);
-            }
-        }
 
         m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
         nvAssert(m_dbgNContributions == m_atoms.size() * (m_atoms.size() - 1));
@@ -442,11 +458,11 @@ private:
     }
 
     template <NvU32 index>
-    void updateForces(Force &force)
+    void updateForces(ForceKey forceKey, Force &force)
     {
-        NvU32 uAtom1 = force.getAtom1Index();
+        NvU32 uAtom1 = forceKey.getAtom1Index();
         auto& atom1 = m_atoms[uAtom1];
-        NvU32 uAtom2 = force.getAtom2Index();
+        NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
 
         rtvector<MyUnits<T>, 3> vR;
@@ -463,12 +479,12 @@ private:
         }
         force.m_fDistSqr[index] = out.fDistSqr; // this is needed even if force is 0
     }
-    void updateSpeeds(Force &force)
+    void updateSpeeds(ForceKey forceKey, Force &force)
     {
-        NvU32 uAtom1 = force.getAtom1Index();
+        NvU32 uAtom1 = forceKey.getAtom1Index();
         auto& atom1 = m_atoms[uAtom1];
         MyUnits<T> fMass1 = atom1.getMass();
-        NvU32 uAtom2 = force.getAtom2Index();
+        NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
         MyUnits<T> fMass2 = atom2.getMass();
 
@@ -556,7 +572,7 @@ private:
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
     std::vector<Atom> m_atoms;
-    std::vector<Force> m_forces;
+    ForceMap m_forces;
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
 
