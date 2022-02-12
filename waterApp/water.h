@@ -6,69 +6,12 @@
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 
-struct ForceKey
-{
-    ForceKey(NvU32 uAtom1, NvU32 uAtom2)
-    {
-        if (uAtom1 < uAtom2) // sort indices to avoid duplicate forces 1<->2 and 2<->1
-        {
-            m_uAtom1 = uAtom1;
-            m_uAtom2 = uAtom2;
-            nvAssert(m_uAtom1 == uAtom1 && m_uAtom2 == uAtom2 && m_uAtom1 != m_uAtom2);
-            return;
-        }
-        m_uAtom1 = uAtom2;
-        m_uAtom2 = uAtom1;
-        nvAssert(m_uAtom1 == uAtom2 && m_uAtom2 == uAtom1 && m_uAtom1 != m_uAtom2);
-    }
-    bool operator ==(const ForceKey& other) const { return m_uAtom1 == other.m_uAtom1 && m_uAtom2 == other.m_uAtom2; }
-    NvU32 getAtom1Index() const { return m_uAtom1; }
-    NvU32 getAtom2Index() const { return m_uAtom2; }
-private:
-    NvU32 m_uAtom1 : 16;
-    NvU32 m_uAtom2 : 16;
-};
-
-// custom specialization of std::hash can be injected in namespace std
-template<>
-struct std::hash<ForceKey>
-{
-    std::size_t operator()(ForceKey const& s) const noexcept
-    {
-        static_assert(sizeof(s) == sizeof(NvU32), "error: wrong ForceKey size");
-        return std::hash<NvU32>{}((NvU32&)s);
-    }
-};
-
 template <class _T>
 struct Water
 {
     typedef _T T;
 
-    struct Force
-    {
-        Force() : m_collisionDetected(0), m_isCovalentBond(0) { }
-
-        bool hadCollision() const { return m_collisionDetected; }
-        bool isCovalentBond() const { return m_isCovalentBond; }
-
-        void notifyCollision() { m_collisionDetected = 1; }
-        void dropCovalentBond() { nvAssert(m_isCovalentBond == 1); m_isCovalentBond = 0; }
-        void setCovalentBond() { nvAssert(m_isCovalentBond == 0); m_isCovalentBond = 1; }
-
-        inline bool operator <(const Force& other) const
-        {
-            return m_fPotential[1] - m_fPotential[0] < other.m_fPotential[1] - other.m_fPotential[0];
-        }
-
-        MyUnits<T> m_fPotential[2]; // potentials corresponding to vPos[0] and vPos[1] respectively
-        MyUnits<T> m_fDistSqr[2]; // distances between atoms corresponding to vPos[0] and vPos[1] respectively
-
-    private:
-        NvU32 m_collisionDetected : 1; // collision detected during time step
-        NvU32 m_isCovalentBond : 1;
-    };
-    typedef std::unordered_map<ForceKey, Force> ForceMap;
+    typedef std::unordered_map<ForceKey, Force<T>> ForceMap;
 
     const ForceMap &getForces() const { return m_forces; }
 
@@ -190,7 +133,7 @@ struct Water
         }
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            Force &force = _if->second;
+            Force<T> &force = _if->second;
             force.m_fPotential[0] = MyUnits<T>();
             updateForces<0>(_if->first, force);
         }
@@ -221,7 +164,7 @@ struct Water
 
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            Force &force = _if->second;
+            Force<T> &force = _if->second;
             force.m_fPotential[1] = MyUnits<T>();
             updateForces<1>(_if->first, force);
         }
@@ -265,7 +208,7 @@ struct Water
     {
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            Force &force = _if->second;
+            Force<T> &force = _if->second;
 
             // compute current bond length
             auto& forceKey = _if->first;
@@ -292,7 +235,7 @@ struct Water
         }
     }
 
-    int adjustForceDistance(ForceKey forceKey, Force& force)
+    int adjustForceDistance(ForceKey forceKey, Force<T> &force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
         auto& atom1 = m_atoms[uAtom1];
@@ -458,7 +401,7 @@ private:
     }
 
     template <NvU32 index>
-    void updateForces(ForceKey forceKey, Force &force)
+    void updateForces(ForceKey forceKey, Force<T> &force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
         auto& atom1 = m_atoms[uAtom1];
@@ -479,7 +422,7 @@ private:
         }
         force.m_fDistSqr[index] = out.fDistSqr; // this is needed even if force is 0
     }
-    void updateSpeeds(ForceKey forceKey, Force &force)
+    void updateSpeeds(ForceKey forceKey, Force<T> &force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
         auto& atom1 = m_atoms[uAtom1];
