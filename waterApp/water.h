@@ -401,19 +401,12 @@ private:
         auto& atom2 = m_atoms[uAtom2];
 
         rtvector<MyUnits<T>, 3> vR = computeDir<index>(atom1, atom2);
-        typename BondsDataBase<T>::LJ_Out out;
-        auto& eBond = BondsDataBase<T>::getEBond(atom1.getNProtons(), atom2.getNProtons(), 1);
-        if (eBond.lennardJones(vR, out))
+        rtvector<MyUnits<T>, 3> vForce;
+        if (force.computeForce<index>(atom1.getNProtons(), atom2.getNProtons(), vR, vForce) && index == 0)
         {
-            // symmetric addition should ensure conservation of momentum
-            if (index == 0)
-            {
-                atom1.m_vForce += out.vForce;
-                atom2.m_vForce -= out.vForce;
-            }
-            force.m_fPotential[index] = out.fPotential;
+            atom1.m_vForce += vForce;
+            atom2.m_vForce -= vForce;
         }
-        force.m_fDistSqr[index] = out.fDistSqr; // this is needed even if force is 0
     }
     void updateSpeeds(ForceKey forceKey, Force<T> &force)
     {
