@@ -49,14 +49,16 @@ struct Water
                 ++nOs;
             }
 
+            rtvector<MyUnits<T>, 3> vNewPos;
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
                 double f = m_rng.generate01();
-                atom.m_vPos[0][uDim] = m_bBox.m_vMin[uDim] * f + m_bBox.m_vMax[uDim] * (1 - f);
+                vNewPos[uDim] = m_bBox.m_vMin[uDim] * f + m_bBox.m_vMax[uDim] * (1 - f);
             }
+            atom.setPos(0, vNewPos, m_bBox);
             m_rng.nextSeed();
 
-            if (!m_bBox.includes(atom.m_vPos[0])) // atom must be inside the bounding box
+            if (!m_bBox.includes(atom.getUnwrappedPos(0))) // atom must be inside the bounding box
             {
                 __debugbreak();
             }
@@ -127,7 +129,7 @@ struct Water
         {
             auto& atom = m_atoms[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vPos[0] = atom.m_vPos[1];
+            atom.copyPos(0, 1);
             atom.m_vSpeed[0] = atom.m_vSpeed[1];
             MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
             m_fCurTotalKin += fKin;
@@ -175,13 +177,7 @@ struct Water
         auto& atom1 = m_atoms[forceKey.getAtom1Index()];
         auto& atom2 = m_atoms[forceKey.getAtom2Index()];
 
-        if (force.adjustAtomsDistance(forceKey, atom1, atom2, m_bBox))
-        {
-            atom1.m_vPos[1] = m_bBox.wrapThePos(atom1.m_vPos[1]);
-            atom2.m_vPos[1] = m_bBox.wrapThePos(atom2.m_vPos[1]);
-            return true;
-        }
-        return false;
+        return force.adjustAtomsDistance(forceKey, atom1, atom2, m_bBox);
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -278,7 +274,7 @@ struct Water
         return MyUnits<T>::evalPressure(m_fCurTotalKin, m_bBox.evalVolume(), (NvU32)m_atoms.size());
     }
     const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
-    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].m_vPos[0]); }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].getUnwrappedPos(0)); }
 
 private:
     void createListOfForces()
@@ -326,7 +322,7 @@ private:
             this->m_vMax = makeVector<MyUnits<T>, 3>(m_fHalfBoxSize);
         }
         // if the atom exits bounding box, it enters from the other side
-        rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3>& vOldPos)
+        rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3>& vOldPos) const
         {
             auto vNewPos = vOldPos;
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
@@ -353,7 +349,7 @@ private:
         template <NvU32 index>
         rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const
         {
-            rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
+            rtvector<MyUnits<T>, 3> vOutDir = atom1.getUnwrappedPos(index) - atom2.getUnwrappedPos(index);
             for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
             {
                 if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
@@ -365,7 +361,7 @@ private:
         {
             MyUnits<T> fMass = atom.getMass();
             auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
-            atom.m_vPos[1] = wrapThePos(atom.m_vPos[0] + vAvgSpeed * fTimeStep);
+            atom.setPos(1, atom.getUnwrappedPos(0) + vAvgSpeed * fTimeStep, *this);
         }
         MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     };

@@ -125,12 +125,12 @@ struct MyViewer : public Viewer
             const auto& atom = atoms[u];
             if (atom.m_nProtons == 8)
             {
-                m_pODrawable->setVertex(nO++, atom.m_vPos[0]);
+                m_pODrawable->setVertex(nO++, atom.getUnwrappedPos(0));
                 continue;
             }
             if (atom.m_nProtons == 1)
             {
-                m_pHDrawable->setVertex(nH++, atom.m_vPos[0]);
+                m_pHDrawable->setVertex(nH++, atom.getUnwrappedPos(0));
                 continue;
             }
             nvAssert(false);
@@ -180,8 +180,8 @@ struct MyViewer : public Viewer
             auto& forceKey = _if->first;
             const auto& atom1 = atoms[forceKey.getAtom1Index()];
             const auto& atom2 = atoms[forceKey.getAtom2Index()];
-            m_pBondPoints.push_back(toVec3(atom1.m_vPos[0]));
-            m_pBondPoints.push_back(toVec3(atom2.m_vPos[0]));
+            m_pBondPoints.push_back(toVec3(atom1.getUnwrappedPos(0)));
+            m_pBondPoints.push_back(toVec3(atom2.getUnwrappedPos(0)));
         }
         m_pBondsDrawable->update_vertex_buffer(m_pBondPoints);
     }
