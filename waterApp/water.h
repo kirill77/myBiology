@@ -21,12 +21,9 @@ struct Water
 
     Water() : m_ocTree(*this)
     {
-        m_fBoxSize = MyUnits<T>::angstrom() * 20;
-        m_fHalfBoxSize = m_fBoxSize / 2.;
-        m_bBox.m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
-        m_bBox.m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
+        m_bBox.init(MyUnits<T>::angstrom() * 20);
 
-        MyUnits<T> volume = m_fBoxSize * m_fBoxSize * m_fBoxSize;
+        MyUnits<T> volume = m_bBox.m_fBoxSize * m_bBox.m_fBoxSize * m_bBox.m_fBoxSize;
         // one mole of water has volume of 18 milliliters
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
 #ifdef NDEBUG
@@ -91,7 +88,7 @@ struct Water
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
             auto& atom = m_atoms[uAtom];
-            advectPosition(atom, m_fTimeStep);
+            m_bBox.advectPosition(atom, m_fTimeStep);
             atom.m_vSpeed[1] = atom.m_vSpeed[0];
         }
 
@@ -163,7 +160,7 @@ struct Water
             auto& forceKey = _if->first;
             auto &atom1 = m_atoms[forceKey.getAtom1Index()];
             auto &atom2 = m_atoms[forceKey.getAtom2Index()];
-            auto vDir = computeDir<1>(atom1, atom2);
+            auto vDir = m_bBox.computeDir<1>(atom1, atom2);
 
             if (force.dissociateWeakBond(forceKey, atom1, atom2, vDir))
             {
@@ -180,12 +177,12 @@ struct Water
         auto& atom1 = m_atoms[uAtom1];
         NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
-        auto vDir = computeDir<1>(atom1, atom2);
+        auto vDir = m_bBox.computeDir<1>(atom1, atom2);
 
         if (force.adjustAtomsDistance(forceKey, atom1, atom2, vDir))
         {
-            atom1.m_vPos[1] = wrapThePos(atom1.m_vPos[1]);
-            atom2.m_vPos[1] = wrapThePos(atom2.m_vPos[1]);
+            atom1.m_vPos[1] = m_bBox.wrapThePos(atom1.m_vPos[1]);
+            atom2.m_vPos[1] = m_bBox.wrapThePos(atom2.m_vPos[1]);
             return true;
         }
         return false;
@@ -249,7 +246,7 @@ struct Water
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
                 auto& atom1 = m_atoms[uPoint1];
-                auto vDir = computeDir<0>(atom1, atom2);
+                auto vDir = m_bBox.computeDir<0>(atom1, atom2);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
@@ -301,18 +298,6 @@ private:
     }
 
     template <NvU32 index>
-    rtvector<MyUnits<T>, 3> computeDir(const Atom<T> &atom1, const Atom<T> &atom2) const
-    {
-        rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
-        for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-        {
-            if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
-            else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
-        }
-        return vOutDir;
-    }
-
-    template <NvU32 index>
     void updateForces(ForceKey forceKey, Force<T> &force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
@@ -320,7 +305,7 @@ private:
         NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
 
-        rtvector<MyUnits<T>, 3> vR = computeDir<index>(atom1, atom2);
+        rtvector<MyUnits<T>, 3> vR = m_bBox.computeDir<index>(atom1, atom2);
         rtvector<MyUnits<T>, 3> vForce;
         if (force.computeForce<index>(atom1, atom2, vR, vForce) && index == 0)
         {
@@ -335,45 +320,65 @@ private:
         NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
 
-        auto vDir = computeDir<1>(atom2, atom1);
+        auto vDir = m_bBox.computeDir<1>(atom2, atom1);
 
         force.updateSpeeds1(atom1, atom2, vDir);
     }
-    // if the atom exits bounding box, it enters from the other side
-    rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3> &vOldPos)
+
+    struct BoundingBox : public BBox3<MyUnits<T>>
     {
-        auto vNewPos = vOldPos;
-        for (NvU32 uDim = 0; uDim < 3; ++uDim)
+        void init(MyUnits<T> fBoxSide)
         {
-            if (vNewPos[uDim] < m_bBox.m_vMin[uDim])
-            {
-                auto fOvershoot = (m_bBox.m_vMin[uDim] - vNewPos[uDim]);
-                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                vNewPos[uDim] += m_fBoxSize * nBoxSizes;
-                nvAssert(m_bBox.m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= m_bBox.m_vMax[uDim]);
-                continue;
-            }
-            if (vNewPos[uDim] > m_bBox.m_vMax[uDim])
-            {
-                auto fOvershoot = (vNewPos[uDim] - m_bBox.m_vMax[uDim]);
-                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
-                nvAssert(m_bBox.m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= m_bBox.m_vMax[uDim]);
-            }
+            m_fBoxSize = fBoxSide;
+            m_fHalfBoxSize = m_fBoxSize / 2.;
+            this->m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
+            this->m_vMax = makeVector<MyUnits<T>, 3>(m_fHalfBoxSize);
         }
-        nvAssert(m_bBox.includes(vNewPos)); // atom must be inside the bounding box
-        return vNewPos;
-    }
-
-    void advectPosition(Atom<T> &atom, MyUnits<T> fTimeStep)
-    {
-        MyUnits<T> fMass = atom.getMass();
-        auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
-        atom.m_vPos[1] = wrapThePos(atom.m_vPos[0] + vAvgSpeed * fTimeStep);
-    }
-
-    MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
-    BBox3<MyUnits<T>> m_bBox;
+        // if the atom exits bounding box, it enters from the other side
+        rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3>& vOldPos)
+        {
+            auto vNewPos = vOldPos;
+            for (NvU32 uDim = 0; uDim < 3; ++uDim)
+            {
+                if (vNewPos[uDim] < this->m_vMin[uDim])
+                {
+                    auto fOvershoot = (this->m_vMin[uDim] - vNewPos[uDim]);
+                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                    vNewPos[uDim] += m_fBoxSize * nBoxSizes;
+                    nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
+                    continue;
+                }
+                if (vNewPos[uDim] > this->m_vMax[uDim])
+                {
+                    auto fOvershoot = (vNewPos[uDim] - this->m_vMax[uDim]);
+                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                    vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
+                    nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
+                }
+            }
+            nvAssert(this->includes(vNewPos)); // atom must be inside the bounding box
+            return vNewPos;
+        }
+        template <NvU32 index>
+        rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const
+        {
+            rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
+            for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+            {
+                if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
+                else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
+            }
+            return vOutDir;
+        }
+        void advectPosition(Atom<T>& atom, MyUnits<T> fTimeStep)
+        {
+            MyUnits<T> fMass = atom.getMass();
+            auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
+            atom.m_vPos[1] = wrapThePos(atom.m_vPos[0] + vAvgSpeed * fTimeStep);
+        }
+        MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
+    };
+    BoundingBox m_bBox;
     std::vector<Atom<T>> m_atoms;
     ForceMap m_forces;
     OcTree<Water> m_ocTree;
