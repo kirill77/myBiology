@@ -160,9 +160,8 @@ struct Water
             auto& forceKey = _if->first;
             auto &atom1 = m_atoms[forceKey.getAtom1Index()];
             auto &atom2 = m_atoms[forceKey.getAtom2Index()];
-            auto vDir = m_bBox.computeDir<1>(atom1, atom2);
 
-            if (force.dissociateWeakBond(forceKey, atom1, atom2, vDir))
+            if (force.dissociateWeakBond(forceKey, atom1, atom2, m_bBox))
             {
                 _if = m_forces.erase(_if);
                 if (_if == m_forces.end())
@@ -173,13 +172,10 @@ struct Water
 
     bool adjustForceDistance(ForceKey forceKey, Force<T> &force)
     {
-        NvU32 uAtom1 = forceKey.getAtom1Index();
-        auto& atom1 = m_atoms[uAtom1];
-        NvU32 uAtom2 = forceKey.getAtom2Index();
-        auto& atom2 = m_atoms[uAtom2];
-        auto vDir = m_bBox.computeDir<1>(atom1, atom2);
+        auto& atom1 = m_atoms[forceKey.getAtom1Index()];
+        auto& atom2 = m_atoms[forceKey.getAtom2Index()];
 
-        if (force.adjustAtomsDistance(forceKey, atom1, atom2, vDir))
+        if (force.adjustAtomsDistance(forceKey, atom1, atom2, m_bBox))
         {
             atom1.m_vPos[1] = m_bBox.wrapThePos(atom1.m_vPos[1]);
             atom2.m_vPos[1] = m_bBox.wrapThePos(atom2.m_vPos[1]);
@@ -300,14 +296,11 @@ private:
     template <NvU32 index>
     void updateForces(ForceKey forceKey, Force<T> &force)
     {
-        NvU32 uAtom1 = forceKey.getAtom1Index();
-        auto& atom1 = m_atoms[uAtom1];
-        NvU32 uAtom2 = forceKey.getAtom2Index();
-        auto& atom2 = m_atoms[uAtom2];
+        auto& atom1 = m_atoms[forceKey.getAtom1Index()];
+        auto& atom2 = m_atoms[forceKey.getAtom2Index()];
 
-        rtvector<MyUnits<T>, 3> vR = m_bBox.computeDir<index>(atom1, atom2);
         rtvector<MyUnits<T>, 3> vForce;
-        if (force.computeForce<index>(atom1, atom2, vR, vForce) && index == 0)
+        if (force.computeForce<index>(atom1, atom2, m_bBox, vForce) && index == 0)
         {
             atom1.m_vForce += vForce;
             atom2.m_vForce -= vForce;
@@ -320,9 +313,7 @@ private:
         NvU32 uAtom2 = forceKey.getAtom2Index();
         auto& atom2 = m_atoms[uAtom2];
 
-        auto vDir = m_bBox.computeDir<1>(atom2, atom1);
-
-        force.updateSpeeds1(atom1, atom2, vDir);
+        force.updateSpeeds1(atom1, atom2, m_bBox);
     }
 
     struct BoundingBox : public BBox3<MyUnits<T>>
