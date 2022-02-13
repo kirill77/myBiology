@@ -27,7 +27,7 @@ struct Water
         // one mole of water has volume of 18 milliliters
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
 #ifdef NDEBUG
-        m_points.resize(3 * nWaterMolecules);
+        m_atoms.resize(3 * nWaterMolecules);
 #else
         // debug can't simulate all molecules - too slow
         m_atoms.resize(3 * 64);
