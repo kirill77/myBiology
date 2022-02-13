@@ -40,15 +40,15 @@ struct Water
 
         for (NvU32 u = 0; u < m_atoms.size(); ++u)
         {
-            Atom& atom = m_atoms[u];
+            Atom<T> &atom = m_atoms[u];
             if (nHs < nOs * 2)
             {
-                atom = Atom(NPROTONS_H);
+                atom = Atom<T>(NPROTONS_H);
                 ++nHs;
             }
             else
             {
-                atom = Atom(NPROTONS_O);
+                atom = Atom<T>(NPROTONS_O);
                 ++nOs;
             }
 
@@ -68,56 +68,7 @@ struct Water
         m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
     }
 
-    struct Atom
-    {
-        Atom(NvU32 nProtons = 1) : m_nBondedAtoms(0), m_nProtons(nProtons), m_uValence(BondsDataBase<T>::getAtom(m_nProtons).m_uValence)
-        {
-            for (NvU32 u = 0; u < m_bondedAtoms.size(); ++u) m_bondedAtoms[u] = -1;
-            nvAssert(m_uValence != 0); // we don't work with noble gasses
-        }
-
-        NvU32 getNProtons() const { return m_nProtons; }
-        MyUnits<T> getMass() const { return BondsDataBase<T>::getAtom(m_nProtons).m_fMass; }
-        NvU32 getValence() const { return m_uValence; }
-        NvU32 getNBonds() const { return m_nBondedAtoms; }
-        NvU32 getBond(NvU32 uBond) const { nvAssert(uBond < m_nBondedAtoms); return m_bondedAtoms[uBond]; }
-
-        void addBond(NvU32 uAtom)
-        {
-            nvAssert(m_nBondedAtoms < m_uValence);
-            m_bondedAtoms[m_nBondedAtoms] = uAtom;
-            nvAssert(m_bondedAtoms[m_nBondedAtoms] == uAtom); // check that type conversion didn't loose information
-            ++m_nBondedAtoms;
-        }
-        void removeBond(NvU32 uAtom)
-        {
-            for (NvU32 u = 0; ; ++u)
-            {
-                nvAssert(u < m_nBondedAtoms);
-                if (m_bondedAtoms[u] == uAtom)
-                {
-                    m_bondedAtoms[u] = m_bondedAtoms[--m_nBondedAtoms];
-                    return;
-                }
-            }
-        }
-
-        rtvector<MyUnits<T>,3> m_vPos[2], m_vSpeed[2], m_vForce;
-
-        private:
-            union
-            {
-                NvU32 flags;
-                struct
-                {
-                    NvU32 m_nProtons : 8;
-                    NvU32 m_nBondedAtoms : 3;
-                    NvU32 m_uValence : 3;
-                };
-            };
-            std::array<unsigned short, 4> m_bondedAtoms;
-    };
-    inline std::vector<Atom>& points()
+    inline std::vector<Atom<T>>& points()
     {
         return m_atoms;
     }
@@ -381,7 +332,7 @@ private:
     }
 
     template <NvU32 index>
-    rtvector<MyUnits<T>, 3> computeDir(const Atom &atom1, const Atom &atom2) const
+    rtvector<MyUnits<T>, 3> computeDir(const Atom<T> &atom1, const Atom<T> &atom2) const
     {
         rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos[index] - atom2.m_vPos[index];
         for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
@@ -491,7 +442,7 @@ private:
         return vNewPos;
     }
 
-    void advectPosition(Atom &atom, MyUnits<T> fTimeStep)
+    void advectPosition(Atom<T> &atom, MyUnits<T> fTimeStep)
     {
         MyUnits<T> fMass = atom.getMass();
         auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
@@ -500,7 +451,7 @@ private:
 
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     BBox3<MyUnits<T>> m_bBox;
-    std::vector<Atom> m_atoms;
+    std::vector<Atom<T>> m_atoms;
     ForceMap m_forces;
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
