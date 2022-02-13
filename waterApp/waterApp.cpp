@@ -175,7 +175,7 @@ struct MyViewer : public Viewer
         for (auto _if = forces.begin(); _if != forces.end(); ++_if)
         {
             auto& force = _if->second;
-            if (!force.isCovalentBond())
+            if (!force.shouldDraw())
                 continue;
             auto& forceKey = _if->first;
             const auto& atom1 = atoms[forceKey.getAtom1Index()];
