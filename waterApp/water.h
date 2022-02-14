@@ -94,6 +94,7 @@ struct Water
             atom.m_vSpeed[1] = atom.m_vSpeed[0];
         }
 
+#if 0
         // don't let atoms come closer than the bond length - otherwise enormous repulsive forces explode the simulation
         for ( ; ; )
         {
@@ -108,6 +109,7 @@ struct Water
                 break;
             }
         }
+#endif
 
         dissociateWeakBonds();
 
@@ -172,6 +174,7 @@ struct Water
         }
     }
 
+#if 0
     bool adjustForceDistance(ForceKey forceKey, Force<T> &force)
     {
         auto& atom1 = m_atoms[forceKey.getAtom1Index()];
@@ -179,6 +182,7 @@ struct Water
 
         return force.adjustAtomsDistance(forceKey, atom1, atom2, m_bBox);
     }
+#endif
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
     OcTreeNode<Water>& accessNode(NvU32 index) { return m_ocTree.m_nodes[index]; }
