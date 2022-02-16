@@ -74,7 +74,7 @@ struct Water
 
     void makeTimeStep()
     {
-        createListOfForces();
+        updateListOfForces();
 
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
@@ -89,27 +89,14 @@ struct Water
 
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
+            // advect positions by full step and speeds by half-step
             auto& atom = m_atoms[uAtom];
-            m_bBox.advectPosition(atom, m_fTimeStep);
-            atom.m_vSpeed[1] = atom.m_vSpeed[0];
+            MyUnits<T> fMass = atom.getMass();
+            atom.m_vSpeed[1] = atom.m_vSpeed[0] + atom.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.setPos(1, atom.getUnwrappedPos(0) + atom.m_vSpeed[1] * m_fTimeStep, m_bBox);
+            // clear forces before we start accumulating them for next step
+            atom.m_vForce = rtvector<MyUnits<T>, 3>();
         }
-
-#if 0
-        // don't let atoms come closer than the bond length - otherwise enormous repulsive forces explode the simulation
-        for ( ; ; )
-        {
-            int nAdjustments = 0;
-            for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
-            {
-                nAdjustments += adjustForceDistance(_if->first, _if->second) ? 1 : 0;
-            }
-            // if nothing has been adjusted - break
-            if (nAdjustments == 0)
-            {
-                break;
-            }
-        }
-#endif
 
         dissociateWeakBonds();
 
@@ -119,10 +106,12 @@ struct Water
             updateForces<1>(_if->first, force);
         }
 
-        // update m_vSpeed[1] in each atom based on change of force potentials
-        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
-            updateSpeeds(_if->first, _if->second);
+            // advect speeds by half-step
+            auto& atom = m_atoms[uAtom];
+            MyUnits<T> fMass = atom.getMass();
+            atom.m_vSpeed[0] = atom.m_vSpeed[1] + atom.m_vForce * (m_fTimeStep / 2 / fMass);
         }
 
         // update kinetic energy
@@ -132,7 +121,6 @@ struct Water
             auto& atom = m_atoms[uAtom];
             MyUnits<T> fMass = atom.getMass();
             atom.copyPos(0, 1);
-            atom.m_vSpeed[0] = atom.m_vSpeed[1];
             MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
             m_fCurTotalKin += fKin;
         }
@@ -281,7 +269,7 @@ struct Water
     rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].getUnwrappedPos(0)); }
 
 private:
-    void createListOfForces()
+    void updateListOfForces()
     {
         m_ocTree.rebuild(removeUnits(m_bBox), (NvU32)m_atoms.size());
 
@@ -300,20 +288,11 @@ private:
         auto& atom2 = m_atoms[forceKey.getAtom2Index()];
 
         rtvector<MyUnits<T>, 3> vForce;
-        if (force.computeForce<index>(atom1, atom2, m_bBox, vForce) && index == 0)
+        if (force.computeForce<index>(atom1, atom2, m_bBox, vForce))
         {
             atom1.m_vForce += vForce;
             atom2.m_vForce -= vForce;
         }
-    }
-    void updateSpeeds(ForceKey forceKey, Force<T> &force)
-    {
-        NvU32 uAtom1 = forceKey.getAtom1Index();
-        auto& atom1 = m_atoms[uAtom1];
-        NvU32 uAtom2 = forceKey.getAtom2Index();
-        auto& atom2 = m_atoms[uAtom2];
-
-        force.updateSpeeds1(atom1, atom2, m_bBox);
     }
 
     struct BoundingBox : public BBox3<MyUnits<T>>
@@ -360,12 +339,6 @@ private:
                 else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
             }
             return vOutDir;
-        }
-        void advectPosition(Atom<T>& atom, MyUnits<T> fTimeStep)
-        {
-            MyUnits<T> fMass = atom.getMass();
-            auto vAvgSpeed = atom.m_vSpeed[0] + atom.m_vForce * (fTimeStep / 2 / fMass);
-            atom.setPos(1, atom.getUnwrappedPos(0) + vAvgSpeed * fTimeStep, *this);
         }
         MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
     };
