@@ -98,8 +98,6 @@ struct Water
             atom.m_vForce = rtvector<MyUnits<T>, 3>();
         }
 
-        dissociateWeakBonds();
-
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
             Force<T> &force = _if->second;
@@ -267,10 +265,13 @@ struct Water
     }
     const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
     rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].getUnwrappedPos(0)); }
+    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_bBox.computeDir<0>(atom1, atom2); }
 
 private:
     void updateListOfForces()
     {
+        dissociateWeakBonds();
+
         m_ocTree.rebuild(removeUnits(m_bBox), (NvU32)m_atoms.size());
 
 #if ASSERT_ONLY_CODE

@@ -177,11 +177,28 @@ struct MyViewer : public Viewer
             auto& force = _if->second;
             if (!force.shouldDraw())
                 continue;
+
             auto& forceKey = _if->first;
             const auto& atom1 = atoms[forceKey.getAtom1Index()];
             const auto& atom2 = atoms[forceKey.getAtom2Index()];
-            m_pBondPoints.push_back(toVec3(atom1.getUnwrappedPos(0)));
-            m_pBondPoints.push_back(toVec3(atom2.getUnwrappedPos(0)));
+
+            auto atom1Pos = toVec3(atom1.getUnwrappedPos(0));
+            auto atom2Pos = toVec3(atom2.getUnwrappedPos(0));
+            auto vDir1 = atom1Pos - atom2Pos;
+            auto vDir2 = toVec3(m_water.computeDir(atom1, atom2));
+            // if vDir1 is large - this means dir wraps around the bounding box - we have to draw two lines
+            if (dot(vDir1, vDir1) > 2 * dot(vDir2, vDir2))
+            {
+                m_pBondPoints.push_back(atom1Pos);
+                m_pBondPoints.push_back(atom1Pos - vDir2);
+                m_pBondPoints.push_back(atom2Pos);
+                m_pBondPoints.push_back(atom2Pos + vDir2);
+            }
+            else
+            {
+                m_pBondPoints.push_back(atom1Pos);
+                m_pBondPoints.push_back(atom2Pos);
+            }
         }
         m_pBondsDrawable->update_vertex_buffer(m_pBondPoints);
     }
