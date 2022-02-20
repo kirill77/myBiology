@@ -6,6 +6,58 @@
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 
+// class used to wrap coordinates and directions so that everything stays inside boundind box
+template <class T>
+struct BoxWrapper : public BBox3<MyUnits<T>>
+{
+    BoxWrapper(MyUnits<T> fBoxSide = MyUnits<T>(1.))
+    {
+        m_fBoxSize = fBoxSide;
+        m_fHalfBoxSize = m_fBoxSize / 2.;
+        this->m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
+        this->m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
+    }
+    // if the atom exits bounding box, it enters from the other side
+    rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3>& vOldPos) const
+    {
+        auto vNewPos = vOldPos;
+        for (NvU32 uDim = 0; uDim < 3; ++uDim)
+        {
+            if (vNewPos[uDim] < this->m_vMin[uDim])
+            {
+                auto fOvershoot = (this->m_vMin[uDim] - vNewPos[uDim]);
+                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                vNewPos[uDim] += m_fBoxSize * nBoxSizes;
+                nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
+                continue;
+            }
+            if (vNewPos[uDim] > this->m_vMax[uDim])
+            {
+                auto fOvershoot = (vNewPos[uDim] - this->m_vMax[uDim]);
+                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
+                vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
+                nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
+            }
+        }
+        nvAssert(this->includes(vNewPos)); // atom must be inside the bounding box
+        return vNewPos;
+    }
+    template <NvU32 index>
+    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const
+    {
+        rtvector<MyUnits<T>, 3> vOutDir = atom1.getUnwrappedPos(index) - atom2.getUnwrappedPos(index);
+        for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
+        {
+            if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
+            else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
+        }
+        return vOutDir;
+    }
+
+private:
+    MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
+};
+
 template <class _T>
 struct Water
 {
@@ -19,11 +71,9 @@ struct Water
     {
     };
 
-    Water() : m_ocTree(*this)
+    Water() : m_ocTree(*this), m_bBox(MyUnits<T>::angstrom() * 20)
     {
-        m_bBox.init(MyUnits<T>::angstrom() * 20);
-
-        MyUnits<T> volume = m_bBox.m_fBoxSize * m_bBox.m_fBoxSize * m_bBox.m_fBoxSize;
+        MyUnits<T> volume = m_bBox.evalVolume();
         // one mole of water has volume of 18 milliliters
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
 #ifdef NDEBUG
@@ -160,16 +210,6 @@ struct Water
         }
     }
 
-#if 0
-    bool adjustForceDistance(ForceKey forceKey, Force<T> &force)
-    {
-        auto& atom1 = m_atoms[forceKey.getAtom1Index()];
-        auto& atom2 = m_atoms[forceKey.getAtom2Index()];
-
-        return force.adjustAtomsDistance(forceKey, atom1, atom2, m_bBox);
-    }
-#endif
-
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
     OcTreeNode<Water>& accessNode(NvU32 index) { return m_ocTree.m_nodes[index]; }
     bool isOkToBeNotLeaf(const OcTreeNode<Water>& node) const
@@ -296,54 +336,7 @@ private:
         }
     }
 
-    struct BoundingBox : public BBox3<MyUnits<T>>
-    {
-        void init(MyUnits<T> fBoxSide)
-        {
-            m_fBoxSize = fBoxSide;
-            m_fHalfBoxSize = m_fBoxSize / 2.;
-            this->m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
-            this->m_vMax = makeVector<MyUnits<T>, 3>(m_fHalfBoxSize);
-        }
-        // if the atom exits bounding box, it enters from the other side
-        rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3>& vOldPos) const
-        {
-            auto vNewPos = vOldPos;
-            for (NvU32 uDim = 0; uDim < 3; ++uDim)
-            {
-                if (vNewPos[uDim] < this->m_vMin[uDim])
-                {
-                    auto fOvershoot = (this->m_vMin[uDim] - vNewPos[uDim]);
-                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                    vNewPos[uDim] += m_fBoxSize * nBoxSizes;
-                    nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
-                    continue;
-                }
-                if (vNewPos[uDim] > this->m_vMax[uDim])
-                {
-                    auto fOvershoot = (vNewPos[uDim] - this->m_vMax[uDim]);
-                    int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                    vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
-                    nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
-                }
-            }
-            nvAssert(this->includes(vNewPos)); // atom must be inside the bounding box
-            return vNewPos;
-        }
-        template <NvU32 index>
-        rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const
-        {
-            rtvector<MyUnits<T>, 3> vOutDir = atom1.getUnwrappedPos(index) - atom2.getUnwrappedPos(index);
-            for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-            {
-                if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
-                else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
-            }
-            return vOutDir;
-        }
-        MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
-    };
-    BoundingBox m_bBox;
+    BoxWrapper<T> m_bBox;
     std::vector<Atom<T>> m_atoms;
     ForceMap m_forces;
     OcTree<Water> m_ocTree;
