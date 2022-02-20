@@ -6,6 +6,9 @@
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 
+template <class T>
+using ForceMap = std::unordered_map<ForceKey, Force<T>>;
+
 // class used to wrap coordinates and directions so that everything stays inside boundind box
 template <class T>
 struct BoxWrapper : public BBox3<MyUnits<T>>
@@ -58,74 +61,21 @@ private:
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
 };
 
-template <class _T>
-struct Water
+// class propagates simulation
+template <class T>
+struct Propagator
 {
-    typedef _T T;
+    Propagator() : m_bBox(MyUnits<T>::angstrom() * 20) { }
 
-    typedef std::unordered_map<ForceKey, Force<T>> ForceMap;
+    const ForceMap<T>& getForces() const { return m_forces; }
+    inline const std::vector<Atom<T>>& points() const { return m_atoms; }
+    const MyUnits<T>& getCurTimeStep() const { return m_fTimeStep; }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].getUnwrappedPos(0)); }
+    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_bBox.computeDir<0>(atom1, atom2); }
+    const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
 
-    const ForceMap &getForces() const { return m_forces; }
-
-    struct NODE_DATA // data that we store in each node
+    void propagate()
     {
-    };
-
-    Water() : m_ocTree(*this), m_bBox(MyUnits<T>::angstrom() * 20)
-    {
-        MyUnits<T> volume = m_bBox.evalVolume();
-        // one mole of water has volume of 18 milliliters
-        NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
-#ifdef NDEBUG
-        m_atoms.resize(3 * nWaterMolecules);
-#else
-        // debug can't simulate all molecules - too slow
-        m_atoms.resize(3 * 64);
-#endif
-
-        NvU32 nOs = 0, nHs = 0;
-
-        for (NvU32 u = 0; u < m_atoms.size(); ++u)
-        {
-            Atom<T> &atom = m_atoms[u];
-            if (nHs < nOs * 2)
-            {
-                atom = Atom<T>(NPROTONS_H);
-                ++nHs;
-            }
-            else
-            {
-                atom = Atom<T>(NPROTONS_O);
-                ++nOs;
-            }
-
-            rtvector<MyUnits<T>, 3> vNewPos;
-            for (NvU32 uDim = 0; uDim < 3; ++uDim)
-            {
-                double f = m_rng.generate01();
-                vNewPos[uDim] = m_bBox.m_vMin[uDim] * f + m_bBox.m_vMax[uDim] * (1 - f);
-            }
-            atom.setPos(0, vNewPos, m_bBox);
-            m_rng.nextSeed();
-
-            if (!m_bBox.includes(atom.getUnwrappedPos(0))) // atom must be inside the bounding box
-            {
-                __debugbreak();
-            }
-        }
-
-        m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
-    }
-
-    inline std::vector<Atom<T>>& points()
-    {
-        return m_atoms;
-    }
-
-    void makeTimeStep()
-    {
-        updateListOfForces();
-
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
             auto& atom = m_atoms[uAtom];
@@ -133,7 +83,7 @@ struct Water
         }
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            Force<T> &force = _if->second;
+            Force<T>& force = _if->second;
             updateForces<0>(_if->first, force);
         }
 
@@ -150,7 +100,7 @@ struct Water
 
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            Force<T> &force = _if->second;
+            Force<T>& force = _if->second;
             updateForces<1>(_if->first, force);
         }
 
@@ -161,45 +111,18 @@ struct Water
             MyUnits<T> fMass = atom.getMass();
             atom.m_vSpeed[0] = atom.m_vSpeed[1] + atom.m_vForce * (m_fTimeStep / 2 / fMass);
         }
-
-        // update kinetic energy
-        m_fCurTotalKin = MyUnits<T>();
-        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
-        {
-            auto& atom = m_atoms[uAtom];
-            MyUnits<T> fMass = atom.getMass();
-            atom.copyPos(0, 1);
-            MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
-            m_fCurTotalKin += fKin;
-        }
-
-        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
-        auto fScaleCoeff = (m_fWantedAverageKin / (m_fCurTotalKin / (T)m_atoms.size())).m_value;
-        if (fScaleCoeff < 1)
-        {
-            double fScaleCoeffSqrt = sqrt(fScaleCoeff);
-            for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
-            {
-                auto& atom = m_atoms[uAtom];
-                // kinetic energy is computed using the following equation:
-                // fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
-                // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
-                atom.m_vSpeed[0] *= fScaleCoeffSqrt;
-            }
-            m_fCurTotalKin *= fScaleCoeff;
-        }
     }
 
     void dissociateWeakBonds()
     {
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
-            Force<T> &force = _if->second;
+            Force<T>& force = _if->second;
 
             // compute current bond length
             auto& forceKey = _if->first;
-            auto &atom1 = m_atoms[forceKey.getAtom1Index()];
-            auto &atom2 = m_atoms[forceKey.getAtom2Index()];
+            auto& atom1 = m_atoms[forceKey.getAtom1Index()];
+            auto& atom2 = m_atoms[forceKey.getAtom2Index()];
 
             if (force.dissociateWeakBond(forceKey, atom1, atom2, m_bBox))
             {
@@ -207,6 +130,116 @@ struct Water
                 if (_if == m_forces.end())
                     break;
             }
+        }
+    }
+
+protected:
+    std::vector<Atom<T>> m_atoms;
+    ForceMap<T> m_forces;
+    BoxWrapper<T> m_bBox;
+    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
+
+private:
+    template <NvU32 index>
+    void updateForces(ForceKey forceKey, Force<T>& force)
+    {
+        auto& atom1 = m_atoms[forceKey.getAtom1Index()];
+        auto& atom2 = m_atoms[forceKey.getAtom2Index()];
+
+        rtvector<MyUnits<T>, 3> vForce;
+        if (force.computeForce<index>(atom1, atom2, m_bBox, vForce))
+        {
+            atom1.m_vForce += vForce;
+            atom2.m_vForce -= vForce;
+        }
+    }
+};
+
+template <class _T>
+struct Water : public Propagator<_T>
+{
+    typedef _T T;
+
+    struct NODE_DATA // data that we store in each node
+    {
+    };
+
+    Water() : m_ocTree(*this)
+    {
+        MyUnits<T> volume = this->m_bBox.evalVolume();
+        // one mole of water has volume of 18 milliliters
+        NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
+
+#ifdef NDEBUG
+        this->this->m_atoms.resize(3 * nWaterMolecules);
+#else
+        // debug can't simulate all molecules - too slow
+        this->m_atoms.resize(3 * 64);
+#endif
+
+        for (NvU32 u = 0, nOs = 0, nHs = 0; u < this->m_atoms.size(); ++u)
+        {
+            Atom<T> &atom = this->m_atoms[u];
+            if (nHs < nOs * 2)
+            {
+                atom = Atom<T>(NPROTONS_H);
+                ++nHs;
+            }
+            else
+            {
+                atom = Atom<T>(NPROTONS_O);
+                ++nOs;
+            }
+
+            rtvector<MyUnits<T>, 3> vNewPos;
+            for (NvU32 uDim = 0; uDim < 3; ++uDim)
+            {
+                double f = m_rng.generate01();
+                vNewPos[uDim] = this->m_bBox.m_vMin[uDim] * f + this->m_bBox.m_vMax[uDim] * (1 - f);
+            }
+            atom.setPos(0, vNewPos, this->m_bBox);
+            m_rng.nextSeed();
+
+            if (!this->m_bBox.includes(atom.getUnwrappedPos(0))) // atom must be inside the bounding box
+            {
+                __debugbreak();
+            }
+        }
+
+        m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
+    }
+
+    void makeTimeStep()
+    {
+        updateListOfForces();
+
+        this->propagate();
+
+        // update kinetic energy
+        m_fCurTotalKin = MyUnits<T>();
+        for (NvU32 uAtom = 0; uAtom < this->m_atoms.size(); ++uAtom)
+        {
+            auto& atom = this->m_atoms[uAtom];
+            MyUnits<T> fMass = atom.getMass();
+            atom.copyPos(0, 1);
+            MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
+            m_fCurTotalKin += fKin;
+        }
+
+        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
+        auto fScaleCoeff = (m_fWantedAverageKin / (m_fCurTotalKin / (T)this->m_atoms.size())).m_value;
+        if (fScaleCoeff < 1)
+        {
+            double fScaleCoeffSqrt = sqrt(fScaleCoeff);
+            for (NvU32 uAtom = 0; uAtom < this->m_atoms.size(); ++uAtom)
+            {
+                auto& atom = this->m_atoms[uAtom];
+                // kinetic energy is computed using the following equation:
+                // fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
+                // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
+                atom.m_vSpeed[0] *= fScaleCoeffSqrt;
+            }
+            m_fCurTotalKin *= fScaleCoeff;
         }
     }
 
@@ -260,15 +293,15 @@ struct Water
         for (NvU32 uTreePoint2 = leafNode2.getFirstTreePoint(); uTreePoint2 < leafNode2.getEndTreePoint(); ++uTreePoint2)
         {
             NvU32 uPoint2 = m_ocTree.getPointIndex(uTreePoint2);
-            auto& atom2 = m_atoms[uPoint2];
+            auto& atom2 = this->m_atoms[uPoint2];
             for (NvU32 uTreePoint1 = (leafIndex == nodeIndex) ? uTreePoint2 + 1 : leafNode1.getFirstTreePoint(); uTreePoint1 < leafNode1.getEndTreePoint(); ++uTreePoint1)
             {
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
-                auto& atom1 = m_atoms[uPoint1];
-                auto vDir = m_bBox.computeDir<0>(atom1, atom2);
+                auto& atom1 = this->m_atoms[uPoint1];
+                auto vDir = this->m_bBox.computeDir<0>(atom1, atom2);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
@@ -279,7 +312,7 @@ struct Water
                 {
                     if (uBond1 >= atom1.getNBonds())
                     {
-                        m_forces[ForceKey(uPoint1, uPoint2)]; // this adds default force between those two atoms into ForceMap
+                        this->m_forces[ForceKey(uPoint1, uPoint2)]; // this adds default force between those two atoms into ForceMap
                         break;
                     }
                     // if this is covalent bond - we don't need to add it - it must already be in the list of forces
@@ -293,60 +326,36 @@ struct Water
         return true;
     }
 
-    const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
-
     MyUnits<T> evalTemperature() const
     {
-        return MyUnits<T>::evalTemperature(m_fCurTotalKin / (NvU32)m_atoms.size());
+        return MyUnits<T>::evalTemperature(m_fCurTotalKin / (NvU32)this->m_atoms.size());
     }
     MyUnits<T> evalPressure() const
     {
-        return MyUnits<T>::evalPressure(m_fCurTotalKin, m_bBox.evalVolume(), (NvU32)m_atoms.size());
+        return MyUnits<T>::evalPressure(m_fCurTotalKin, this->m_bBox.evalVolume(), (NvU32)this->m_atoms.size());
     }
-    const MyUnits<T> &getCurTimeStep() const { return m_fTimeStep; }
-    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].getUnwrappedPos(0)); }
-    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_bBox.computeDir<0>(atom1, atom2); }
 
 private:
     void updateListOfForces()
     {
-        dissociateWeakBonds();
+        this->dissociateWeakBonds();
 
-        m_ocTree.rebuild(removeUnits(m_bBox), (NvU32)m_atoms.size());
+        m_ocTree.rebuild(removeUnits(this->m_bBox), (NvU32)this->m_atoms.size());
 
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
 #endif
 
-        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(m_bBox), *this);
-        nvAssert(m_dbgNContributions == m_atoms.size() * (m_atoms.size() - 1));
+        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(this->m_bBox), *this);
+        nvAssert(m_dbgNContributions == this->m_atoms.size() * (this->m_atoms.size() - 1));
     }
 
-    template <NvU32 index>
-    void updateForces(ForceKey forceKey, Force<T> &force)
-    {
-        auto& atom1 = m_atoms[forceKey.getAtom1Index()];
-        auto& atom2 = m_atoms[forceKey.getAtom2Index()];
-
-        rtvector<MyUnits<T>, 3> vForce;
-        if (force.computeForce<index>(atom1, atom2, m_bBox, vForce))
-        {
-            atom1.m_vForce += vForce;
-            atom2.m_vForce -= vForce;
-        }
-    }
-
-    BoxWrapper<T> m_bBox;
-    std::vector<Atom<T>> m_atoms;
-    ForceMap m_forces;
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
 
     const double m_fWantedTempC = 37;
     MyUnits<T> m_fWantedAverageKin;
     MyUnits<T> m_fCurTotalKin; // energy conservation variables
-    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
-    MyUnits<T> m_fMaxSpaceStep = MyUnits<T>::nanoMeter() / 512, m_fMaxSpaceStepSqr = m_fMaxSpaceStep * m_fMaxSpaceStep;
 
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions = 0;
