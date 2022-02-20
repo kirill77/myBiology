@@ -76,10 +76,11 @@ struct Propagator
 
     void propagate()
     {
+        m_atomDatas.resize(m_atoms.size());
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
-            auto& atom = m_atoms[uAtom];
-            atom.m_vForce = rtvector<MyUnits<T>, 3>();
+            AtomData &atomD = m_atomDatas[uAtom];
+            atomD.m_vForce = rtvector<MyUnits<T>, 3>();
         }
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
@@ -90,12 +91,13 @@ struct Propagator
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
             // advect positions by full step and speeds by half-step
-            auto& atom = m_atoms[uAtom];
+            Atom<T>& atom = m_atoms[uAtom];
+            AtomData& atomD = m_atomDatas[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed[1] = atom.m_vSpeed[0] + atom.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vSpeed[1] = atom.m_vSpeed[0] + atomD.m_vForce * (m_fTimeStep / 2 / fMass);
             atom.setPos(1, atom.getUnwrappedPos(0) + atom.m_vSpeed[1] * m_fTimeStep, m_bBox);
             // clear forces before we start accumulating them for next step
-            atom.m_vForce = rtvector<MyUnits<T>, 3>();
+            atomD.m_vForce = rtvector<MyUnits<T>, 3>();
         }
 
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
@@ -108,8 +110,9 @@ struct Propagator
         {
             // advect speeds by half-step
             auto& atom = m_atoms[uAtom];
+            AtomData& atomD = m_atomDatas[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed[0] = atom.m_vSpeed[1] + atom.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vSpeed[0] = atom.m_vSpeed[1] + atomD.m_vForce * (m_fTimeStep / 2 / fMass);
         }
     }
 
@@ -143,16 +146,25 @@ private:
     template <NvU32 index>
     void updateForces(ForceKey forceKey, Force<T>& force)
     {
-        auto& atom1 = m_atoms[forceKey.getAtom1Index()];
-        auto& atom2 = m_atoms[forceKey.getAtom2Index()];
+        NvU32 uAtom1 = forceKey.getAtom1Index();
+        Atom<T>& atom1 = m_atoms[uAtom1];
+        AtomData& atomD1 = m_atomDatas[uAtom1];
+        NvU32 uAtom2 = forceKey.getAtom2Index();
+        Atom<T>& atom2 = m_atoms[uAtom2];
+        AtomData& atomD2 = m_atomDatas[uAtom2];
 
         rtvector<MyUnits<T>, 3> vForce;
         if (force.computeForce<index>(atom1, atom2, m_bBox, vForce))
         {
-            atom1.m_vForce += vForce;
-            atom2.m_vForce -= vForce;
+            atomD1.m_vForce += vForce;
+            atomD2.m_vForce -= vForce;
         }
     }
+    struct AtomData
+    {
+        rtvector<MyUnits<T>, 3> m_vForce;
+    };
+    std::vector<AtomData> m_atomDatas;
 };
 
 template <class _T>
