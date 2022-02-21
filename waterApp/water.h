@@ -45,10 +45,9 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
         nvAssert(this->includes(vNewPos)); // atom must be inside the bounding box
         return vNewPos;
     }
-    template <NvU32 index>
     rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const
     {
-        rtvector<MyUnits<T>, 3> vOutDir = atom1.getUnwrappedPos(index) - atom2.getUnwrappedPos(index);
+        rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos - atom2.m_vPos;
         for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
         {
             if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
@@ -70,8 +69,8 @@ struct Propagator
     const ForceMap<T>& getForces() const { return m_forces; }
     inline const std::vector<Atom<T>>& points() const { return m_atoms; }
     const MyUnits<T>& getCurTimeStep() const { return m_fTimeStep; }
-    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].getUnwrappedPos(0)); }
-    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_bBox.computeDir<0>(atom1, atom2); }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].m_vPos); }
+    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_bBox.computeDir(atom1, atom2); }
     const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
 
     void propagate()
@@ -85,7 +84,7 @@ struct Propagator
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
             Force<T>& force = _if->second;
-            updateForces<0>(_if->first, force);
+            updateForces(_if->first, force);
         }
 
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
@@ -94,8 +93,8 @@ struct Propagator
             Atom<T>& atom = m_atoms[uAtom];
             AtomData& atomD = m_atomDatas[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed[1] = atom.m_vSpeed[0] + atomD.m_vForce * (m_fTimeStep / 2 / fMass);
-            atom.setPos(1, atom.getUnwrappedPos(0) + atom.m_vSpeed[1] * m_fTimeStep, m_bBox);
+            atom.m_vSpeed[0] += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vPos = m_bBox.wrapThePos(atom.m_vPos + atom.m_vSpeed[0] * m_fTimeStep);
             // clear forces before we start accumulating them for next step
             atomD.m_vForce = rtvector<MyUnits<T>, 3>();
         }
@@ -103,7 +102,7 @@ struct Propagator
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
             Force<T>& force = _if->second;
-            updateForces<1>(_if->first, force);
+            updateForces(_if->first, force);
         }
 
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
@@ -112,7 +111,7 @@ struct Propagator
             auto& atom = m_atoms[uAtom];
             AtomData& atomD = m_atomDatas[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed[0] = atom.m_vSpeed[1] + atomD.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vSpeed[0] += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
         }
     }
 
@@ -143,7 +142,6 @@ protected:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
 
 private:
-    template <NvU32 index>
     void updateForces(ForceKey forceKey, Force<T>& force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
@@ -154,7 +152,7 @@ private:
         AtomData& atomD2 = m_atomDatas[uAtom2];
 
         rtvector<MyUnits<T>, 3> vForce;
-        if (force.computeForce<index>(atom1, atom2, m_bBox, vForce))
+        if (force.computeForce(atom1, atom2, m_bBox, vForce))
         {
             atomD1.m_vForce += vForce;
             atomD2.m_vForce -= vForce;
@@ -209,10 +207,10 @@ struct Water : public Propagator<_T>
                 double f = m_rng.generate01();
                 vNewPos[uDim] = this->m_bBox.m_vMin[uDim] * f + this->m_bBox.m_vMax[uDim] * (1 - f);
             }
-            atom.setPos(0, vNewPos, this->m_bBox);
+            atom.m_vPos = vNewPos;
             m_rng.nextSeed();
 
-            if (!this->m_bBox.includes(atom.getUnwrappedPos(0))) // atom must be inside the bounding box
+            if (!this->m_bBox.includes(atom.m_vPos)) // atom must be inside the bounding box
             {
                 __debugbreak();
             }
@@ -233,7 +231,6 @@ struct Water : public Propagator<_T>
         {
             auto& atom = this->m_atoms[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.copyPos(0, 1);
             MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
             m_fCurTotalKin += fKin;
         }
@@ -313,7 +310,7 @@ struct Water : public Propagator<_T>
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
                 auto& atom1 = this->m_atoms[uPoint1];
-                auto vDir = this->m_bBox.computeDir<0>(atom1, atom2);
+                auto vDir = this->m_bBox.computeDir(atom1, atom2);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {

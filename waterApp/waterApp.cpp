@@ -125,12 +125,12 @@ struct MyViewer : public Viewer
             const auto& atom = atoms[u];
             if (atom.m_nProtons == 8)
             {
-                m_pODrawable->setVertex(nO++, atom.getUnwrappedPos(0));
+                m_pODrawable->setVertex(nO++, atom.m_vPos);
                 continue;
             }
             if (atom.m_nProtons == 1)
             {
-                m_pHDrawable->setVertex(nH++, atom.getUnwrappedPos(0));
+                m_pHDrawable->setVertex(nH++, atom.m_vPos);
                 continue;
             }
             nvAssert(false);
@@ -182,8 +182,8 @@ struct MyViewer : public Viewer
             const auto& atom1 = atoms[forceKey.getAtom1Index()];
             const auto& atom2 = atoms[forceKey.getAtom2Index()];
 
-            auto atom1Pos = toVec3(atom1.getUnwrappedPos(0));
-            auto atom2Pos = toVec3(atom2.getUnwrappedPos(0));
+            auto atom1Pos = toVec3(atom1.m_vPos);
+            auto atom2Pos = toVec3(atom2.m_vPos);
             auto vDir1 = atom1Pos - atom2Pos;
             auto vDir2 = toVec3(m_water.computeDir(atom1, atom2));
             // if vDir1 is large - this means dir wraps around the bounding box - we have to draw two lines
