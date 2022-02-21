@@ -75,10 +75,42 @@ struct Propagator
 
     void propagate()
     {
+        propagateInternal();
+    }
+
+    void dissociateWeakBonds()
+    {
+        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
+        {
+            Force<T>& force = _if->second;
+
+            // compute current bond length
+            auto& forceKey = _if->first;
+            auto& atom1 = m_atoms[forceKey.getAtom1Index()];
+            auto& atom2 = m_atoms[forceKey.getAtom2Index()];
+
+            if (force.dissociateWeakBond(forceKey, atom1, atom2, m_bBox))
+            {
+                _if = m_forces.erase(_if);
+                if (_if == m_forces.end())
+                    break;
+            }
+        }
+    }
+
+protected:
+    std::vector<Atom<T>> m_atoms;
+    ForceMap<T> m_forces;
+    BoxWrapper<T> m_bBox;
+    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
+
+private:
+    void propagateInternal()
+    {
         m_atomDatas.resize(m_atoms.size());
         for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
         {
-            AtomData &atomD = m_atomDatas[uAtom];
+            AtomData& atomD = m_atomDatas[uAtom];
             atomD.m_vForce = rtvector<MyUnits<T>, 3>();
         }
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
@@ -114,34 +146,6 @@ struct Propagator
             atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
         }
     }
-
-    void dissociateWeakBonds()
-    {
-        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
-        {
-            Force<T>& force = _if->second;
-
-            // compute current bond length
-            auto& forceKey = _if->first;
-            auto& atom1 = m_atoms[forceKey.getAtom1Index()];
-            auto& atom2 = m_atoms[forceKey.getAtom2Index()];
-
-            if (force.dissociateWeakBond(forceKey, atom1, atom2, m_bBox))
-            {
-                _if = m_forces.erase(_if);
-                if (_if == m_forces.end())
-                    break;
-            }
-        }
-    }
-
-protected:
-    std::vector<Atom<T>> m_atoms;
-    ForceMap<T> m_forces;
-    BoxWrapper<T> m_bBox;
-    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
-
-private:
     void updateForces(ForceKey forceKey, Force<T>& force)
     {
         NvU32 uAtom1 = forceKey.getAtom1Index();
