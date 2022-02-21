@@ -93,8 +93,8 @@ struct Propagator
             Atom<T>& atom = m_atoms[uAtom];
             AtomData& atomD = m_atomDatas[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed[0] += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
-            atom.m_vPos = m_bBox.wrapThePos(atom.m_vPos + atom.m_vSpeed[0] * m_fTimeStep);
+            atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vPos = m_bBox.wrapThePos(atom.m_vPos + atom.m_vSpeed * m_fTimeStep);
             // clear forces before we start accumulating them for next step
             atomD.m_vForce = rtvector<MyUnits<T>, 3>();
         }
@@ -111,7 +111,7 @@ struct Propagator
             auto& atom = m_atoms[uAtom];
             AtomData& atomD = m_atomDatas[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed[0] += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
         }
     }
 
@@ -231,7 +231,7 @@ struct Water : public Propagator<_T>
         {
             auto& atom = this->m_atoms[uAtom];
             MyUnits<T> fMass = atom.getMass();
-            MyUnits<T> fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
+            MyUnits<T> fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
             m_fCurTotalKin += fKin;
         }
 
@@ -244,9 +244,9 @@ struct Water : public Propagator<_T>
             {
                 auto& atom = this->m_atoms[uAtom];
                 // kinetic energy is computed using the following equation:
-                // fKin = lengthSquared(atom.m_vSpeed[0]) * fMass / 2;
+                // fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
                 // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
-                atom.m_vSpeed[0] *= fScaleCoeffSqrt;
+                atom.m_vSpeed *= fScaleCoeffSqrt;
             }
             m_fCurTotalKin *= fScaleCoeff;
         }
