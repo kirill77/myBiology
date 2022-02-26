@@ -155,11 +155,11 @@ private:
         Atom<T>& atom2 = m_atoms[uAtom2];
         AtomData& atomD2 = m_atomDatas[uAtom2];
 
-        rtvector<MyUnits<T>, 3> vForce;
-        if (force.computeForce(atom1, atom2, m_bBox, vForce))
+        ForceData<T> forceData;
+        if (force.computeForce(atom1, atom2, m_bBox, forceData))
         {
-            atomD1.m_vForce += vForce;
-            atomD2.m_vForce -= vForce;
+            atomD1.m_vForce += forceData.vForce;
+            atomD2.m_vForce -= forceData.vForce;
         }
     }
     struct AtomData
