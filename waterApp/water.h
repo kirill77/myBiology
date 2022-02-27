@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
 #include "basics/bonds.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
@@ -60,6 +61,58 @@ private:
     MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
 };
 
+template <class T>
+struct CachedForce
+{
+    CachedForce() : m_forceKey(-1, -1) { }
+    CachedForce(ForceKey forceKey, const Force<T>& force) : m_forceKey(forceKey), m_force(force) { }
+    ForceKey m_forceKey;
+    Force<T> m_force;
+};
+
+template <class T>
+struct SimLayer
+{
+    void init(NvU32 nAtoms)
+    {
+        m_enableAtomBits.assign((nAtoms + 31) / 32, 0);
+        m_atoms.resize(0);
+        m_cachedForces.resize(0);
+    }
+    bool haveAtom(NvU32 index) const
+    {
+        return m_enableAtomBits[index / 32] & (1 << (index & 31));
+    }
+    void addAtom(NvU32 index)
+    {
+        if (haveAtom(index)) return; // don't add the same atom twice
+        m_enableAtomBits[index / 32] |= (1 << (index & 31));
+        NvU16 index16 = (NvU16)index;
+        nvAssert(index16 == index);
+        m_atoms.push_back(index);
+    }
+    void initCachedForces(ForceMap<T>& forces)
+    {
+        for (auto _if = forces.begin(); _if != forces.end(); ++_if)
+        {
+            ForceKey forceKey = _if->first;
+            if (haveAtom(forceKey.getAtom1Index()) || haveAtom(forceKey.getAtom2Index()))
+            {
+                m_cachedForces.push_back(CachedForce<T>(_if->first, _if->second));
+            }
+        }
+    }
+    void propagate(MyUnits<T> fTimeStep)
+    {
+    }
+
+private:
+    std::vector<NvU32> m_enableAtomBits; // a bitfield
+    std::vector<NvU16> m_atoms;
+    std::vector<CachedForce<T>> m_cachedForces;
+    std::unique_ptr<SimLayer<T>> m_child;
+};
+
 // class propagates simulation
 template <class T>
 struct Propagator
@@ -75,7 +128,37 @@ struct Propagator
 
     void propagate()
     {
-        propagateInternal();
+        m_atomDatas.resize(m_atoms.size());
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
+        {
+            AtomData& atomD = m_atomDatas[uAtom];
+            atomD.m_vForce = rtvector<MyUnits<T>, 3>();
+        }
+
+        updateForces();
+
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
+        {
+            // advect positions by full step and speeds by half-step
+            Atom<T>& atom = m_atoms[uAtom];
+            AtomData& atomD = m_atomDatas[uAtom];
+            MyUnits<T> fMass = atom.getMass();
+            atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
+            atom.m_vPos = m_bBox.wrapThePos(atom.m_vPos + atom.m_vSpeed * m_fTimeStep);
+            // clear forces before we start accumulating them for next step
+            atomD.m_vForce = rtvector<MyUnits<T>, 3>();
+        }
+
+        updateForces();
+
+        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
+        {
+            // advect speeds by half-step
+            auto& atom = m_atoms[uAtom];
+            AtomData& atomD = m_atomDatas[uAtom];
+            MyUnits<T> fMass = atom.getMass();
+            atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
+        }
     }
 
     void dissociateWeakBonds()
@@ -105,61 +188,26 @@ protected:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
 
 private:
-    void propagateInternal()
+    void updateForces()
     {
-        m_atomDatas.resize(m_atoms.size());
-        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
-        {
-            AtomData& atomD = m_atomDatas[uAtom];
-            atomD.m_vForce = rtvector<MyUnits<T>, 3>();
-        }
         for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
         {
+            ForceKey forceKey = _if->first;
             Force<T>& force = _if->second;
-            updateForces(_if->first, force);
-        }
 
-        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
-        {
-            // advect positions by full step and speeds by half-step
-            Atom<T>& atom = m_atoms[uAtom];
-            AtomData& atomD = m_atomDatas[uAtom];
-            MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
-            atom.m_vPos = m_bBox.wrapThePos(atom.m_vPos + atom.m_vSpeed * m_fTimeStep);
-            // clear forces before we start accumulating them for next step
-            atomD.m_vForce = rtvector<MyUnits<T>, 3>();
-        }
+            NvU32 uAtom1 = forceKey.getAtom1Index();
+            Atom<T>& atom1 = m_atoms[uAtom1];
+            AtomData& atomD1 = m_atomDatas[uAtom1];
+            NvU32 uAtom2 = forceKey.getAtom2Index();
+            Atom<T>& atom2 = m_atoms[uAtom2];
+            AtomData& atomD2 = m_atomDatas[uAtom2];
 
-        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
-        {
-            Force<T>& force = _if->second;
-            updateForces(_if->first, force);
-        }
-
-        for (NvU32 uAtom = 0; uAtom < m_atoms.size(); ++uAtom)
-        {
-            // advect speeds by half-step
-            auto& atom = m_atoms[uAtom];
-            AtomData& atomD = m_atomDatas[uAtom];
-            MyUnits<T> fMass = atom.getMass();
-            atom.m_vSpeed += atomD.m_vForce * (m_fTimeStep / 2 / fMass);
-        }
-    }
-    void updateForces(ForceKey forceKey, Force<T>& force)
-    {
-        NvU32 uAtom1 = forceKey.getAtom1Index();
-        Atom<T>& atom1 = m_atoms[uAtom1];
-        AtomData& atomD1 = m_atomDatas[uAtom1];
-        NvU32 uAtom2 = forceKey.getAtom2Index();
-        Atom<T>& atom2 = m_atoms[uAtom2];
-        AtomData& atomD2 = m_atomDatas[uAtom2];
-
-        ForceData<T> forceData;
-        if (force.computeForce(atom1, atom2, m_bBox, forceData))
-        {
-            atomD1.m_vForce += forceData.vForce;
-            atomD2.m_vForce -= forceData.vForce;
+            ForceData<T> forceData;
+            if (force.computeForce(atom1, atom2, m_bBox, forceData))
+            {
+                atomD1.m_vForce += forceData.vForce;
+                atomD2.m_vForce -= forceData.vForce;
+            }
         }
     }
     struct AtomData
