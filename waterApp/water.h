@@ -83,6 +83,7 @@ struct SimLayerForce
     SimLayerForce(typename std::vector<SimLayerForce<T>>::const_iterator& it) : m_forceKey(it->m_forceKey), m_force(it->m_force) { }
     ForceKey m_forceKey;
     Force<T> m_force;
+    MyUnits<T> m_fPotential0;
 };
 // used for interpolating of proxy atom positions and restoring them at the end
 template <class T>
@@ -114,6 +115,10 @@ private:
 template <class T>
 struct SimLayer
 {
+    SimLayer(NvU32 uLevel) : m_uLevel(uLevel)
+    {
+        nvAssert(m_uLevel < 12);
+    }
     void init(NvU32 nAtoms, const BoxWrapper<T> &bBox)
     {
         m_atomsBitfield.assign((nAtoms + 31) / 32, 0);
@@ -165,7 +170,7 @@ struct SimLayer
             return;
         if (m_pNextSimLayer == nullptr)
         {
-            m_pNextSimLayer = std::make_unique<SimLayer<T>>();
+            m_pNextSimLayer = std::make_unique<SimLayer<T>>(m_uLevel + 1);
         }
 
         for (NvU32 u = 0; u < m_atomIndices.size(); ++u)
@@ -176,7 +181,7 @@ struct SimLayer
         }
 
         SimLayer& nextSimLayer = *m_pNextSimLayer;
-        updateForces(fBeginTime, atoms, prAtoms, nextSimLayer);
+        updateForces<0>(fBeginTime, atoms, prAtoms, nextSimLayer);
 
         MyUnits<T> fTimeStep = fEndTime - fBeginTime;
         for (NvU32 u = 0; u < m_atomIndices.size(); ++u)
@@ -201,7 +206,7 @@ struct SimLayer
         }
 
         nextSimLayer.init((NvU32)atoms.size(), m_slBox);
-        updateForces<true>(fEndTime, atoms, prAtoms, nextSimLayer);
+        updateForces<1>(fEndTime, atoms, prAtoms, nextSimLayer);
 
         if (nextSimLayer.numDetailAtoms() < numDetailAtoms()) // do we have some detailed atoms of our own?
         {
@@ -227,7 +232,7 @@ struct SimLayer
     }
 
 private:
-    template <bool bUpdateDetailLayer = false>
+    template <NvU32 uPass> // pass 0 is first Verlet step, pass 1 is second Verlet step
     void updateForces(MyUnits<T> fTime, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, SimLayer<T> &nextSimLayer)
     {
         for (NvU32 uF = 0; uF < m_slForces.size(); ++uF)
@@ -246,14 +251,17 @@ private:
             AtomPositionInterpolator<T> interp2(isDetailAtom(uAtom2), atom2, prAtom2, fTime, m_slBox);
 
             ForceData<T> forceData;
-            MyUnits<T> fPrevPotential = forceData.fPotential;
             if (force.computeForce(atom1, atom2, m_slBox, forceData))
             {
-                if (bUpdateDetailLayer)
+                if (uPass == 0)
                 {
-                    if (forceData.fPotential > fPrevPotential)
+                    slForce.m_fPotential0 = forceData.fPotential;
+                }
+                else
+                {
+                    if ((forceData.fPotential - slForce.m_fPotential0) > 1e-7 && isDetailAtom(uAtom1) && isDetailAtom(uAtom2))
                     {
-                        if ((forceData.fPotential - fPrevPotential) * 2 > lengthSquared(atom1.m_vSpeed) * atom1.getMass() + lengthSquared(atom2.m_vSpeed) * atom2.getMass())
+                        if ((forceData.fPotential - slForce.m_fPotential0) * 2 > lengthSquared(atom1.m_vSpeed) * atom1.getMass() + lengthSquared(atom2.m_vSpeed) * atom2.getMass())
                         {
                             nextSimLayer.addDetailAtom(uAtom1);
                             nextSimLayer.addDetailAtom(uAtom2);
@@ -264,6 +272,10 @@ private:
                 prAtom1.m_vForce += forceData.vForce;
                 prAtom2.m_vForce -= forceData.vForce;
             }
+            else if (uPass == 0)
+            {
+                slForce.m_fPotential0 = MyUnits<T>();
+            }
         }
     }
     std::vector<NvU32> m_atomsBitfield;
@@ -271,6 +283,7 @@ private:
     std::vector<SimLayerForce<T>> m_slForces;
     std::unique_ptr<SimLayer<T>> m_pNextSimLayer;
     BoxWrapper<T> m_slBox;
+    NvU32 m_uLevel = 0;
 };
 
 // class propagates simulation by the given time step. if I detect that the time step is not small enough for some particular atom, this
@@ -278,7 +291,7 @@ private:
 template <class T>
 struct Propagator
 {
-    Propagator() : m_bBox(MyUnits<T>::angstrom() * 20) { }
+    Propagator() : m_bBox(MyUnits<T>::angstrom() * 20), m_nextSimLayer(1) { }
 
     const ForceMap<T>& getForces() const { return m_forces; }
     inline const std::vector<Atom<T>>& points() const { return m_atoms; }
