@@ -10,6 +10,34 @@
 template <class T>
 using ForceMap = std::unordered_map<ForceKey, Force<T>>;
 
+template <class T>
+struct GlobalState
+{
+    GlobalState()
+    {
+        m_fWantedTempC = 37;
+        m_fWantedAvgKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
+        // let's take a hydrogen atom having average kinetic energy
+        // mHydrogen * V^2 / 2 = m_fDerivedAverageKin
+        // then the V would be equal to sqrt(2 * m_fDerivedAverageKin) / mHydrogen
+        // let's limit the speed to 100 times that
+        auto hMass = Atom<T>(NPROTONS_H).getMass();
+        nvAssert(hMass > 0 && hMass < 1e10);
+        m_fMaxAllowedAtomSpeed = sqrt(m_fWantedAvgKin * 2) * 100 / hMass;
+    }
+    void clampAtomSpeed(MyUnits3<T>& vSpeed)
+    {
+        vSpeed[0] = std::clamp(vSpeed[0], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
+        vSpeed[1] = std::clamp(vSpeed[1], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
+        vSpeed[2] = std::clamp(vSpeed[2], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
+    }
+    MyUnits<T> getWantedAvgKin() const { return m_fWantedAvgKin; }
+
+private:
+    T m_fWantedTempC;
+    MyUnits<T> m_fWantedAvgKin, m_fMaxAllowedAtomSpeed;
+};
+
 // class used to wrap coordinates and directions so that everything stays inside the simulation boundind box
 template <class T>
 struct BoxWrapper : public BBox3<MyUnits<T>>
@@ -22,9 +50,9 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
         this->m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
     }
     // if the atom exits bounding box, it enters from the other side
-    rtvector<MyUnits<T>, 3> wrapThePos(const rtvector<MyUnits<T>, 3>& vPos) const
+    MyUnits3<T> wrapThePos(const MyUnits3<T>& vPos) const
     {
-        auto vNewPos = vPos;
+        MyUnits3<T> vNewPos = vPos;
         for (NvU32 uDim = 0; uDim < 3; ++uDim)
         {
             if (vNewPos[uDim] < this->m_vMin[uDim])
@@ -118,7 +146,7 @@ struct SimLayer
     SimLayer(NvU32 uLevel = 0) : m_uLevel(uLevel)
     {
         nvAssert(isTopLayer == (uLevel == 0));
-        nvAssert(m_uLevel < 12);
+        nvAssert(m_uLevel < 20);
     }
     void init(NvU32 nAtoms, const BoxWrapper<T> &bBox)
     {
@@ -209,6 +237,7 @@ struct SimLayer
 
             // advect positions by full step and speeds by half-step
             atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
+            m_globalState.clampAtomSpeed(atom.m_vSpeed);
             atom.m_vPos = m_slBox.wrapThePos(atom.m_vPos + atom.m_vSpeed * fTimeStep);
             prAtom.m_fTime = fEndTime;
 
@@ -230,6 +259,7 @@ struct SimLayer
                 PropagatorAtom<T>& prAtom = prAtoms[uAtom];
                 MyUnits<T> fMass = atom.getMass();
                 atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
+                m_globalState.clampAtomSpeed(atom.m_vSpeed);
             }
         }
 
@@ -296,6 +326,7 @@ private:
     std::unique_ptr<SimLayer<T>> m_pNextSimLayer;
     BoxWrapper<T> m_slBox;
     NvU32 m_uLevel = 0;
+    GlobalState<T> m_globalState;
 };
 
 // class propagates simulation by the given time step. if I detect that the time step is not small enough for some particular atom, this
@@ -367,7 +398,7 @@ struct Water : public Propagator<_T>
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
 
 #ifdef NDEBUG
-        this->this->m_atoms.resize(3 * nWaterMolecules);
+        this->m_atoms.resize(3 * nWaterMolecules);
 #else
         // debug can't simulate all molecules - too slow
         this->m_atoms.resize(3 * 64);
@@ -402,7 +433,6 @@ struct Water : public Propagator<_T>
             }
         }
 
-        m_fWantedAverageKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
     }
 
     void makeTimeStep()
@@ -422,7 +452,7 @@ struct Water : public Propagator<_T>
         }
 
         // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
-        auto fScaleCoeff = (m_fWantedAverageKin / (m_fCurTotalKin / (T)this->m_atoms.size())).m_value;
+        auto fScaleCoeff = (m_globalState.getWantedAvgKin() / (m_fCurTotalKin / (T)this->m_atoms.size())).m_value;
         if (fScaleCoeff < 1)
         {
             double fScaleCoeffSqrt = sqrt(fScaleCoeff);
@@ -548,9 +578,9 @@ private:
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
 
-    const double m_fWantedTempC = 37;
-    MyUnits<T> m_fWantedAverageKin;
     MyUnits<T> m_fCurTotalKin; // energy conservation variables
+
+    GlobalState<T> m_globalState;
 
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions = 0;
