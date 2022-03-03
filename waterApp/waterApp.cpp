@@ -63,40 +63,6 @@ static NvU32 countMatchingCoords(const vec3& v1, const vec3& v2)
     return n;
 }
 
-template <NvU32 LOGN>
-struct MyFilter
-{
-    MyFilter() { memset(this, 0, sizeof(*this)); }
-
-    void addValue(double f)
-    {
-        NvU32 u = (m_nValues++) & MASK;
-        m_fSum -= m_fValues[u];
-        m_fValues[u] = f;
-        m_fSum += f;
-        if (u % 1024 == 0)
-        {
-            resetSum();
-        }
-    }
-    double getAverage() const
-    {
-        return m_nValues == 0 ? 0 : m_fSum / std::min(m_nValues, N);
-    }
-
-private:
-    void resetSum()
-    {
-        m_fSum = m_fValues[0];
-        for (NvU32 u = 1; u < N; ++u) m_fSum += m_fValues[u];
-    }
-    static const NvU32 N = (1 << LOGN);
-    static const NvU32 MASK = N - 1;
-    double m_fSum;
-    double m_fValues[N];
-    NvU32 m_nValues;
-};
-
 template <class T>
 struct MyViewer : public Viewer
 {
@@ -233,15 +199,16 @@ private:
         const float font_height = texter_->font_height(font_size);
 
         char sBuffer[64];
-        m_fTemp.addValue(m_water.evalTemperature().toCelcius());
-        double fAverageTempC = m_fTemp.getAverage();
+        MyUnits<T> fFilteredAverageKin = m_water.getFilteredAverageKin();
+        double fAverageTempC = fFilteredAverageKin.toCelcius();
         sprintf_s(sBuffer, "T(C): %.1lf", fAverageTempC);
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        m_fPressure.addValue(m_water.evalPressure().toAtmospheres());
-        sprintf_s(sBuffer, "P(atm): %.1lf", m_fPressure.getAverage());
+        MyUnits<T> fTotalKin = fFilteredAverageKin * (double)m_water.points().size();
+        MyUnits<T> fPressure = MyUnits<T>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
+        sprintf_s(sBuffer, "P(atm): %.1lf", fPressure.toAtmospheres());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
@@ -259,8 +226,6 @@ private:
     LinesDrawable* m_pBoxDrawable = nullptr, *m_pBondsDrawable = nullptr;
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
-
-    MyFilter<7> m_fTemp, m_fPressure;
 
     // for text rendering:
     float font_size_delta_ = -20;

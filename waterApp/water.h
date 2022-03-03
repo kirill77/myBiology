@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <memory>
 #include "basics/bonds.h"
+#include "basics/myFilter.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
@@ -25,17 +26,31 @@ struct GlobalState
         nvAssert(hMass > 0 && hMass < 1e10);
         m_fMaxAllowedAtomSpeed = sqrt(m_fWantedAvgKin * 2) * 100 / hMass;
     }
-    void clampAtomSpeed(MyUnits3<T>& vSpeed)
+    MyUnits<T> getWantedAvgKin() const { return m_fWantedAvgKin; }
+    MyUnits<T> getWeightedKinSum() const { return m_fDoubleWeightedKinSum / 2; }
+    MyUnits<T> getKinWeightsSum() const { return m_fKinWeightsSum; }
+    void clampAtomSpeed(MyUnits3<T>& vSpeed) const
     {
         vSpeed[0] = std::clamp(vSpeed[0], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
         vSpeed[1] = std::clamp(vSpeed[1], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
         vSpeed[2] = std::clamp(vSpeed[2], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
     }
-    MyUnits<T> getWantedAvgKin() const { return m_fWantedAvgKin; }
+
+    void resetKinComputation()
+    {
+        m_fDoubleWeightedKinSum = MyUnits<T>();
+        m_fKinWeightsSum = MyUnits<T>();
+    }
+    void notifyAtomSpeed(MyUnits<T> fMass, const MyUnits3<T>& vSpeed, MyUnits<T> fTimeStep)
+    {
+        m_fDoubleWeightedKinSum += fMass * lengthSquared(vSpeed) * fTimeStep;
+        m_fKinWeightsSum += fTimeStep;
+    }
 
 private:
     T m_fWantedTempC;
     MyUnits<T> m_fWantedAvgKin, m_fMaxAllowedAtomSpeed;
+    MyUnits<T> m_fDoubleWeightedKinSum, m_fKinWeightsSum;
 };
 
 // class used to wrap coordinates and directions so that everything stays inside the simulation boundind box
@@ -151,7 +166,11 @@ struct SimLayer
     void init(NvU32 nAtoms, const BoxWrapper<T> &bBox)
     {
         m_nAtoms = nAtoms;
-        if (!isTopLayer)
+        if (isTopLayer)
+        {
+            resetKinComputation();
+        }
+        else
         {
             m_atomsBitfield.assign((nAtoms + 31) / 32, 0);
             m_atomIndices.resize(0);
@@ -162,6 +181,23 @@ struct SimLayer
 
     NvU32 numDetailAtoms() const { return isTopLayer ? m_nAtoms : (NvU32)m_atomIndices.size(); }
     bool isDetailAtom(NvU32 index) const { return isTopLayer ? true : m_atomsBitfield[index / 32] & (1 << (index & 31)); }
+    void resetKinComputation()
+    {
+        m_globalState.resetKinComputation();
+        if (m_pNextSimLayer) m_pNextSimLayer->resetKinComputation();
+    }
+    MyUnits<T> getWeightedKinSum() const
+    {
+        if (numDetailAtoms() == 0)
+            return MyUnits<T>();
+        return m_globalState.getWeightedKinSum() + m_pNextSimLayer->getWeightedKinSum();
+    }
+    MyUnits<T> getKinWeightsSum() const
+    {
+        if (numDetailAtoms() == 0)
+            return MyUnits<T>();
+        return m_globalState.getKinWeightsSum() + m_pNextSimLayer->getKinWeightsSum();
+    }
 
     void addDetailAtom(NvU32 index)
     {
@@ -258,6 +294,8 @@ struct SimLayer
                 Atom<T>& atom = atoms[uAtom];
                 PropagatorAtom<T>& prAtom = prAtoms[uAtom];
                 MyUnits<T> fMass = atom.getMass();
+                // this is the actual speed that was used to propel this atom on this time step
+                m_globalState.notifyAtomSpeed(fMass, atom.m_vSpeed, fTimeStep);
                 atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
                 m_globalState.clampAtomSpeed(atom.m_vSpeed);
             }
@@ -346,9 +384,9 @@ struct Propagator
     void propagate()
     {
         m_prAtoms.resize(m_atoms.size());
-        m_nextSimLayer.init((NvU32)m_atoms.size(), m_bBox);
-        m_nextSimLayer.prepareForPropagation(m_forces, m_atoms, m_prAtoms, MyUnits<T>());
-        m_nextSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_atoms, m_prAtoms);
+        m_topSimLayer.init((NvU32)m_atoms.size(), m_bBox);
+        m_topSimLayer.prepareForPropagation(m_forces, m_atoms, m_prAtoms, MyUnits<T>());
+        m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_atoms, m_prAtoms);
     }
 
     void dissociateWeakBonds()
@@ -372,6 +410,13 @@ struct Propagator
     }
 
 protected:
+    MyUnits<T> getInstantaneousAverageKin() const
+    {
+        MyUnits<T> fWeightsSum = m_topSimLayer.getKinWeightsSum();
+        if (fWeightsSum == 0) return MyUnits<T>(); // to avoid division by 0
+        MyUnits<T> fWeightedKinSum = m_topSimLayer.getWeightedKinSum();
+        return fWeightedKinSum / fWeightsSum;
+    }
     std::vector<Atom<T>> m_atoms;
     ForceMap<T> m_forces;
     BoxWrapper<T> m_bBox;
@@ -379,7 +424,7 @@ protected:
 private:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
     std::vector<PropagatorAtom<T>> m_prAtoms;
-    SimLayer<T, true> m_nextSimLayer; // next simulation layer (for detail atoms)
+    SimLayer<T, true> m_topSimLayer; // top simulation layer
 };
 
 template <class _T>
@@ -435,36 +480,36 @@ struct Water : public Propagator<_T>
 
     }
 
+    MyUnits<T> getFilteredAverageKin() const
+    {
+        return MyUnits<T>(m_averageKinFilter.getAverage());
+    }
+
     void makeTimeStep()
     {
         updateListOfForces();
 
         this->propagate();
 
-        // update kinetic energy
-        m_fCurTotalKin = MyUnits<T>();
+        MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
+        m_averageKinFilter.addValue(fInstantaneousAverageKin.m_value);
+        // this is to avoid situation when the average kinetic energy already got below target value,
+        // but filtered value (being delayed due to filtering) didn't yet understand it
+        if (fInstantaneousAverageKin < m_globalState.getWantedAvgKin())
+            return;
+        MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
+        if (fFilteredAverageKin < m_globalState.getWantedAvgKin())
+            return;
+        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
+        auto fScaleCoeff = (m_globalState.getWantedAvgKin() / fFilteredAverageKin).m_value;
+        double fScaleCoeffSqrt = sqrt(fScaleCoeff);
         for (NvU32 uAtom = 0; uAtom < this->m_atoms.size(); ++uAtom)
         {
             auto& atom = this->m_atoms[uAtom];
-            MyUnits<T> fMass = atom.getMass();
-            MyUnits<T> fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
-            m_fCurTotalKin += fKin;
-        }
-
-        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
-        auto fScaleCoeff = (m_globalState.getWantedAvgKin() / (m_fCurTotalKin / (T)this->m_atoms.size())).m_value;
-        if (fScaleCoeff < 1)
-        {
-            double fScaleCoeffSqrt = sqrt(fScaleCoeff);
-            for (NvU32 uAtom = 0; uAtom < this->m_atoms.size(); ++uAtom)
-            {
-                auto& atom = this->m_atoms[uAtom];
-                // kinetic energy is computed using the following equation:
-                // fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
-                // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
-                atom.m_vSpeed *= fScaleCoeffSqrt;
-            }
-            m_fCurTotalKin *= fScaleCoeff;
+            // kinetic energy is computed using the following equation:
+            // fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
+            // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
+            atom.m_vSpeed *= fScaleCoeffSqrt;
         }
     }
 
@@ -551,15 +596,6 @@ struct Water : public Propagator<_T>
         return true;
     }
 
-    MyUnits<T> evalTemperature() const
-    {
-        return MyUnits<T>::evalTemperature(m_fCurTotalKin / (NvU32)this->m_atoms.size());
-    }
-    MyUnits<T> evalPressure() const
-    {
-        return MyUnits<T>::evalPressure(m_fCurTotalKin, this->m_bBox.evalVolume(), (NvU32)this->m_atoms.size());
-    }
-
 private:
     void updateListOfForces()
     {
@@ -578,9 +614,8 @@ private:
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
 
-    MyUnits<T> m_fCurTotalKin; // energy conservation variables
-
     GlobalState<T> m_globalState;
+    MyFilter<7> m_averageKinFilter;
 
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions = 0;
