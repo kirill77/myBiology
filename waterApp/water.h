@@ -29,7 +29,7 @@ struct GlobalState
     MyUnits<T> getWantedAvgKin() const { return m_fWantedAvgKin; }
     MyUnits<T> getWeightedKinSum() const { return m_fDoubleWeightedKinSum / 2; }
     MyUnits<T> getKinWeightsSum() const { return m_fKinWeightsSum; }
-    void clampAtomSpeed(MyUnits3<T>& vSpeed) const
+    void fastSpeedClamp(MyUnits3<T>& vSpeed) const
     {
         vSpeed[0] = std::clamp(vSpeed[0], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
         vSpeed[1] = std::clamp(vSpeed[1], -m_fMaxAllowedAtomSpeed, m_fMaxAllowedAtomSpeed);
@@ -51,6 +51,38 @@ private:
     T m_fWantedTempC;
     MyUnits<T> m_fWantedAvgKin, m_fMaxAllowedAtomSpeed;
     MyUnits<T> m_fDoubleWeightedKinSum, m_fKinWeightsSum;
+};
+
+template <class T>
+struct SpeedScaler
+{
+    void scale(MyUnits<T> fInstantaneousAverageKin, MyUnits<T> fFilteredAverageKin, std::vector<Atom<T>>& atoms)
+    {
+        // this is to avoid situation when the average kinetic energy already got below target value,
+        // but filtered value (being delayed due to filtering) didn't yet catch up
+        if (fInstantaneousAverageKin < m_globalState.getWantedAvgKin())
+            return;
+        if (fFilteredAverageKin < m_globalState.getWantedAvgKin())
+            return;
+        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
+        double fScaleCoeff = (m_globalState.getWantedAvgKin() / fFilteredAverageKin).m_value;
+        double fScaleCoeffSqrt = sqrt(fScaleCoeff);
+        MyUnits<T> fSmallKinThreshold = m_globalState.getWantedAvgKin() / 2;
+        for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
+        {
+            auto& atom = atoms[uAtom];
+            // don't slow down the atoms that are already slow
+            if (atom.getMass() * lengthSquared(atom.m_vSpeed) < fSmallKinThreshold)
+                continue;
+            // kinetic energy is computed using the following equation:
+            // fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
+            // hence if we want to multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
+            atom.m_vSpeed *= fScaleCoeffSqrt;
+        }
+    }
+
+private:
+    GlobalState<T> m_globalState;
 };
 
 // class used to wrap coordinates and directions so that everything stays inside the simulation boundind box
@@ -273,7 +305,7 @@ struct SimLayer
 
             // advect positions by full step and speeds by half-step
             atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
-            m_globalState.clampAtomSpeed(atom.m_vSpeed);
+            m_globalState.fastSpeedClamp(atom.m_vSpeed);
             atom.m_vPos = m_slBox.wrapThePos(atom.m_vPos + atom.m_vSpeed * fTimeStep);
             prAtom.m_fTime = fEndTime;
 
@@ -297,7 +329,7 @@ struct SimLayer
                 // this is the actual speed that was used to propel this atom on this time step
                 m_globalState.notifyAtomSpeed(fMass, atom.m_vSpeed, fTimeStep);
                 atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
-                m_globalState.clampAtomSpeed(atom.m_vSpeed);
+                m_globalState.fastSpeedClamp(atom.m_vSpeed);
             }
         }
 
@@ -493,24 +525,9 @@ struct Water : public Propagator<_T>
 
         MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
         m_averageKinFilter.addValue(fInstantaneousAverageKin.m_value);
-        // this is to avoid situation when the average kinetic energy already got below target value,
-        // but filtered value (being delayed due to filtering) didn't yet understand it
-        if (fInstantaneousAverageKin < m_globalState.getWantedAvgKin())
-            return;
         MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
-        if (fFilteredAverageKin < m_globalState.getWantedAvgKin())
-            return;
-        // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
-        auto fScaleCoeff = (m_globalState.getWantedAvgKin() / fFilteredAverageKin).m_value;
-        double fScaleCoeffSqrt = sqrt(fScaleCoeff);
-        for (NvU32 uAtom = 0; uAtom < this->m_atoms.size(); ++uAtom)
-        {
-            auto& atom = this->m_atoms[uAtom];
-            // kinetic energy is computed using the following equation:
-            // fKin = lengthSquared(atom.m_vSpeed) * fMass / 2;
-            // hence if we multiply fKin by fScaleCoeff, we must multiply speed by sqrt(fScaleCoeff);
-            atom.m_vSpeed *= fScaleCoeffSqrt;
-        }
+
+        m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_atoms);
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -614,8 +631,8 @@ private:
     OcTree<Water> m_ocTree;
     RNGSobol m_rng;
 
-    GlobalState<T> m_globalState;
     MyFilter<7> m_averageKinFilter;
+    SpeedScaler<T> m_speedScaler;
 
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions = 0;
