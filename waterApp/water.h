@@ -158,7 +158,7 @@ struct SimLayerForce
     SimLayerForce(typename std::vector<SimLayerForce<T>>::const_iterator& it) : m_forceKey(it->m_forceKey), m_force(it->m_force) { }
     ForceKey m_forceKey;
     Force<T> m_force;
-    MyUnits<T> m_fPotential0;
+    T m_fNormalizedForce0;
 };
 // used for interpolating of proxy atom positions and restoring them at the end
 template <class T>
@@ -270,7 +270,6 @@ struct SimLayer
             }
         }
     }
-    // this is very similar to what propagator does except that here I interpolate some atoms instead of computing them
     void propagate(MyUnits<T> fBeginTime, MyUnits<T> fEndTime, std::vector<Atom<T>> &atoms, std::vector<PropagatorAtom<T>> &prAtoms)
     {
         if (numDetailAtoms() == 0)
@@ -361,31 +360,28 @@ private:
             PropagatorAtom<T>& prAtom2 = prAtoms[uAtom2];
             AtomPositionInterpolator<T> interp2(isDetailAtom(uAtom2), atom2, prAtom2, fTime, m_slBox);
 
+            // why would we simulate this force if it doesn't have any detail atoms in it?
+            nvAssert(isDetailAtom(uAtom1) || isDetailAtom(uAtom2));
+
             ForceData<T> forceData;
             if (force.computeForce(atom1, atom2, m_slBox, forceData))
             {
-                if (uPass == 0)
-                {
-                    slForce.m_fPotential0 = forceData.fPotential;
-                }
-                else
-                {
-                    if ((forceData.fPotential - slForce.m_fPotential0) > 1e-7 && isDetailAtom(uAtom1) && isDetailAtom(uAtom2))
-                    {
-                        if ((forceData.fPotential - slForce.m_fPotential0) * 2 > lengthSquared(atom1.m_vSpeed) * atom1.getMass() + lengthSquared(atom2.m_vSpeed) * atom2.getMass())
-                        {
-                            nextSimLayer.addDetailAtom(uAtom1);
-                            nextSimLayer.addDetailAtom(uAtom2);
-                            continue;
-                        }
-                    }
-                }
                 prAtom1.m_vForce += forceData.vForce;
                 prAtom2.m_vForce -= forceData.vForce;
             }
-            else if (uPass == 0)
+            else
             {
-                slForce.m_fPotential0 = MyUnits<T>();
+                forceData.fNormalizedForce = 0;
+            }
+            if (uPass == 0)
+            {
+                slForce.m_fNormalizedForce0 = forceData.fNormalizedForce;
+            }
+            else if (fabs(forceData.fNormalizedForce - slForce.m_fNormalizedForce0) > 0.4f && isDetailAtom(uAtom1) && isDetailAtom(uAtom2))
+            {
+                // if normalized force has changed more than the threshold
+                nextSimLayer.addDetailAtom(uAtom1);
+                nextSimLayer.addDetailAtom(uAtom2);
             }
         }
     }
