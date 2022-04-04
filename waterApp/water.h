@@ -279,9 +279,9 @@ struct SimLayer
             m_pNextSimLayer = std::make_unique<SimLayer<T>>(m_uLevel + 1);
         }
 
-        for (NvU32 u = 0; u < m_atomIndices.size(); ++u)
+        for (NvU32 u = 0; u < numDetailAtoms(); ++u)
         {
-            NvU32 uAtom = m_atomIndices[u];
+            NvU32 uAtom = isTopLayer ? u : m_atomIndices[u];
             PropagatorAtom<T>& prAtom = prAtoms[uAtom];
             prAtom.m_vForce = rtvector<MyUnits<T>, 3>();
         }
@@ -377,11 +377,17 @@ private:
             {
                 slForce.m_fNormalizedForce0 = forceData.fNormalizedForce;
             }
-            else if (fabs(forceData.fNormalizedForce - slForce.m_fNormalizedForce0) > 0.4f && isDetailAtom(uAtom1) && isDetailAtom(uAtom2))
+            // if the normalized force has changed more than the threshold - need to simulate in more detail
+            else if (fabs(forceData.fNormalizedForce - slForce.m_fNormalizedForce0) > 0.4)
             {
-                // if normalized force has changed more than the threshold
-                nextSimLayer.addDetailAtom(uAtom1);
-                nextSimLayer.addDetailAtom(uAtom2);
+                if (isDetailAtom(uAtom1))
+                {
+                    nextSimLayer.addDetailAtom(uAtom1);
+                }
+                if (isDetailAtom(uAtom2))
+                {
+                    nextSimLayer.addDetailAtom(uAtom2);
+                }
             }
         }
     }
