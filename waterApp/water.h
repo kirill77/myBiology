@@ -146,8 +146,49 @@ private:
 template <class T>
 struct PropagatorAtom
 {
-    MyUnits<T> m_fTime, m_fPrTime; // times for Atom<T> and PropagatorAtom<T> positions respectively (used for interpolation of proxy atom positions)
-    MyUnits3<T> m_vForce, m_vPrPos, m_vPrSpeed;
+    void prepareForPropagation(const Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fEndTime)
+    {
+        m_vBeginSpeed = atom.m_vSpeed;
+        m_vBeginPos = atom.m_vPos;
+        m_fBeginTime = fBeginTime;
+        m_fEndTime = fEndTime;
+        m_vForce = MyUnits3<T>();
+    }
+    void notifyStepShrinking(Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fEndTime)
+    {
+        atom.m_vPos = m_vBeginPos;
+        atom.m_vSpeed = m_vBeginSpeed;
+        nvAssert(m_fBeginTime == fBeginTime && fEndTime < m_fEndTime);
+        m_fEndTime = fEndTime;
+    }
+    void setInterpolatedPosition(Atom<T> &atom, MyUnits<T> fTime, const BoxWrapper<T>& w)
+    {
+        nvAssert(m_fEndTime > m_fBeginTime); // to avoid division by zero
+        T fWeight = ((fTime - m_fBeginTime) / (m_fEndTime - m_fBeginTime)).m_value;
+        nvAssert(fWeight >= 0 && fWeight <= 1); // to avoid extrapolation
+        atom.m_vPos = m_vBeginPos * (1 - fWeight) + atom.m_vPos * fWeight;
+        atom.m_vPos = w.wrapThePos(atom.m_vPos);
+    }
+    void verletStep1(Atom<T>& atom, MyUnits<T> fTimeStep, const BoxWrapper<T>& w)
+    {
+        // advect positions by full step and speeds by half-step
+        atom.m_vSpeed += m_vForce * (fTimeStep / 2 / atom.getMass());
+        atom.m_vPos = w.wrapThePos(atom.m_vPos + atom.m_vSpeed * fTimeStep);
+        // clear forces before we start accumulating them for next step
+        m_vForce = MyUnits3<T>();
+    }
+    void verletStep2(Atom<T>& atom, MyUnits<T> fTimeStep)
+    {
+        atom.m_vSpeed += m_vForce * (fTimeStep / 2 / atom.getMass());
+    }
+    void notifyForceContribution(const MyUnits3<T>& vDeltaForce)
+    {
+        m_vForce += vDeltaForce;
+    }
+
+private:
+    MyUnits<T> m_fBeginTime, m_fEndTime;
+    MyUnits3<T> m_vBeginPos, m_vBeginSpeed, m_vForce;
 };
 // force representation for SimLayer - unlike Propagator<T>, it stores all forces in linear array
 template <class T>
@@ -171,11 +212,7 @@ struct AtomPositionInterpolator
         {
             return;
         }
-        nvAssert(prAtom.m_fPrTime != prAtom.m_fTime); // to avoid division by zero
-        T fWeight = ((fTime - prAtom.m_fPrTime) / (prAtom.m_fTime - prAtom.m_fPrTime)).m_value;
-        nvAssert(fWeight >= 0 && fWeight <= 1); // to avoid extrapolation
-        atom.m_vPos = prAtom.m_vPrPos * (1 - fWeight) + atom.m_vPos * fWeight;
-        atom.m_vPos = w.wrapThePos(atom.m_vPos);
+        prAtom.setInterpolatedPosition(atom, fTime, w);
     }
     ~AtomPositionInterpolator()
     {
@@ -242,7 +279,7 @@ struct SimLayer
     }
 
     template <class ForceArray>
-    void prepareForPropagation(const ForceArray &forces, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, MyUnits<T> fBeginTime)
+    void prepareForPropagation(const ForceArray &forces, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, MyUnits<T> fBeginTime, MyUnits<T> fEndTime)
     {
         if (numDetailAtoms() == 0)
             return;
@@ -263,10 +300,7 @@ struct SimLayer
                 NvU32 uAtom = m_atomIndices[u];
                 Atom<T>& atom = atoms[uAtom];
                 PropagatorAtom<T>& prAtom = prAtoms[uAtom];
-                atom.m_vPos = prAtom.m_vPrPos;
-                atom.m_vSpeed = prAtom.m_vPrSpeed;
-                nvAssert(prAtom.m_fPrTime == fBeginTime);
-                prAtom.m_fTime = fBeginTime;
+                prAtom.notifyStepShrinking(atom, fBeginTime, fEndTime);
             }
         }
     }
@@ -283,7 +317,7 @@ struct SimLayer
         {
             NvU32 uAtom = isTopLayer ? u : m_atomIndices[u];
             PropagatorAtom<T>& prAtom = prAtoms[uAtom];
-            prAtom.m_vForce = rtvector<MyUnits<T>, 3>();
+            prAtom.prepareForPropagation(atoms[uAtom], fBeginTime, fEndTime);
         }
 
         auto& nextSimLayer = *m_pNextSimLayer;
@@ -295,21 +329,7 @@ struct SimLayer
             NvU32 uAtom = isTopLayer ? u : m_atomIndices[u];
             Atom<T>& atom = atoms[uAtom];
             PropagatorAtom<T>& prAtom = prAtoms[uAtom];
-            MyUnits<T> fMass = atom.getMass();
-
-            // save previous state of the atom
-            prAtom.m_vPrSpeed = atom.m_vSpeed;
-            prAtom.m_vPrPos = atom.m_vPos;
-            prAtom.m_fPrTime = fBeginTime;
-
-            // advect positions by full step and speeds by half-step
-            atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
-            m_globalState.fastSpeedClamp(atom.m_vSpeed);
-            atom.m_vPos = m_slBox.wrapThePos(atom.m_vPos + atom.m_vSpeed * fTimeStep);
-            prAtom.m_fTime = fEndTime;
-
-            // clear forces before we start accumulating them for next step
-            prAtom.m_vForce = rtvector<MyUnits<T>, 3>();
+            prAtom.verletStep1(atom, fTimeStep, m_slBox);
         }
 
         nextSimLayer.init((NvU32)atoms.size(), m_slBox);
@@ -327,16 +347,15 @@ struct SimLayer
                 MyUnits<T> fMass = atom.getMass();
                 // this is the actual speed that was used to propel this atom on this time step
                 m_globalState.notifyAtomSpeed(fMass, atom.m_vSpeed, fTimeStep);
-                atom.m_vSpeed += prAtom.m_vForce * (fTimeStep / 2 / fMass);
-                m_globalState.fastSpeedClamp(atom.m_vSpeed);
+                prAtom.verletStep2(atom, fTimeStep);
             }
         }
 
         if (nextSimLayer.numDetailAtoms() == 0)
             return;
 
-        nextSimLayer.prepareForPropagation(m_slForces, atoms, prAtoms, fBeginTime);
         MyUnits<T> fMidTime = (fBeginTime + fEndTime) / 2;
+        nextSimLayer.prepareForPropagation(m_slForces, atoms, prAtoms, fBeginTime, fMidTime);
         nextSimLayer.propagate(fBeginTime, fMidTime, atoms, prAtoms);
         nextSimLayer.propagate(fMidTime, fEndTime, atoms, prAtoms);
     }
@@ -366,8 +385,8 @@ private:
             ForceData<T> forceData;
             if (force.computeForce(atom1, atom2, m_slBox, forceData))
             {
-                prAtom1.m_vForce += forceData.vForce;
-                prAtom2.m_vForce -= forceData.vForce;
+                prAtom1.notifyForceContribution( forceData.vForce);
+                prAtom2.notifyForceContribution(-forceData.vForce);
             }
             else
             {
@@ -419,7 +438,7 @@ struct Propagator
     {
         m_prAtoms.resize(m_atoms.size());
         m_topSimLayer.init((NvU32)m_atoms.size(), m_bBox);
-        m_topSimLayer.prepareForPropagation(m_forces, m_atoms, m_prAtoms, MyUnits<T>());
+        m_topSimLayer.prepareForPropagation(m_forces, m_atoms, m_prAtoms, MyUnits<T>(), m_fTimeStep);
         m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_atoms, m_prAtoms);
     }
 
