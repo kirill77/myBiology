@@ -146,49 +146,57 @@ private:
 template <class T>
 struct PropagatorAtom
 {
-    void prepareForPropagation(const Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fEndTime)
+    void prepareForPropagation(const Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
         m_vBeginSpeed = atom.m_vSpeed;
         m_vBeginPos = atom.m_vPos;
         m_fBeginTime = fBeginTime;
-        m_fEndTime = fEndTime;
-        m_vForce = MyUnits3<T>();
+#if ASSERT_ONLY_CODE
+        m_fDbgEndTime = fDbgEndTime;
+#endif
+        m_vEndForce = MyUnits3<T>();
     }
-    void notifyStepShrinking(Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fEndTime)
+    void notifyStepShrinking(Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
         atom.m_vPos = m_vBeginPos;
         atom.m_vSpeed = m_vBeginSpeed;
-        nvAssert(m_fBeginTime == fBeginTime && fEndTime < m_fEndTime);
-        m_fEndTime = fEndTime;
+        nvAssert(m_fBeginTime == fBeginTime && fDbgEndTime < m_fDbgEndTime);
+#if ASSERT_ONLY_CODE
+        m_fDbgEndTime = fDbgEndTime;
+#endif
     }
     void setInterpolatedPosition(Atom<T> &atom, MyUnits<T> fTime, const BoxWrapper<T>& w)
     {
-        nvAssert(m_fEndTime > m_fBeginTime); // to avoid division by zero
-        T fWeight = ((fTime - m_fBeginTime) / (m_fEndTime - m_fBeginTime)).m_value;
-        nvAssert(fWeight >= 0 && fWeight <= 1); // to avoid extrapolation
-        atom.m_vPos = m_vBeginPos * (1 - fWeight) + atom.m_vPos * fWeight;
-        atom.m_vPos = w.wrapThePos(atom.m_vPos);
+        nvAssert(fTime >= m_fBeginTime && fTime <= m_fDbgEndTime);
+        MyUnits<T> fTimeStep = fTime - m_fBeginTime;
+        // advect positions by full step and speeds by half-step
+        MyUnits3<T> vSpeed = m_vBeginSpeed + m_vBeginForce * (fTimeStep / 2 / atom.getMass());
+        atom.m_vPos = w.wrapThePos(m_vBeginPos + vSpeed * fTimeStep);
     }
     void verletStep1(Atom<T>& atom, MyUnits<T> fTimeStep, const BoxWrapper<T>& w)
     {
+        m_vBeginForce = m_vEndForce;
         // advect positions by full step and speeds by half-step
-        atom.m_vSpeed += m_vForce * (fTimeStep / 2 / atom.getMass());
-        atom.m_vPos = w.wrapThePos(atom.m_vPos + atom.m_vSpeed * fTimeStep);
+        atom.m_vSpeed += m_vBeginForce * (fTimeStep / 2 / atom.getMass());
+        atom.m_vPos = w.wrapThePos(m_vBeginPos + atom.m_vSpeed * fTimeStep);
         // clear forces before we start accumulating them for next step
-        m_vForce = MyUnits3<T>();
+        m_vEndForce = MyUnits3<T>();
     }
     void verletStep2(Atom<T>& atom, MyUnits<T> fTimeStep)
     {
-        atom.m_vSpeed += m_vForce * (fTimeStep / 2 / atom.getMass());
+        atom.m_vSpeed += m_vEndForce * (fTimeStep / 2 / atom.getMass());
     }
     void notifyForceContribution(const MyUnits3<T>& vDeltaForce)
     {
-        m_vForce += vDeltaForce;
+        m_vEndForce += vDeltaForce;
     }
 
 private:
-    MyUnits<T> m_fBeginTime, m_fEndTime;
-    MyUnits3<T> m_vBeginPos, m_vBeginSpeed, m_vForce;
+    MyUnits<T> m_fBeginTime;
+#if ASSERT_ONLY_CODE
+    MyUnits<T> m_fDbgEndTime;
+#endif
+    MyUnits3<T> m_vBeginPos, m_vBeginSpeed, m_vBeginForce, m_vEndForce;
 };
 // force representation for SimLayer - unlike Propagator<T>, it stores all forces in linear array
 template <class T>
@@ -279,7 +287,7 @@ struct SimLayer
     }
 
     template <class ForceArray>
-    void prepareForPropagation(const ForceArray &forces, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, MyUnits<T> fBeginTime, MyUnits<T> fEndTime)
+    void prepareForPropagation(const ForceArray &forces, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
         if (numDetailAtoms() == 0)
             return;
@@ -300,7 +308,7 @@ struct SimLayer
                 NvU32 uAtom = m_atomIndices[u];
                 Atom<T>& atom = atoms[uAtom];
                 PropagatorAtom<T>& prAtom = prAtoms[uAtom];
-                prAtom.notifyStepShrinking(atom, fBeginTime, fEndTime);
+                prAtom.notifyStepShrinking(atom, fBeginTime, fDbgEndTime);
             }
         }
     }
