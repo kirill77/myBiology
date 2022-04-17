@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <memory>
 #include "basics/forceMap.h"
+#include "basics/sparseArray.h"
 #include "basics/myFilter.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
@@ -227,32 +228,27 @@ private:
     MyUnits3<T> m_vPosBackup;
 };
 // simulation layer - hierarchy of ever diminishing time steps used for accuracy
-template <class T, bool isTopLayer = false>
+template <class T, class AtomIndicesArrayType>
 struct SimLayer
 {
-    SimLayer(NvU32 uLevel = 0) : m_uLevel(uLevel)
+    using NextLayerType = SimLayer<T, SparseArray<std::vector<Atom<T>>>>;
+    SimLayer(std::vector<Atom<T>> &atoms, NvU32 uLevel) : m_atoms(atoms), m_uLevel(uLevel)
     {
-        nvAssert(isTopLayer == (uLevel == 0));
         nvAssert(m_uLevel < 20);
     }
-    void init(NvU32 nAtoms, const BoxWrapper<T> &bBox)
+    void init(const BoxWrapper<T> &bBox)
     {
-        m_nAtoms = nAtoms;
-        if (isTopLayer)
+        m_atomIndices.init(m_atoms);
+        if (m_uLevel == 0)
         {
             resetKinComputation();
-        }
-        else
-        {
-            m_atomsBitfield.assign((nAtoms + 31) / 32, 0);
-            m_atomIndices.resize(0);
         }
         m_slForces.resize(0);
         m_slBox = bBox;
     }
 
-    NvU32 numDetailAtoms() const { return isTopLayer ? m_nAtoms : (NvU32)m_atomIndices.size(); }
-    bool isDetailAtom(NvU32 index) const { return isTopLayer ? true : m_atomsBitfield[index / 32] & (1 << (index & 31)); }
+    NvU32 numDetailAtoms() const { return m_atomIndices.getNumValidIndices(m_atoms); }
+    bool isDetailAtom(NvU32 index) const { return m_atomIndices.isValidIndex(m_atoms, index); }
     void resetKinComputation()
     {
         m_globalState.resetKinComputation();
@@ -273,16 +269,11 @@ struct SimLayer
 
     void addDetailAtom(NvU32 index)
     {
-        nvAssert(!isTopLayer);
-        if (isDetailAtom(index)) return; // don't add the same atom twice
-        m_atomsBitfield[index / 32] |= (1 << (index & 31));
-        NvU16 index16 = (NvU16)index;
-        nvAssert(index16 == index); // check that no overflow happenned
-        m_atomIndices.push_back(index);
+        m_atomIndices.makeIndexValid(index);
     }
 
     template <class ForceArray>
-    void prepareForPropagation(const ForceArray &forces, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
+    void prepareForPropagation(const ForceArray &forces, std::vector<PropagatorAtom<T>>& prAtoms, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
         if (numDetailAtoms() == 0)
             return;
@@ -295,57 +286,52 @@ struct SimLayer
                 m_slForces.push_back(slForce);
             }
         }
-        if (!isTopLayer)
+        if (m_uLevel != 0)
         {
             // we have to reset all atoms we're going to re-simulate to their initial state
-            for (NvU32 u = 0; u < m_atomIndices.size(); ++u)
+            for (NvU32 uAtom = m_atomIndices.getFirstValidIndex(m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.getNextValidIndex(m_atoms, uAtom))
             {
-                NvU32 uAtom = m_atomIndices[u];
-                Atom<T>& atom = atoms[uAtom];
+                Atom<T>& atom = m_atoms[uAtom];
                 PropagatorAtom<T>& prAtom = prAtoms[uAtom];
                 prAtom.notifyStepShrinking(atom, fBeginTime, fDbgEndTime);
             }
         }
     }
-    void propagate(MyUnits<T> fBeginTime, MyUnits<T> fEndTime, std::vector<Atom<T>> &atoms, std::vector<PropagatorAtom<T>> &prAtoms)
+    void propagate(MyUnits<T> fBeginTime, MyUnits<T> fEndTime, std::vector<PropagatorAtom<T>> &prAtoms)
     {
         if (numDetailAtoms() == 0)
             return;
         if (m_pNextSimLayer == nullptr)
         {
-            m_pNextSimLayer = std::make_unique<SimLayer<T>>(m_uLevel + 1);
+            m_pNextSimLayer = std::make_unique<NextLayerType>(m_atoms, m_uLevel + 1);
         }
 
-        for (NvU32 u = 0; u < numDetailAtoms(); ++u)
+        for (NvU32 uAtom = m_atomIndices.getFirstValidIndex(m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.getNextValidIndex(m_atoms, uAtom))
         {
-            NvU32 uAtom = isTopLayer ? u : m_atomIndices[u];
             PropagatorAtom<T>& prAtom = prAtoms[uAtom];
-            prAtom.prepareForPropagation(atoms[uAtom], fBeginTime, fEndTime);
+            prAtom.prepareForPropagation(m_atoms[uAtom], fBeginTime, fEndTime);
         }
 
-        auto& nextSimLayer = *m_pNextSimLayer;
-        updateForces<0>(fBeginTime, atoms, prAtoms, nextSimLayer);
+        updateForces<0>(fBeginTime, prAtoms);
 
         MyUnits<T> fTimeStep = fEndTime - fBeginTime;
-        for (NvU32 u = 0; u < numDetailAtoms(); ++u)
+        for (NvU32 uAtom = m_atomIndices.getFirstValidIndex(m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.getNextValidIndex(m_atoms, uAtom))
         {
-            NvU32 uAtom = isTopLayer ? u : m_atomIndices[u];
-            Atom<T>& atom = atoms[uAtom];
+            Atom<T>& atom = m_atoms[uAtom];
             PropagatorAtom<T>& prAtom = prAtoms[uAtom];
             prAtom.verletStep1(atom, fTimeStep, m_slBox);
         }
 
-        nextSimLayer.init((NvU32)atoms.size(), m_slBox);
-        updateForces<1>(fEndTime, atoms, prAtoms, nextSimLayer);
+        m_pNextSimLayer->init(m_slBox);
+        updateForces<1>(fEndTime, prAtoms);
 
-        if (nextSimLayer.numDetailAtoms() < numDetailAtoms()) // do we have some detailed atoms of our own?
+        if (m_pNextSimLayer->numDetailAtoms() < numDetailAtoms()) // do we have some detailed atoms of our own?
         {
-            for (NvU32 u = 0; u < numDetailAtoms(); ++u)
+            for (NvU32 uAtom = m_atomIndices.getFirstValidIndex(m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.getNextValidIndex(m_atoms, uAtom))
             {
-                NvU32 uAtom = isTopLayer ? u : m_atomIndices[u];
-                if (nextSimLayer.isDetailAtom(uAtom))
+                if (m_pNextSimLayer->isDetailAtom(uAtom))
                     continue;
-                Atom<T>& atom = atoms[uAtom];
+                Atom<T>& atom = m_atoms[uAtom];
                 PropagatorAtom<T>& prAtom = prAtoms[uAtom];
                 MyUnits<T> fMass = atom.getMass();
                 // this is the actual speed that was used to propel this atom on this time step
@@ -354,18 +340,18 @@ struct SimLayer
             }
         }
 
-        if (nextSimLayer.numDetailAtoms() == 0)
+        if (m_pNextSimLayer->numDetailAtoms() == 0)
             return;
 
         MyUnits<T> fMidTime = (fBeginTime + fEndTime) / 2;
-        nextSimLayer.prepareForPropagation(m_slForces, atoms, prAtoms, fBeginTime, fMidTime);
-        nextSimLayer.propagate(fBeginTime, fMidTime, atoms, prAtoms);
-        nextSimLayer.propagate(fMidTime, fEndTime, atoms, prAtoms);
+        m_pNextSimLayer->prepareForPropagation(m_slForces, prAtoms, fBeginTime, fMidTime);
+        m_pNextSimLayer->propagate(fBeginTime, fMidTime, prAtoms);
+        m_pNextSimLayer->propagate(fMidTime, fEndTime, prAtoms);
     }
 
 private:
     template <NvU32 uPass> // pass 0 is first Verlet step, pass 1 is second Verlet step
-    void updateForces(MyUnits<T> fTime, std::vector<Atom<T>>& atoms, std::vector<PropagatorAtom<T>>& prAtoms, SimLayer<T> &nextSimLayer)
+    void updateForces(MyUnits<T> fTime, std::vector<PropagatorAtom<T>>& prAtoms)
     {
         for (NvU32 uF = 0; uF < m_slForces.size(); ++uF)
         {
@@ -373,11 +359,11 @@ private:
             Force<T>& force = slForce.m_force;
 
             NvU32 uAtom1 = force.getAtom1Index();
-            Atom<T>& atom1 = atoms[uAtom1];
+            Atom<T>& atom1 = m_atoms[uAtom1];
             PropagatorAtom<T>& prAtom1 = prAtoms[uAtom1];
             AtomPositionInterpolator<T> interp1(isDetailAtom(uAtom1), atom1, prAtom1, fTime, m_slBox);
             NvU32 uAtom2 = force.getAtom2Index();
-            Atom<T>& atom2 = atoms[uAtom2];
+            Atom<T>& atom2 = m_atoms[uAtom2];
             PropagatorAtom<T>& prAtom2 = prAtoms[uAtom2];
             AtomPositionInterpolator<T> interp2(isDetailAtom(uAtom2), atom2, prAtom2, fTime, m_slBox);
 
@@ -403,20 +389,19 @@ private:
             {
                 if (isDetailAtom(uAtom1))
                 {
-                    nextSimLayer.addDetailAtom(uAtom1);
+                    m_pNextSimLayer->addDetailAtom(uAtom1);
                 }
                 if (isDetailAtom(uAtom2))
                 {
-                    nextSimLayer.addDetailAtom(uAtom2);
+                    m_pNextSimLayer->addDetailAtom(uAtom2);
                 }
             }
         }
     }
-    NvU32 m_nAtoms = 0;
-    std::vector<NvU32> m_atomsBitfield;
-    std::vector<NvU16> m_atomIndices;
+    std::vector<Atom<T>>& m_atoms; // this array is shared by all simulation levels
+    AtomIndicesArrayType m_atomIndices;
     std::vector<SimLayerForce<T>> m_slForces;
-    std::unique_ptr<SimLayer<T>> m_pNextSimLayer;
+    std::unique_ptr<NextLayerType> m_pNextSimLayer;
     BoxWrapper<T> m_slBox;
     NvU32 m_uLevel = 0;
     GlobalState<T> m_globalState;
@@ -427,7 +412,7 @@ private:
 template <class T>
 struct Propagator
 {
-    Propagator() : m_bBox(MyUnits<T>::angstrom() * 20) { }
+    Propagator() : m_topSimLayer(m_atoms, 0), m_bBox(MyUnits<T>::angstrom() * 20) { }
 
     const ForceMap<T>& getForces() const { return m_forces; }
     inline const std::vector<Atom<T>>& points() const { return m_atoms; }
@@ -439,9 +424,9 @@ struct Propagator
     void propagate()
     {
         m_prAtoms.resize(m_atoms.size());
-        m_topSimLayer.init((NvU32)m_atoms.size(), m_bBox);
-        m_topSimLayer.prepareForPropagation(m_forces, m_atoms, m_prAtoms, MyUnits<T>(), m_fTimeStep);
-        m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_atoms, m_prAtoms);
+        m_topSimLayer.init(m_bBox);
+        m_topSimLayer.prepareForPropagation(m_forces, m_prAtoms, MyUnits<T>(), m_fTimeStep);
+        m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_prAtoms);
     }
 
     void dissociateWeakBonds()
@@ -477,7 +462,7 @@ protected:
 private:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
     std::vector<PropagatorAtom<T>> m_prAtoms;
-    SimLayer<T, true> m_topSimLayer; // top simulation layer
+    SimLayer<T, DenseStdArray> m_topSimLayer; // top simulation layer
 };
 
 template <class _T>
