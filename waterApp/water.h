@@ -2,14 +2,11 @@
 
 #include <algorithm>
 #include <memory>
-#include "basics/bonds.h"
+#include "basics/forceMap.h"
 #include "basics/myFilter.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
-
-template <class T>
-using ForceMap = std::unordered_map<ForceKey, Force<T>>;
 
 template <class T>
 struct GlobalState
@@ -202,12 +199,10 @@ private:
 template <class T>
 struct SimLayerForce
 {
-    SimLayerForce() : m_forceKey(-1, -1) { }
-    SimLayerForce(typename ForceMap<T>::const_local_iterator &it) : m_forceKey(it->first), m_force(it->second) { }
-    SimLayerForce(typename std::vector<SimLayerForce<T>>::const_iterator& it) : m_forceKey(it->m_forceKey), m_force(it->m_force) { }
-    ForceKey m_forceKey;
+    SimLayerForce() : m_force(-1, -1) { }
+    SimLayerForce(const Force<T> &force) : m_force(force) { }
     Force<T> m_force;
-    T m_fNormalizedForce0;
+    T m_fNormalizedForce0 = 0;
 };
 // used for interpolating of proxy atom positions and restoring them at the end
 template <class T>
@@ -294,8 +289,8 @@ struct SimLayer
         // prepare list of forces that affect our atoms
         for (auto _if = forces.begin(); _if != forces.end(); ++_if)
         {
-            SimLayerForce<T> slForce(_if);
-            if (isDetailAtom(slForce.m_forceKey.getAtom1Index()) || isDetailAtom(slForce.m_forceKey.getAtom2Index()))
+            SimLayerForce<T> slForce(*_if);
+            if (isDetailAtom(slForce.m_force.getAtom1Index()) || isDetailAtom(slForce.m_force.getAtom2Index()))
             {
                 m_slForces.push_back(slForce);
             }
@@ -375,14 +370,13 @@ private:
         for (NvU32 uF = 0; uF < m_slForces.size(); ++uF)
         {
             SimLayerForce<T>& slForce = m_slForces[uF];
-            ForceKey forceKey = slForce.m_forceKey;
             Force<T>& force = slForce.m_force;
 
-            NvU32 uAtom1 = forceKey.getAtom1Index();
+            NvU32 uAtom1 = force.getAtom1Index();
             Atom<T>& atom1 = atoms[uAtom1];
             PropagatorAtom<T>& prAtom1 = prAtoms[uAtom1];
             AtomPositionInterpolator<T> interp1(isDetailAtom(uAtom1), atom1, prAtom1, fTime, m_slBox);
-            NvU32 uAtom2 = forceKey.getAtom2Index();
+            NvU32 uAtom2 = force.getAtom2Index();
             Atom<T>& atom2 = atoms[uAtom2];
             PropagatorAtom<T>& prAtom2 = prAtoms[uAtom2];
             AtomPositionInterpolator<T> interp2(isDetailAtom(uAtom2), atom2, prAtom2, fTime, m_slBox);
@@ -452,21 +446,19 @@ struct Propagator
 
     void dissociateWeakBonds()
     {
-        for (auto _if = m_forces.begin(); _if != m_forces.end(); ++_if)
+        for (NvU32 uForce = m_forces.findSmallestForceIndex(); uForce != INVALID_UINT32; )
         {
-            Force<T>& force = _if->second;
+            Force<T>& force = m_forces.accessForceByIndex(uForce);
 
             // compute current bond length
-            auto& forceKey = _if->first;
-            auto& atom1 = m_atoms[forceKey.getAtom1Index()];
-            auto& atom2 = m_atoms[forceKey.getAtom2Index()];
+            auto& atom1 = m_atoms[force.getAtom1Index()];
+            auto& atom2 = m_atoms[force.getAtom2Index()];
 
-            if (force.dissociateWeakBond(forceKey, atom1, atom2, m_bBox))
+            if (force.dissociateWeakBond(atom1, atom2, m_bBox))
             {
-                _if = m_forces.erase(_if);
-                if (_if == m_forces.end())
-                    break;
+                uForce = m_forces.dissociateForce(uForce);
             }
+            else uForce = m_forces.findLargerForceIndex(uForce);
         }
     }
 
@@ -539,6 +531,7 @@ struct Water : public Propagator<_T>
             }
         }
 
+        this->m_forces.init((NvU32)this->m_atoms.size());
     }
 
     MyUnits<T> getFilteredAverageKin() const
@@ -628,7 +621,7 @@ struct Water : public Propagator<_T>
                 {
                     if (uBond1 >= atom1.getNBonds())
                     {
-                        this->m_forces[ForceKey(uPoint1, uPoint2)]; // this adds default force between those two atoms into ForceMap
+                        this->m_forces.createForce(uPoint1, uPoint2);
                         break;
                     }
                     // if this is covalent bond - we don't need to add it - it must already be in the list of forces
