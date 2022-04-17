@@ -85,7 +85,7 @@ struct MyViewer : public Viewer
     void updateVertexBuffers()
     {
         // update vertex buffer for atom drawables
-        const auto& atoms = m_water.points();
+        const std::vector<Atom<T>>& atoms = m_water.getAtoms();
         for (NvU32 u = 0, nO = 0, nH = 0; u < atoms.size(); ++u)
         {
             const auto& atom = atoms[u];
@@ -205,7 +205,7 @@ private:
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        MyUnits<T> fTotalKin = fFilteredAverageKin * (double)m_water.points().size();
+        MyUnits<T> fTotalKin = fFilteredAverageKin * (double)m_water.getAtoms().size();
         MyUnits<T> fPressure = MyUnits<T>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
         sprintf_s(sBuffer, "P(atm): %.1lf", fPressure.toAtmospheres());
         texter_->draw(sBuffer,

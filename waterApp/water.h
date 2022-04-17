@@ -407,43 +407,55 @@ private:
     GlobalState<T> m_globalState;
 };
 
+template <class T>
+struct PrContext
+{
+    std::vector<Atom<T>> m_atoms;
+    ForceMap<T> m_forces;
+    BoxWrapper<T> m_bBox;
+    std::vector<PropagatorAtom<T>> m_prAtoms;
+};
+
 // class propagates simulation by the given time step. if I detect that the time step is not small enough for some particular atom, this
 // atom is passed for simulation to SimLayer class.
 template <class T>
 struct Propagator
 {
-    Propagator() : m_topSimLayer(m_atoms, 0), m_bBox(MyUnits<T>::angstrom() * 20) { }
+    Propagator() : m_topSimLayer(m_c.m_atoms, 0)
+    {
+        m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 20);
+    }
 
-    const ForceMap<T>& getForces() const { return m_forces; }
-    inline const std::vector<Atom<T>>& points() const { return m_atoms; }
+    const ForceMap<T>& getForces() const { return m_c.m_forces; }
+    const std::vector<Atom<T>>& getAtoms() const { return m_c.m_atoms; }
     const MyUnits<T>& getCurTimeStep() const { return m_fTimeStep; }
-    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_atoms[index].m_vPos); }
-    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_bBox.computeDir(atom1, atom2); }
-    const BBox3<MyUnits<T>>& getBoundingBox() const { return m_bBox; }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_c.m_atoms[index].m_vPos); }
+    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_c.m_bBox.computeDir(atom1, atom2); }
+    const BBox3<MyUnits<T>>& getBoundingBox() const { return m_c.m_bBox; }
 
     void propagate()
     {
-        m_prAtoms.resize(m_atoms.size());
-        m_topSimLayer.init(m_bBox);
-        m_topSimLayer.prepareForPropagation(m_forces, m_prAtoms, MyUnits<T>(), m_fTimeStep);
-        m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_prAtoms);
+        m_c.m_prAtoms.resize(m_c.m_atoms.size());
+        m_topSimLayer.init(m_c.m_bBox);
+        m_topSimLayer.prepareForPropagation(m_c.m_forces, m_c.m_prAtoms, MyUnits<T>(), m_fTimeStep);
+        m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_c.m_prAtoms);
     }
 
     void dissociateWeakBonds()
     {
-        for (NvU32 uForce = m_forces.findFirstForceIndex(); uForce != INVALID_UINT32; )
+        for (NvU32 uForce = m_c.m_forces.findFirstForceIndex(); uForce != INVALID_UINT32; )
         {
-            Force<T>& force = m_forces.accessForceByIndex(uForce);
+            Force<T>& force = m_c.m_forces.accessForceByIndex(uForce);
 
             // compute current bond length
-            auto& atom1 = m_atoms[force.getAtom1Index()];
-            auto& atom2 = m_atoms[force.getAtom2Index()];
+            auto& atom1 = m_c.m_atoms[force.getAtom1Index()];
+            auto& atom2 = m_c.m_atoms[force.getAtom2Index()];
 
-            if (force.dissociateWeakBond(atom1, atom2, m_bBox))
+            if (force.dissociateWeakBond(atom1, atom2, m_c.m_bBox))
             {
-                uForce = m_forces.dissociateForce(uForce);
+                uForce = m_c.m_forces.dissociateForce(uForce);
             }
-            else uForce = m_forces.findNextForceIndex(uForce);
+            else uForce = m_c.m_forces.findNextForceIndex(uForce);
         }
     }
 
@@ -455,13 +467,10 @@ protected:
         MyUnits<T> fWeightedKinSum = m_topSimLayer.getWeightedKinSum();
         return fWeightedKinSum / fWeightsSum;
     }
-    std::vector<Atom<T>> m_atoms;
-    ForceMap<T> m_forces;
-    BoxWrapper<T> m_bBox;
+    PrContext<T> m_c;
 
 private:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
-    std::vector<PropagatorAtom<T>> m_prAtoms;
     SimLayer<T, DenseStdArray> m_topSimLayer; // top simulation layer
 };
 
@@ -476,7 +485,7 @@ struct Water : public Propagator<_T>
 
     Water() : m_ocTree(*this)
     {
-        MyUnits<T> volume = this->m_bBox.evalVolume();
+        MyUnits<T> volume = this->m_c.m_bBox.evalVolume();
         // one mole of water has volume of 18 milliliters
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
 
@@ -484,12 +493,12 @@ struct Water : public Propagator<_T>
         this->m_atoms.resize(3 * nWaterMolecules);
 #else
         // debug can't simulate all molecules - too slow
-        this->m_atoms.resize(3 * 64);
+        this->m_c.m_atoms.resize(3 * 64);
 #endif
 
-        for (NvU32 u = 0, nOs = 0, nHs = 0; u < this->m_atoms.size(); ++u)
+        for (NvU32 u = 0, nOs = 0, nHs = 0; u < this->m_c.m_atoms.size(); ++u)
         {
-            Atom<T> &atom = this->m_atoms[u];
+            Atom<T> &atom = this->m_c.m_atoms[u];
             if (nHs < nOs * 2)
             {
                 atom = Atom<T>(NPROTONS_H);
@@ -505,18 +514,18 @@ struct Water : public Propagator<_T>
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
                 double f = m_rng.generate01();
-                vNewPos[uDim] = this->m_bBox.m_vMin[uDim] * f + this->m_bBox.m_vMax[uDim] * (1 - f);
+                vNewPos[uDim] = this->m_c.m_bBox.m_vMin[uDim] * f + this->m_c.m_bBox.m_vMax[uDim] * (1 - f);
             }
             atom.m_vPos = vNewPos;
             m_rng.nextSeed();
 
-            if (!this->m_bBox.includes(atom.m_vPos)) // atom must be inside the bounding box
+            if (!this->m_c.m_bBox.includes(atom.m_vPos)) // atom must be inside the bounding box
             {
                 __debugbreak();
             }
         }
 
-        this->m_forces.init((NvU32)this->m_atoms.size());
+        this->m_c.m_forces.init((NvU32)this->m_c.m_atoms.size());
     }
 
     MyUnits<T> getFilteredAverageKin() const
@@ -534,7 +543,7 @@ struct Water : public Propagator<_T>
         m_averageKinFilter.addValue(fInstantaneousAverageKin.m_value);
         MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
 
-        m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_atoms);
+        m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -587,15 +596,15 @@ struct Water : public Propagator<_T>
         for (NvU32 uTreePoint2 = leafNode2.getFirstTreePoint(); uTreePoint2 < leafNode2.getEndTreePoint(); ++uTreePoint2)
         {
             NvU32 uPoint2 = m_ocTree.getPointIndex(uTreePoint2);
-            auto& atom2 = this->m_atoms[uPoint2];
+            auto& atom2 = this->m_c.m_atoms[uPoint2];
             for (NvU32 uTreePoint1 = (leafIndex == nodeIndex) ? uTreePoint2 + 1 : leafNode1.getFirstTreePoint(); uTreePoint1 < leafNode1.getEndTreePoint(); ++uTreePoint1)
             {
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2;
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
-                auto& atom1 = this->m_atoms[uPoint1];
-                auto vDir = this->m_bBox.computeDir(atom1, atom2);
+                auto& atom1 = this->m_c.m_atoms[uPoint1];
+                auto vDir = this->m_c.m_bBox.computeDir(atom1, atom2);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
@@ -606,7 +615,7 @@ struct Water : public Propagator<_T>
                 {
                     if (uBond1 >= atom1.getNBonds())
                     {
-                        this->m_forces.createForce(uPoint1, uPoint2);
+                        this->m_c.m_forces.createForce(uPoint1, uPoint2);
                         break;
                     }
                     // if this is covalent bond - we don't need to add it - it must already be in the list of forces
@@ -625,14 +634,14 @@ private:
     {
         this->dissociateWeakBonds();
 
-        m_ocTree.rebuild(removeUnits(this->m_bBox), (NvU32)this->m_atoms.size());
+        m_ocTree.rebuild(removeUnits(this->m_c.m_bBox), (NvU32)this->m_c.m_atoms.size());
 
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
 #endif
 
-        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(this->m_bBox), *this);
-        nvAssert(m_dbgNContributions == this->m_atoms.size() * (this->m_atoms.size() - 1));
+        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(this->m_c.m_bBox), *this);
+        nvAssert(m_dbgNContributions == this->m_c.m_atoms.size() * (this->m_c.m_atoms.size() - 1));
     }
 
     OcTree<Water> m_ocTree;
