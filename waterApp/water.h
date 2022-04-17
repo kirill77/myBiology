@@ -446,7 +446,7 @@ struct Propagator
 
     void dissociateWeakBonds()
     {
-        for (NvU32 uForce = m_forces.findSmallestForceIndex(); uForce != INVALID_UINT32; )
+        for (NvU32 uForce = m_forces.findFirstForceIndex(); uForce != INVALID_UINT32; )
         {
             Force<T>& force = m_forces.accessForceByIndex(uForce);
 
@@ -458,7 +458,7 @@ struct Propagator
             {
                 uForce = m_forces.dissociateForce(uForce);
             }
-            else uForce = m_forces.findLargerForceIndex(uForce);
+            else uForce = m_forces.findNextForceIndex(uForce);
         }
     }
 
