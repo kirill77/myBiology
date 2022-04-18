@@ -138,9 +138,9 @@ struct MyViewer : public Viewer
         // update vertex buffer for bonds drawable
         const auto& forces = m_water.getForces();
         m_pBondPoints.resize(0);
-        for (auto _if = forces.begin(); _if != forces.end(); ++_if)
+        for (NvU32 uForce = forces.findFirstValidIndex(); uForce != INVALID_UINT32; uForce = forces.findNextValidIndex(uForce))
         {
-            const Force<T> &force = *_if;
+            const Force<T> &force = forces.accessForceByIndex(uForce);
             if (!force.shouldDraw())
                 continue;
 
@@ -212,7 +212,7 @@ private:
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", m_water.getCurTimeStep().toFemtoseconds(), m_water.getForces().getNForces());
+        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", m_water.getCurTimeStep().toFemtoseconds(), m_water.getForces().size());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
