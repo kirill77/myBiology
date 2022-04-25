@@ -234,56 +234,33 @@ struct PrContext
     ForceMap<T> m_forces;
     std::vector<PropagatorForce<T>> m_prForces;
     BoxWrapper<T> m_bBox;
+    SparseHierarchy m_atomLayers;
+    GlobalState<T> m_globalState;
 };
 
 // simulation layer - hierarchy of ever diminishing time steps used for accuracy
-template <class T, class AtomIndicesArrayType, class ForceIndicesArrayType>
+template <class T, class ForceIndicesArrayType>
 struct SimLayer
 {
-    using NextLayerType = SimLayer<T, SparseArray<std::vector<Atom<T>>>, SparseArray<ForceMap<T>>>;
-    SimLayer(NvU32 uLevel) :m_uLevel(uLevel)
+    using NextLayerType = SimLayer<T, SparseArray<ForceMap<T>>>;
+    SimLayer(NvU32 uLevel) : m_uLevel(uLevel)
     {
         nvAssert(m_uLevel < 20);
     }
-    void init(const PrContext<T> &c)
+    void init(PrContext<T> &c)
     {
-        m_atomIndices.init(c.m_atoms);
         m_forceIndices.init(c.m_forces);
         if (m_uLevel == 0)
         {
-            resetKinComputation();
+            c.m_globalState.resetKinComputation();
         }
     }
 
-    NvU32 numDetailAtoms(const PrContext<T> &c) const { return m_atomIndices.getNumValidIndices(c.m_atoms); }
-    bool isDetailAtom(const PrContext<T>& c, NvU32 index) const { return m_atomIndices.isIndexValid(index); }
-    void resetKinComputation()
-    {
-        m_globalState.resetKinComputation();
-        if (m_pNextSimLayer) m_pNextSimLayer->resetKinComputation();
-    }
-    MyUnits<T> getWeightedKinSum(const PrContext<T>& c) const
-    {
-        if (numDetailAtoms(c) == 0)
-            return MyUnits<T>();
-        return m_globalState.getWeightedKinSum() + m_pNextSimLayer->getWeightedKinSum(c);
-    }
-    MyUnits<T> getKinWeightsSum(const PrContext<T>& c) const
-    {
-        if (numDetailAtoms(c) == 0)
-            return MyUnits<T>();
-        return m_globalState.getKinWeightsSum() + m_pNextSimLayer->getKinWeightsSum(c);
-    }
-
-    void addDetailAtom(NvU32 index)
-    {
-        m_atomIndices.makeIndexValid(index);
-    }
     void addDetailForceIfNeeded(const PrContext<T>& c, NvU32 uForce)
     {
         const Force<T>& force = c.m_forces.accessForceByIndex(uForce);
         // if at least one force atom is detailed - the force has to be detailed
-        if (isDetailAtom(c, force.getAtom1Index()) || isDetailAtom(c, force.getAtom2Index()))
+        if (c.m_atomLayers.hasElement(m_uLevel, force.getAtom1Index()) || c.m_atomLayers.hasElement(m_uLevel, force.getAtom2Index()))
         {
             m_forceIndices.makeIndexValid(uForce);
         }
@@ -291,12 +268,11 @@ struct SimLayer
 
     void prepareForPropagation(PrContext<T>& c, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
-        if (numDetailAtoms(c) == 0)
-            return;
+        nvAssert(c.m_atomLayers.hasElements(m_uLevel));
         if (m_uLevel != 0)
         {
             // we have to reset all atoms we're going to re-simulate to their initial state
-            for (NvU32 uAtom = m_atomIndices.findFirstValidIndex(c.m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.findNextValidIndex(c.m_atoms, uAtom))
+            for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
             {
                 Atom<T>& atom = c.m_atoms[uAtom];
                 PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
@@ -306,14 +282,14 @@ struct SimLayer
     }
     void propagate(MyUnits<T> fBeginTime, MyUnits<T> fEndTime, PrContext<T>& c)
     {
-        if (numDetailAtoms(c) == 0)
-            return;
+        nvAssert(c.m_atomLayers.hasElements(m_uLevel));
+
         if (m_pNextSimLayer == nullptr)
         {
             m_pNextSimLayer = std::make_unique<NextLayerType>(m_uLevel + 1);
         }
 
-        for (NvU32 uAtom = m_atomIndices.findFirstValidIndex(c.m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.findNextValidIndex(c.m_atoms, uAtom))
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
             PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
             prAtom.prepareForPropagation(c.m_atoms[uAtom], fBeginTime, fEndTime);
@@ -322,7 +298,7 @@ struct SimLayer
         updateForces<0>(fBeginTime, c);
 
         MyUnits<T> fTimeStep = fEndTime - fBeginTime;
-        for (NvU32 uAtom = m_atomIndices.findFirstValidIndex(c.m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.findNextValidIndex(c.m_atoms, uAtom))
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
             Atom<T>& atom = c.m_atoms[uAtom];
             PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
@@ -330,37 +306,35 @@ struct SimLayer
         }
 
         m_pNextSimLayer->init(c);
+        c.m_atomLayers.notifyLayerCreated(m_uLevel + 1);
         updateForces<1>(fEndTime, c);
 
-        if (m_pNextSimLayer->numDetailAtoms(c) < numDetailAtoms(c)) // do we have some detailed atoms of our own?
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
-            for (NvU32 uAtom = m_atomIndices.findFirstValidIndex(c.m_atoms); uAtom != INVALID_UINT32; uAtom = m_atomIndices.findNextValidIndex(c.m_atoms, uAtom))
+            nvAssert(!c.m_atomLayers.hasElement(m_uLevel + 1, uAtom));
+            Atom<T>& atom = c.m_atoms[uAtom];
+            PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
+            MyUnits<T> fMass = atom.getMass();
+            // this is the actual speed that was used to propel this atom on this time step
+            c.m_globalState.notifyAtomSpeed(fMass, atom.m_vSpeed, fTimeStep);
+            prAtom.verletStep2(atom, fTimeStep);
+        }
+
+        if (c.m_atomLayers.hasElements(m_uLevel + 1))
+        {
+            // prepare the list of forces that affect next layer atoms
+            for (NvU32 u = m_forceIndices.findFirstValidIndex(c.m_forces); u != INVALID_UINT32; u = m_forceIndices.findNextValidIndex(c.m_forces, u))
             {
-                if (m_pNextSimLayer->isDetailAtom(c, uAtom))
-                    continue;
-                Atom<T>& atom = c.m_atoms[uAtom];
-                PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
-                MyUnits<T> fMass = atom.getMass();
-                // this is the actual speed that was used to propel this atom on this time step
-                m_globalState.notifyAtomSpeed(fMass, atom.m_vSpeed, fTimeStep);
-                prAtom.verletStep2(atom, fTimeStep);
+                m_pNextSimLayer->addDetailForceIfNeeded(c, u);
             }
+
+            MyUnits<T> fMidTime = (fBeginTime + fEndTime) / 2;
+
+            m_pNextSimLayer->prepareForPropagation(c, fBeginTime, fMidTime);
+            m_pNextSimLayer->propagate(fBeginTime, fMidTime, c);
+            m_pNextSimLayer->propagate(fMidTime, fEndTime, c);
         }
-
-        if (m_pNextSimLayer->numDetailAtoms(c) == 0)
-            return;
-
-        // prepare the list of forces that affect next layer atoms
-        for (NvU32 u = m_forceIndices.findFirstValidIndex(c.m_forces); u != INVALID_UINT32; u = m_forceIndices.findNextValidIndex(c.m_forces, u))
-        {
-            m_pNextSimLayer->addDetailForceIfNeeded(c, u);
-        }
-
-        MyUnits<T> fMidTime = (fBeginTime + fEndTime) / 2;
-
-        m_pNextSimLayer->prepareForPropagation(c, fBeginTime, fMidTime);
-        m_pNextSimLayer->propagate(fBeginTime, fMidTime, c);
-        m_pNextSimLayer->propagate(fMidTime, fEndTime, c);
+        c.m_atomLayers.notifyLayerDestroyed(m_uLevel + 1);
     }
 
 private:
@@ -375,14 +349,14 @@ private:
             NvU32 uAtom1 = force.getAtom1Index();
             Atom<T>& atom1 = c.m_atoms[uAtom1];
             PropagatorAtom<T>& prAtom1 = c.m_prAtoms[uAtom1];
-            AtomPositionInterpolator<T> interp1(isDetailAtom(c, uAtom1), atom1, prAtom1, fTime, c.m_bBox);
+            AtomPositionInterpolator<T> interp1(c.m_atomLayers.hasElement(m_uLevel, uAtom1), atom1, prAtom1, fTime, c.m_bBox);
             NvU32 uAtom2 = force.getAtom2Index();
             Atom<T>& atom2 = c.m_atoms[uAtom2];
             PropagatorAtom<T>& prAtom2 = c.m_prAtoms[uAtom2];
-            AtomPositionInterpolator<T> interp2(isDetailAtom(c, uAtom2), atom2, prAtom2, fTime, c.m_bBox);
+            AtomPositionInterpolator<T> interp2(c.m_atomLayers.hasElement(m_uLevel, uAtom2), atom2, prAtom2, fTime, c.m_bBox);
 
             // why would we simulate this force if it doesn't have any detail atoms in it?
-            nvAssert(isDetailAtom(c, uAtom1) || isDetailAtom(c, uAtom2));
+            nvAssert(c.m_atomLayers.hasElement(m_uLevel, uAtom1) || c.m_atomLayers.hasElement(m_uLevel, uAtom2));
 
             ForceData<T> forceData;
             if (force.computeForce(atom1, atom2, c.m_bBox, forceData))
@@ -401,22 +375,20 @@ private:
             // if the normalized force has changed more than the threshold - need to simulate in more detail
             else if (fabs(forceData.fNormalizedForce - prForce.m_fNormalizedForce0) > 0.4)
             {
-                if (isDetailAtom(c, uAtom1))
+                if (c.m_atomLayers.hasElement(m_uLevel, uAtom1))
                 {
-                    m_pNextSimLayer->addDetailAtom(uAtom1);
+                    c.m_atomLayers.moveToMostDetailedLayer(m_uLevel + 1, uAtom1);
                 }
-                if (isDetailAtom(c, uAtom2))
+                if (c.m_atomLayers.hasElement(m_uLevel, uAtom2))
                 {
-                    m_pNextSimLayer->addDetailAtom(uAtom2);
+                    c.m_atomLayers.moveToMostDetailedLayer(m_uLevel + 1, uAtom2);
                 }
             }
         }
     }
-    AtomIndicesArrayType m_atomIndices;
     ForceIndicesArrayType m_forceIndices;
     std::unique_ptr<NextLayerType> m_pNextSimLayer;
     NvU32 m_uLevel = 0;
-    GlobalState<T> m_globalState;
 };
 
 // class propagates simulation by the given time step. if I detect that the time step is not small enough for some particular atom, this
@@ -438,6 +410,7 @@ struct Propagator
 
     void propagate()
     {
+        m_c.m_atomLayers.init((NvU32)m_c.m_atoms.size());
         m_c.m_prAtoms.resize(m_c.m_atoms.size());
         m_c.m_prForces.resize(m_c.m_forces.size());
         m_topSimLayer.init(m_c);
@@ -466,16 +439,16 @@ struct Propagator
 protected:
     MyUnits<T> getInstantaneousAverageKin() const
     {
-        MyUnits<T> fWeightsSum = m_topSimLayer.getKinWeightsSum(m_c);
+        MyUnits<T> fWeightsSum = m_c.m_globalState.getKinWeightsSum();
         if (fWeightsSum == 0) return MyUnits<T>(); // to avoid division by 0
-        MyUnits<T> fWeightedKinSum = m_topSimLayer.getWeightedKinSum(m_c);
+        MyUnits<T> fWeightedKinSum = m_c.m_globalState.getWeightedKinSum();
         return fWeightedKinSum / fWeightsSum;
     }
     PrContext<T> m_c;
 
 private:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
-    SimLayer<T, DenseStdArray<Atom<T>>, DenseArray<ForceMap<T>>> m_topSimLayer; // top simulation layer
+    SimLayer<T, DenseArray<ForceMap<T>>> m_topSimLayer; // top simulation layer
 };
 
 template <class _T>
