@@ -233,6 +233,8 @@ private:
     bool upper_left_ = true;
 };
 
+NvU32 g_debugCount = 0;
+
 int main(int argc, char** argv)
 {
     DistributionsTest::test();

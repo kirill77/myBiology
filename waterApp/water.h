@@ -9,6 +9,8 @@
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 
+extern NvU32 g_debugCount;
+
 template <class T>
 struct GlobalState
 {
@@ -272,7 +274,7 @@ struct SimLayer
         if (m_uLevel != 0)
         {
             // we have to reset all atoms we're going to re-simulate to their initial state
-            for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
+            for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
             {
                 Atom<T>& atom = c.m_atoms[uAtom];
                 PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
@@ -289,7 +291,7 @@ struct SimLayer
             m_pNextSimLayer = std::make_unique<NextLayerType>(m_uLevel + 1);
         }
 
-        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
             PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
             prAtom.prepareForPropagation(c.m_atoms[uAtom], fBeginTime, fEndTime);
@@ -298,7 +300,7 @@ struct SimLayer
         updateForces<0>(fBeginTime, c);
 
         MyUnits<T> fTimeStep = fEndTime - fBeginTime;
-        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
             Atom<T>& atom = c.m_atoms[uAtom];
             PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
@@ -309,7 +311,7 @@ struct SimLayer
         c.m_atomLayers.notifyLayerCreated(m_uLevel + 1);
         updateForces<1>(fEndTime, c);
 
-        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom != INVALID_UINT32; uAtom = c.m_atomLayers.getNextElement(uAtom))
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
             nvAssert(!c.m_atomLayers.hasElement(m_uLevel + 1, uAtom));
             Atom<T>& atom = c.m_atoms[uAtom];
@@ -335,6 +337,7 @@ struct SimLayer
             m_pNextSimLayer->propagate(fMidTime, fEndTime, c);
         }
         c.m_atomLayers.notifyLayerDestroyed(m_uLevel + 1);
+        nvAssert(c.m_atomLayers.hasElements(m_uLevel));
     }
 
 private:
@@ -377,11 +380,11 @@ private:
             {
                 if (c.m_atomLayers.hasElement(m_uLevel, uAtom1))
                 {
-                    c.m_atomLayers.moveToMostDetailedLayer(m_uLevel + 1, uAtom1);
+                    c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom1);
                 }
                 if (c.m_atomLayers.hasElement(m_uLevel, uAtom2))
                 {
-                    c.m_atomLayers.moveToMostDetailedLayer(m_uLevel + 1, uAtom2);
+                    c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom2);
                 }
             }
         }
