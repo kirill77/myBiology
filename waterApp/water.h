@@ -244,15 +244,16 @@ struct PrContext
 template <class T, class ForceIndicesArrayType>
 struct SimLayer
 {
+    static const NvU32 GROUND_LAYER = 1;
     using NextLayerType = SimLayer<T, SparseArray<ForceMap<T>>>;
-    SimLayer(NvU32 uLevel) : m_uLevel(uLevel)
+    SimLayer(NvU32 uLevel = GROUND_LAYER) : m_uLevel(uLevel)
     {
         nvAssert(m_uLevel < 20);
     }
     void init(PrContext<T> &c)
     {
         m_forceIndices.init(c.m_forces);
-        if (m_uLevel == 0)
+        if (m_uLevel == GROUND_LAYER)
         {
             c.m_globalState.resetKinComputation();
         }
@@ -271,7 +272,7 @@ struct SimLayer
     void prepareForPropagation(PrContext<T>& c, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
         nvAssert(c.m_atomLayers.hasElements(m_uLevel));
-        if (m_uLevel != 0)
+        if (m_uLevel != GROUND_LAYER)
         {
             // we have to reset all atoms we're going to re-simulate to their initial state
             for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
@@ -399,7 +400,7 @@ private:
 template <class T>
 struct Propagator
 {
-    Propagator() : m_topSimLayer(0)
+    Propagator()
     {
         m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 20);
     }
@@ -413,7 +414,7 @@ struct Propagator
 
     void propagate()
     {
-        m_c.m_atomLayers.init((NvU32)m_c.m_atoms.size());
+        m_c.m_atomLayers.init((NvU32)m_c.m_atoms.size(), m_topSimLayer.GROUND_LAYER);
         m_c.m_prAtoms.resize(m_c.m_atoms.size());
         m_c.m_prForces.resize(m_c.m_forces.size());
         m_topSimLayer.init(m_c);
