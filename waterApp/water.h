@@ -236,36 +236,34 @@ struct PrContext
     ForceMap<T> m_forces;
     std::vector<PropagatorForce<T>> m_prForces;
     BoxWrapper<T> m_bBox;
-    SparseHierarchy m_atomLayers;
+    SparseHierarchy m_atomLayers, m_forceLayers;
     GlobalState<T> m_globalState;
 };
 
 // simulation layer - hierarchy of ever diminishing time steps used for accuracy
-template <class T, class ForceIndicesArrayType>
+template <class T>
 struct SimLayer
 {
     static const NvU32 GROUND_LAYER = 1;
-    using NextLayerType = SimLayer<T, SparseArray<ForceMap<T>>>;
     SimLayer(NvU32 uLevel = GROUND_LAYER) : m_uLevel(uLevel)
     {
         nvAssert(m_uLevel < 20);
     }
     void init(PrContext<T> &c)
     {
-        m_forceIndices.init(c.m_forces);
         if (m_uLevel == GROUND_LAYER)
         {
             c.m_globalState.resetKinComputation();
         }
     }
 
-    void addDetailForceIfNeeded(const PrContext<T>& c, NvU32 uForce)
+    void addDetailForceIfNeeded(PrContext<T>& c, NvU32 uForce)
     {
         const Force<T>& force = c.m_forces.accessForceByIndex(uForce);
         // if at least one force atom is detailed - the force has to be detailed
         if (c.m_atomLayers.hasElement(m_uLevel, force.getAtom1Index()) || c.m_atomLayers.hasElement(m_uLevel, force.getAtom2Index()))
         {
-            m_forceIndices.makeIndexValid(uForce);
+            c.m_forceLayers.moveToLayer(m_uLevel, uForce);
         }
     }
 
@@ -289,7 +287,7 @@ struct SimLayer
 
         if (m_pNextSimLayer == nullptr)
         {
-            m_pNextSimLayer = std::make_unique<NextLayerType>(m_uLevel + 1);
+            m_pNextSimLayer = std::make_unique<SimLayer<T>>(m_uLevel + 1);
         }
 
         for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
@@ -309,7 +307,7 @@ struct SimLayer
         }
 
         m_pNextSimLayer->init(c);
-        c.m_atomLayers.notifyLayerCreated(m_uLevel + 1);
+        c.m_atomLayers.createLayer(m_uLevel + 1);
         updateForces<1>(fEndTime, c);
 
         for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
@@ -325,10 +323,13 @@ struct SimLayer
 
         if (c.m_atomLayers.hasElements(m_uLevel + 1))
         {
+            c.m_forceLayers.createLayer(m_uLevel + 1);
             // prepare the list of forces that affect next layer atoms
-            for (NvU32 u = m_forceIndices.findFirstValidIndex(c.m_forces); u != INVALID_UINT32; u = m_forceIndices.findNextValidIndex(c.m_forces, u))
+            for (NvU32 uForce = c.m_forceLayers.getFirstLayerElement(m_uLevel); uForce < c.m_forces.size(); )
             {
-                m_pNextSimLayer->addDetailForceIfNeeded(c, u);
+                NvU32 uNextForce = c.m_forceLayers.getNextElement(uForce);
+                m_pNextSimLayer->addDetailForceIfNeeded(c, uForce);
+                uForce = uNextForce;
             }
 
             MyUnits<T> fMidTime = (fBeginTime + fEndTime) / 2;
@@ -336,8 +337,9 @@ struct SimLayer
             m_pNextSimLayer->prepareForPropagation(c, fBeginTime, fMidTime);
             m_pNextSimLayer->propagate(fBeginTime, fMidTime, c);
             m_pNextSimLayer->propagate(fMidTime, fEndTime, c);
+            c.m_forceLayers.destroyLayer(m_uLevel + 1);
         }
-        c.m_atomLayers.notifyLayerDestroyed(m_uLevel + 1);
+        c.m_atomLayers.destroyLayer(m_uLevel + 1);
         nvAssert(c.m_atomLayers.hasElements(m_uLevel));
     }
 
@@ -345,7 +347,7 @@ private:
     template <NvU32 uPass> // pass 0 is first Verlet step, pass 1 is second Verlet step
     void updateForces(MyUnits<T> fTime, PrContext<T>& c)
     {
-        for (NvU32 uForce = m_forceIndices.findFirstValidIndex(c.m_forces); uForce != INVALID_UINT32; uForce = m_forceIndices.findNextValidIndex(c.m_forces, uForce))
+        for (NvU32 uForce = c.m_forceLayers.getFirstLayerElement(m_uLevel); uForce < c.m_forces.size(); uForce = c.m_forceLayers.getNextElement(uForce))
         {
             Force<T>& force = c.m_forces.accessForceByIndex(uForce);
             PropagatorForce<T>& prForce = c.m_prForces[uForce];
@@ -390,8 +392,7 @@ private:
             }
         }
     }
-    ForceIndicesArrayType m_forceIndices;
-    std::unique_ptr<NextLayerType> m_pNextSimLayer;
+    std::unique_ptr<SimLayer<T>> m_pNextSimLayer;
     NvU32 m_uLevel = 0;
 };
 
@@ -415,17 +416,27 @@ struct Propagator
     void propagate()
     {
         m_c.m_atomLayers.init((NvU32)m_c.m_atoms.size(), m_topSimLayer.GROUND_LAYER);
+        m_c.m_forceLayers.init(m_c.m_forces.size(), m_topSimLayer.GROUND_LAYER);
+        // some of the forces in m_forces array are invalid - move them to layer 0
+        for (NvU32 uInvalidForce = m_c.m_forces.getFirstInvalidIndex(); uInvalidForce < m_c.m_forces.size(); uInvalidForce = m_c.m_forces.getNextInvalidIndex(uInvalidForce))
+        {
+            m_c.m_forceLayers.moveToLayer(0, uInvalidForce);
+        }
         m_c.m_prAtoms.resize(m_c.m_atoms.size());
         m_c.m_prForces.resize(m_c.m_forces.size());
         m_topSimLayer.init(m_c);
         m_topSimLayer.prepareForPropagation(m_c, MyUnits<T>(), m_fTimeStep);
         m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_c);
+        // on the next step we may have different invalid forces - so move all current invalid forces back to GROUND_LAYER
+        m_c.m_forceLayers.moveAllElements(m_topSimLayer.GROUND_LAYER, 0);
     }
 
     void dissociateWeakBonds()
     {
-        for (NvU32 uForce = m_c.m_forces.findFirstValidIndex(); uForce != INVALID_UINT32; )
+        for (NvU32 uForce = 0; uForce < m_c.m_forces.size(); ++uForce)
         {
+            if (!m_c.m_forces.isValid(uForce))
+                continue;
             Force<T>& force = m_c.m_forces.accessForceByIndex(uForce);
 
             // compute current bond length
@@ -434,9 +445,8 @@ struct Propagator
 
             if (force.dissociateWeakBond(atom1, atom2, m_c.m_bBox))
             {
-                uForce = m_c.m_forces.dissociateForce(uForce);
+                m_c.m_forces.notifyForceDissociated(uForce);
             }
-            else uForce = m_c.m_forces.findNextValidIndex(uForce);
         }
     }
 
@@ -452,7 +462,7 @@ protected:
 
 private:
     MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
-    SimLayer<T, DenseArray<ForceMap<T>>> m_topSimLayer; // top simulation layer
+    SimLayer<T> m_topSimLayer; // top simulation layer
 };
 
 template <class _T>

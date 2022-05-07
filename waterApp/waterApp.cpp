@@ -138,8 +138,10 @@ struct MyViewer : public Viewer
         // update vertex buffer for bonds drawable
         const auto& forces = m_water.getForces();
         m_pBondPoints.resize(0);
-        for (NvU32 uForce = forces.findFirstValidIndex(); uForce != INVALID_UINT32; uForce = forces.findNextValidIndex(uForce))
+        for (NvU32 uForce = 0; uForce < forces.size(); ++uForce)
         {
+            if (!forces.isValid(uForce))
+                continue;
             const Force<T> &force = forces.accessForceByIndex(uForce);
             if (!force.shouldDraw())
                 continue;
