@@ -158,12 +158,26 @@ struct PropagatorAtom
         m_fDbgEndTime = fDbgEndTime;
 #endif
     }
-    void notifyStepShrinking(Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
+    void notifyStepShrinking(Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime, const BoxWrapper<T>& w)
     {
-        nvAssert(m_dbgState == DBG_STEP1_DONE);
-        nvAssert(m_fBeginTime == fBeginTime && fDbgEndTime < m_fDbgEndTime);
-        atom.m_vSpeed = m_vBeginSpeed;
-        atom.m_vPos = m_vBeginPos;
+        nvAssert(fBeginTime >= m_fBeginTime && fDbgEndTime < m_fDbgEndTime);
+        if (m_fBeginTime == fBeginTime)
+        {
+            nvAssert(m_dbgState == DBG_STEP1_DONE || m_dbgState == DBG_STEP2_DONE);
+            atom.m_vSpeed = m_vBeginSpeed;
+            atom.m_vPos = m_vBeginPos;
+        }
+        else
+        {
+            // the branch is taken if at first atom did not have to be simulated in detail, but then suddenly - it did
+            nvAssert(m_dbgState == DBG_STEP2_DONE);
+            MyUnits<T> fTimeStep = fBeginTime - m_fBeginTime;
+            atom.m_vSpeed = m_vBeginSpeed + m_vBeginForce * (fTimeStep / atom.getMass());
+            atom.m_vPos = w.wrapThePos(m_vBeginPos + (m_vBeginSpeed + atom.m_vSpeed) * (fTimeStep / 2));
+            m_vBeginSpeed = atom.m_vSpeed;
+            m_vBeginPos = atom.m_vPos;
+            m_fBeginTime = fBeginTime;
+        }
         m_vEndForce = MyUnits3<T>();
 #if ASSERT_ONLY_CODE
         m_fDbgEndTime = fDbgEndTime;
@@ -183,8 +197,7 @@ struct PropagatorAtom
         nvAssert(m_dbgState == DBG_INITED);
         m_vBeginForce = m_vEndForce;
         // advect positions by full step and speeds by half-step
-        nvAssert(all(atom.m_vSpeed == m_vBeginSpeed));
-        atom.m_vSpeed += m_vBeginForce * (fTimeStep / 2 / atom.getMass());
+        atom.m_vSpeed = m_vBeginSpeed + m_vBeginForce * (fTimeStep / 2 / atom.getMass());
         atom.m_vPos = w.wrapThePos(m_vBeginPos + atom.m_vSpeed * fTimeStep);
         // clear forces before we start accumulating them for next step
         m_vEndForce = MyUnits3<T>();
@@ -296,7 +309,7 @@ struct SimLayer
             PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
             if (isShrinking)
             {
-                prAtom.notifyStepShrinking(atom, fBeginTime, fDbgEndTime);
+                prAtom.notifyStepShrinking(atom, fBeginTime, fDbgEndTime, c.m_bBox);
             }
             else
             {
@@ -402,14 +415,9 @@ private:
             // if the normalized force has changed more than the threshold - need to simulate in more detail
             else if (fabs(forceData.fNormalizedForce - prForce.m_fNormalizedForce0) > 0.4)
             {
-                if (c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom1))
-                {
-                    c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom1);
-                }
-                if (c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom2))
-                {
-                    c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom2);
-                }
+                // since the force is changing dramatically, we have to move both atoms to most detail level of simulation
+                c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom1);
+                c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom2);
             }
         }
     }
