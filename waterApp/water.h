@@ -261,7 +261,8 @@ struct SimLayer
     {
         const Force<T>& force = c.m_forces.accessForceByIndex(uForce);
         // if at least one force atom is detailed - the force has to be detailed
-        if (c.m_atomLayers.hasElement(m_uLevel, force.getAtom1Index()) || c.m_atomLayers.hasElement(m_uLevel, force.getAtom2Index()))
+        if (c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, force.getAtom1Index()) ||
+            c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, force.getAtom2Index()))
         {
             c.m_forceLayers.moveToLayer(m_uLevel, uForce);
         }
@@ -312,7 +313,7 @@ struct SimLayer
 
         for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
-            nvAssert(!c.m_atomLayers.hasElement(m_uLevel + 1, uAtom));
+            nvAssert(!c.m_atomLayers.hasEverBeenAtLayer(m_uLevel + 1, uAtom));
             Atom<T>& atom = c.m_atoms[uAtom];
             PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
             MyUnits<T> fMass = atom.getMass();
@@ -337,8 +338,10 @@ struct SimLayer
             m_pNextSimLayer->prepareForPropagation(c, fBeginTime, fMidTime);
             m_pNextSimLayer->propagate(fBeginTime, fMidTime, c);
             m_pNextSimLayer->propagate(fMidTime, fEndTime, c);
+            c.m_forceLayers.moveAllElements(m_uLevel, m_uLevel + 1);
             c.m_forceLayers.destroyLayer(m_uLevel + 1);
         }
+        c.m_atomLayers.moveAllElements(m_uLevel, m_uLevel + 1);
         c.m_atomLayers.destroyLayer(m_uLevel + 1);
         nvAssert(c.m_atomLayers.hasElements(m_uLevel));
     }
@@ -355,14 +358,15 @@ private:
             NvU32 uAtom1 = force.getAtom1Index();
             Atom<T>& atom1 = c.m_atoms[uAtom1];
             PropagatorAtom<T>& prAtom1 = c.m_prAtoms[uAtom1];
-            AtomPositionInterpolator<T> interp1(c.m_atomLayers.hasElement(m_uLevel, uAtom1), atom1, prAtom1, fTime, c.m_bBox);
+            AtomPositionInterpolator<T> interp1(c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom1), atom1, prAtom1, fTime, c.m_bBox);
             NvU32 uAtom2 = force.getAtom2Index();
             Atom<T>& atom2 = c.m_atoms[uAtom2];
             PropagatorAtom<T>& prAtom2 = c.m_prAtoms[uAtom2];
-            AtomPositionInterpolator<T> interp2(c.m_atomLayers.hasElement(m_uLevel, uAtom2), atom2, prAtom2, fTime, c.m_bBox);
+            AtomPositionInterpolator<T> interp2(c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom2), atom2, prAtom2, fTime, c.m_bBox);
 
             // why would we simulate this force if it doesn't have any detail atoms in it?
-            nvAssert(c.m_atomLayers.hasElement(m_uLevel, uAtom1) || c.m_atomLayers.hasElement(m_uLevel, uAtom2));
+            nvAssert(c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom1) ||
+                     c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom2));
 
             ForceData<T> forceData;
             if (force.computeForce(atom1, atom2, c.m_bBox, forceData))
@@ -381,11 +385,11 @@ private:
             // if the normalized force has changed more than the threshold - need to simulate in more detail
             else if (fabs(forceData.fNormalizedForce - prForce.m_fNormalizedForce0) > 0.4)
             {
-                if (c.m_atomLayers.hasElement(m_uLevel, uAtom1))
+                if (c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom1))
                 {
                     c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom1);
                 }
-                if (c.m_atomLayers.hasElement(m_uLevel, uAtom2))
+                if (c.m_atomLayers.hasEverBeenAtLayer(m_uLevel, uAtom2))
                 {
                     c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom2);
                 }
@@ -417,6 +421,7 @@ struct Propagator
     {
         m_c.m_atomLayers.init((NvU32)m_c.m_atoms.size(), m_topSimLayer.GROUND_LAYER);
         m_c.m_forceLayers.init(m_c.m_forces.size(), m_topSimLayer.GROUND_LAYER);
+        m_c.m_forceLayers.createLayer(0);
         // some of the forces in m_forces array are invalid - move them to layer 0
         for (NvU32 uInvalidForce = m_c.m_forces.getFirstInvalidIndex(); uInvalidForce < m_c.m_forces.size(); uInvalidForce = m_c.m_forces.getNextInvalidIndex(uInvalidForce))
         {
@@ -429,6 +434,7 @@ struct Propagator
         m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_c);
         // on the next step we may have different invalid forces - so move all current invalid forces back to GROUND_LAYER
         m_c.m_forceLayers.moveAllElements(m_topSimLayer.GROUND_LAYER, 0);
+        m_c.m_forceLayers.destroyLayer(0);
     }
 
     void dissociateWeakBonds()
