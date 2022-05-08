@@ -148,26 +148,31 @@ struct PropagatorAtom
 {
     void prepareForPropagation(const Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
+        nvAssert(m_dbgState == DBG_NOT_INITED || m_dbgState == DBG_STEP2_DONE);
+        m_fBeginTime = fBeginTime;
         m_vBeginSpeed = atom.m_vSpeed;
         m_vBeginPos = atom.m_vPos;
-        m_fBeginTime = fBeginTime;
+        m_vEndForce = MyUnits3<T>();
 #if ASSERT_ONLY_CODE
+        m_dbgState = DBG_INITED;
         m_fDbgEndTime = fDbgEndTime;
 #endif
-        m_vEndForce = MyUnits3<T>();
     }
     void notifyStepShrinking(Atom<T>& atom, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
-        atom.m_vPos = m_vBeginPos;
-        atom.m_vSpeed = m_vBeginSpeed;
+        nvAssert(m_dbgState == DBG_STEP1_DONE);
         nvAssert(m_fBeginTime == fBeginTime && fDbgEndTime < m_fDbgEndTime);
+        atom.m_vSpeed = m_vBeginSpeed;
+        atom.m_vPos = m_vBeginPos;
+        m_vEndForce = MyUnits3<T>();
 #if ASSERT_ONLY_CODE
         m_fDbgEndTime = fDbgEndTime;
+        m_dbgState = DBG_INITED;
 #endif
     }
     void setInterpolatedPosition(Atom<T> &atom, MyUnits<T> fTime, const BoxWrapper<T>& w)
     {
-        nvAssert(fTime >= m_fBeginTime && fTime <= m_fDbgEndTime);
+        nvAssert(fTime >= m_fBeginTime && fTime <= m_fDbgEndTime && m_dbgState == DBG_STEP2_DONE);
         MyUnits<T> fTimeStep = fTime - m_fBeginTime;
         // advect positions by full step and speeds by half-step
         MyUnits3<T> vSpeed = m_vBeginSpeed + m_vBeginForce * (fTimeStep / 2 / atom.getMass());
@@ -175,25 +180,37 @@ struct PropagatorAtom
     }
     void verletStep1(Atom<T>& atom, MyUnits<T> fTimeStep, const BoxWrapper<T>& w)
     {
+        nvAssert(m_dbgState == DBG_INITED);
         m_vBeginForce = m_vEndForce;
         // advect positions by full step and speeds by half-step
+        nvAssert(all(atom.m_vSpeed == m_vBeginSpeed));
         atom.m_vSpeed += m_vBeginForce * (fTimeStep / 2 / atom.getMass());
         atom.m_vPos = w.wrapThePos(m_vBeginPos + atom.m_vSpeed * fTimeStep);
         // clear forces before we start accumulating them for next step
         m_vEndForce = MyUnits3<T>();
+#if ASSERT_ONLY_CODE
+        m_dbgState = DBG_STEP1_DONE;
+#endif
     }
     void verletStep2(Atom<T>& atom, MyUnits<T> fTimeStep)
     {
+        nvAssert(m_dbgState == DBG_STEP1_DONE);
         atom.m_vSpeed += m_vEndForce * (fTimeStep / 2 / atom.getMass());
+#if ASSERT_ONLY_CODE
+        m_dbgState = DBG_STEP2_DONE;
+#endif
     }
     void notifyForceContribution(const MyUnits3<T>& vDeltaForce)
     {
+        nvAssert(m_dbgState == DBG_INITED || m_dbgState == DBG_STEP1_DONE || m_dbgState == DBG_STEP2_DONE);
         m_vEndForce += vDeltaForce;
     }
 
 private:
     MyUnits<T> m_fBeginTime;
 #if ASSERT_ONLY_CODE
+    enum DBG_STATE { DBG_NOT_INITED = 0, DBG_INITED = 1, DBG_STEP1_DONE, DBG_STEP2_DONE };
+    DBG_STATE m_dbgState = DBG_NOT_INITED;
     MyUnits<T> m_fDbgEndTime;
 #endif
     MyUnits3<T> m_vBeginPos, m_vBeginSpeed, m_vBeginForce, m_vEndForce;
@@ -268,17 +285,22 @@ struct SimLayer
         }
     }
 
+    template <bool isShrinking>
     void prepareForPropagation(PrContext<T>& c, MyUnits<T> fBeginTime, MyUnits<T> fDbgEndTime)
     {
         nvAssert(c.m_atomLayers.hasElements(m_uLevel));
-        if (m_uLevel != GROUND_LAYER)
+        // we have to reset all atoms we're going to re-simulate to their initial state
+        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
         {
-            // we have to reset all atoms we're going to re-simulate to their initial state
-            for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
+            Atom<T>& atom = c.m_atoms[uAtom];
+            PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
+            if (isShrinking)
             {
-                Atom<T>& atom = c.m_atoms[uAtom];
-                PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
                 prAtom.notifyStepShrinking(atom, fBeginTime, fDbgEndTime);
+            }
+            else
+            {
+                prAtom.prepareForPropagation(atom, fBeginTime, fDbgEndTime);
             }
         }
     }
@@ -289,12 +311,6 @@ struct SimLayer
         if (m_pNextSimLayer == nullptr)
         {
             m_pNextSimLayer = std::make_unique<SimLayer<T>>(m_uLevel + 1);
-        }
-
-        for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
-        {
-            PropagatorAtom<T>& prAtom = c.m_prAtoms[uAtom];
-            prAtom.prepareForPropagation(c.m_atoms[uAtom], fBeginTime, fEndTime);
         }
 
         updateForces<0>(fBeginTime, c);
@@ -335,8 +351,9 @@ struct SimLayer
 
             MyUnits<T> fMidTime = (fBeginTime + fEndTime) / 2;
 
-            m_pNextSimLayer->prepareForPropagation(c, fBeginTime, fMidTime);
+            m_pNextSimLayer->prepareForPropagation<true>(c, fBeginTime, fMidTime);
             m_pNextSimLayer->propagate(fBeginTime, fMidTime, c);
+            m_pNextSimLayer->prepareForPropagation<false>(c, fMidTime, fEndTime);
             m_pNextSimLayer->propagate(fMidTime, fEndTime, c);
             c.m_forceLayers.moveAllElements(m_uLevel, m_uLevel + 1);
             c.m_forceLayers.destroyLayer(m_uLevel + 1);
@@ -430,7 +447,7 @@ struct Propagator
         m_c.m_prAtoms.resize(m_c.m_atoms.size());
         m_c.m_prForces.resize(m_c.m_forces.size());
         m_topSimLayer.init(m_c);
-        m_topSimLayer.prepareForPropagation(m_c, MyUnits<T>(), m_fTimeStep);
+        m_topSimLayer.prepareForPropagation<false>(m_c, MyUnits<T>(), m_fTimeStep);
         m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_c);
         // on the next step we may have different invalid forces - so move all current invalid forces back to GROUND_LAYER
         m_c.m_forceLayers.moveAllElements(m_topSimLayer.GROUND_LAYER, 0);
