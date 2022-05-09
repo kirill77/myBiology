@@ -432,7 +432,11 @@ struct Propagator
 {
     Propagator()
     {
+#ifdef NDEBUG
         m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 20);
+#else
+        m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 15);
+#endif
     }
 
     const ForceMap<T>& getForces() const { return m_c.m_forces; }
