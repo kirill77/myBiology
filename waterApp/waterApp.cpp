@@ -214,7 +214,7 @@ private:
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", m_water.getCurTimeStep().toFemtoseconds(), m_water.getForces().size());
+        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", m_water.getCurTimeStep().toFemtoseconds(), (NvU32)m_water.getForces().size());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);

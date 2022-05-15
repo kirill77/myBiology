@@ -449,7 +449,7 @@ struct Propagator
     void propagate()
     {
         m_c.m_atomLayers.init((NvU32)m_c.m_atoms.size(), m_topSimLayer.GROUND_LAYER);
-        m_c.m_forceLayers.init(m_c.m_forces.size(), m_topSimLayer.GROUND_LAYER);
+        m_c.m_forceLayers.init((NvU32)m_c.m_forces.size(), m_topSimLayer.GROUND_LAYER);
         m_c.m_forceLayers.createLayer(0);
         // some of the forces in m_forces array are invalid - move them to layer 0
         for (NvU32 uInvalidForce = m_c.m_forces.getFirstInvalidIndex(); uInvalidForce < m_c.m_forces.size(); uInvalidForce = m_c.m_forces.getNextInvalidIndex(uInvalidForce))
