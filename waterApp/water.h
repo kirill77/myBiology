@@ -410,14 +410,19 @@ private:
             }
             if (uPass == 0)
             {
+                nvAssert(fabs(forceData.fNormalizedForce) < 1000);
                 prForce.m_fNormalizedForce0 = forceData.fNormalizedForce;
             }
             // if the normalized force has changed more than the threshold - need to simulate in more detail
-            else if (fabs(forceData.fNormalizedForce - prForce.m_fNormalizedForce0) > 0.4)
+            else if (fabs(forceData.fNormalizedForce - prForce.m_fNormalizedForce0) > 0.2)
             {
                 // since the force is changing dramatically, we have to move both atoms to most detail level of simulation
                 c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom1);
                 c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom2);
+            }
+            else
+            {
+                nvAssert(fabs(forceData.fNormalizedForce) < 1000);
             }
         }
     }
@@ -432,7 +437,7 @@ struct Propagator
 {
     Propagator()
     {
-#ifdef NDEBUG
+#if 0
         m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 20);
 #else
         m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 15);
@@ -515,7 +520,7 @@ struct Water : public Propagator<_T>
         // one mole of water has volume of 18 milliliters
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
 
-#ifdef NDEBUG
+#if 0
         this->m_atoms.resize(3 * nWaterMolecules);
 #else
         // debug can't simulate all molecules - too slow
