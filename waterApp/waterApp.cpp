@@ -82,6 +82,42 @@ struct MyViewer : public Viewer
         Viewer::resize(3840, 2160);
     }
 
+    virtual bool key_press_event(int key, int modifiers)
+    {
+        if (key == GLFW_KEY_SPACE)
+        {
+            m_bSimulationPaused = !m_bSimulationPaused;
+        }
+        return false;
+    }
+    virtual bool mouse_press_event(int x, int y, int button, int modifiers)
+    {
+        bool bFound = false;
+        vec3 vPickedPos = point_under_pixel(x, y, bFound);
+        if (bFound)
+        {
+            double fDistSqrMin = 1e38;
+            const std::vector<Atom<T>>& atoms = m_water.getAtoms();
+            // find the closest atom to picked point
+            for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
+            {
+                vec3 vAtomPos = toVec3(atoms[uAtom].m_vPos);
+                vec3 v = vAtomPos - vPickedPos;
+                double fDistSqr = dot(v, v);
+                if (fDistSqr < fDistSqrMin)
+                {
+                    fDistSqrMin = fDistSqr;
+                    m_pickedAtomIndex = uAtom;
+                }
+            }
+        }
+        else
+        {
+            m_pickedAtomIndex = -1;
+        }
+        return false;
+    }
+
     void updateVertexBuffers()
     {
         // update vertex buffer for atom drawables
@@ -143,16 +179,16 @@ struct MyViewer : public Viewer
             if (!forces.isValid(uForce))
                 continue;
             const Force<T> &force = forces.accessForceByIndex(uForce);
-            if (!force.shouldDraw())
+            if (force.getAtom1Index() != m_pickedAtomIndex && force.getAtom2Index() != m_pickedAtomIndex)
                 continue;
 
             const auto& atom1 = atoms[force.getAtom1Index()];
             const auto& atom2 = atoms[force.getAtom2Index()];
 
-            auto atom1Pos = toVec3(atom1.m_vPos);
-            auto atom2Pos = toVec3(atom2.m_vPos);
-            auto vDir1 = atom1Pos - atom2Pos;
-            auto vDir2 = toVec3(m_water.computeDir(atom1, atom2));
+            vec3 atom1Pos = toVec3(atom1.m_vPos);
+            vec3 atom2Pos = toVec3(atom2.m_vPos);
+            vec3 vDir1 = atom1Pos - atom2Pos;
+            vec3 vDir2 = toVec3(m_water.computeDir(atom1, atom2));
             // if vDir1 is large - this means dir wraps around the bounding box - we have to draw two lines
             if (dot(vDir1, vDir1) > 2 * dot(vDir2, vDir2))
             {
@@ -177,7 +213,10 @@ private:
         if (!m_bIsFirstDraw)
         {
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
-            m_water.makeTimeStep();
+            if (!m_bSimulationPaused)
+            {
+                m_water.makeTimeStep();
+            }
         }
         m_prevDrawTS = curTS;
         updateVertexBuffers();
@@ -218,6 +257,14 @@ private:
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
+        if (m_pickedAtomIndex != -1)
+        {
+            x += 400;
+            sprintf_s(sBuffer, "PickedAtom: %d", m_pickedAtomIndex);
+            texter_->draw(sBuffer,
+                x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
+                line_spacing_, upper_left_);
+        }
     }
 
     bool m_bIsFirstDraw = true;
@@ -227,6 +274,9 @@ private:
     LinesDrawable* m_pBoxDrawable = nullptr, *m_pBondsDrawable = nullptr;
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
+
+    bool m_bSimulationPaused = false;
+    NvU32 m_pickedAtomIndex = -1;
 
     // for text rendering:
     float font_size_delta_ = -20;
