@@ -16,7 +16,7 @@ using namespace easy3d;
 
 inline static vec3 toVec3(const rtvector<MyUnits<double>, 3>& v)
 {
-    return vec3((float)v[0].m_value, (float)v[1].m_value, (float)v[2].m_value);
+    return vec3((float)v[0], (float)v[1], (float)v[2]);
 }
 
 struct MyPointsDrawable : public PointsDrawable
@@ -48,7 +48,7 @@ static vec3 getBoxVertex(const BBox3<MyUnits<double>>& bbox, NvU32 u)
     vec3 r;
     for (NvU32 uBit = 0; uBit < 3; ++uBit)
     {
-        r[uBit] = (float)removeUnits((u & (1 << uBit)) ? bbox.m_vMin[uBit] : bbox.m_vMax[uBit]);
+        r[uBit] = (float)((u & (1 << uBit)) ? bbox.m_vMin[uBit] : bbox.m_vMax[uBit]);
     }
     return r;
 }
@@ -240,20 +240,20 @@ private:
 
         char sBuffer[64];
         MyUnits<T> fFilteredAverageKin = m_water.getFilteredAverageKin();
-        double fAverageTempC = fFilteredAverageKin.toCelcius();
+        double fAverageTempC = MyUnits1<double>::toCelcius(fFilteredAverageKin);
         sprintf_s(sBuffer, "T(C): %.1lf", fAverageTempC);
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
         MyUnits<T> fTotalKin = fFilteredAverageKin * (double)m_water.getAtoms().size();
-        MyUnits<T> fPressure = MyUnits<T>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
-        sprintf_s(sBuffer, "P(atm): %.1lf", fPressure.toAtmospheres());
+        MyUnits<T> fPressure = MyUnits1<T>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
+        sprintf_s(sBuffer, "P(atm): %.1lf", MyUnits1<double>::toAtmospheres(fPressure));
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", m_water.getCurTimeStep().toFemtoseconds(), (NvU32)m_water.getForces().size());
+        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", MyUnits1<double>::toFemtoseconds(m_water.getCurTimeStep()), (NvU32)m_water.getForces().size());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);

@@ -17,7 +17,7 @@ struct GlobalState
     GlobalState()
     {
         m_fWantedTempC = 37;
-        m_fWantedAvgKin = MyUnits<T>::fromCelcius(m_fWantedTempC);
+        m_fWantedAvgKin = MyUnits1<T>::fromCelcius(m_fWantedTempC);
         // let's take a hydrogen atom having average kinetic energy
         // mHydrogen * V^2 / 2 = m_fDerivedAverageKin
         // then the V would be equal to sqrt(2 * m_fDerivedAverageKin) / mHydrogen
@@ -65,7 +65,7 @@ struct SpeedScaler
         if (fFilteredAverageKin < m_globalState.getWantedAvgKin())
             return;
         // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
-        double fScaleCoeff = (m_globalState.getWantedAvgKin() / fFilteredAverageKin).m_value;
+        double fScaleCoeff = (m_globalState.getWantedAvgKin() / fFilteredAverageKin);
         double fScaleCoeffSqrt = sqrt(fScaleCoeff);
         MyUnits<T> fSmallKinThreshold = m_globalState.getWantedAvgKin() / 2;
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
@@ -91,7 +91,7 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
 {
     BoxWrapper(MyUnits<T> fBoxSide = MyUnits<T>(1.))
     {
-        m_fBoxSize = fBoxSide.m_value;
+        m_fBoxSize = fBoxSide;
         m_fHalfBoxSize = m_fBoxSize / 2.;
         this->m_vMin = makeVector<MyUnits<T>, 3>(MyUnits<T>(-m_fHalfBoxSize));
         this->m_vMax = makeVector<MyUnits<T>, 3>(MyUnits<T>( m_fHalfBoxSize));
@@ -105,16 +105,16 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
             if (vNewPos[uDim] < this->m_vMin[uDim])
             {
                 auto fOvershoot = (this->m_vMin[uDim] - vNewPos[uDim]);
-                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                vNewPos[uDim].m_value += m_fBoxSize * nBoxSizes;
+                int nBoxSizes = 1 + (int)(fOvershoot / m_fBoxSize);
+                vNewPos[uDim] += m_fBoxSize * nBoxSizes;
                 nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
                 continue;
             }
             if (vNewPos[uDim] > this->m_vMax[uDim])
             {
                 auto fOvershoot = (vNewPos[uDim] - this->m_vMax[uDim]);
-                int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                vNewPos[uDim].m_value -= m_fBoxSize * nBoxSizes;
+                int nBoxSizes = 1 + (int)(fOvershoot / m_fBoxSize);
+                vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
                 nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
             }
         }
@@ -126,8 +126,8 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
         rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos - atom2.m_vPos;
         for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
         {
-            if (vOutDir[uDim].m_value < -m_fHalfBoxSize) vOutDir[uDim].m_value += m_fBoxSize;
-            else if (vOutDir[uDim].m_value > m_fHalfBoxSize) vOutDir[uDim].m_value -= m_fBoxSize;
+            if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
+            else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
         }
         return vOutDir;
     }
@@ -137,15 +137,15 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
         for (NvU32 uDim = 0; uDim < 3; ++uDim)
         {
             // compute distance between centers
-            T fCenterDist = abs((b1.m_vMax[uDim].m_value + b1.m_vMin[uDim].m_value) - (b2.m_vMax[uDim].m_value + b2.m_vMin[uDim].m_value)) / 2;
+            T fCenterDist = abs((b1.m_vMax[uDim] + b1.m_vMin[uDim]) - (b2.m_vMax[uDim] + b2.m_vMin[uDim])) / 2;
             // wrap the distance around
             fCenterDist -= m_fBoxSize * (int)(fCenterDist / m_fBoxSize);
             if (fCenterDist > m_fHalfBoxSize) fCenterDist = m_fBoxSize - fCenterDist;
             // subtract half box sizes
-            fCenterDist -= ((b1.m_vMax[uDim].m_value - b1.m_vMin[uDim].m_value) + (b2.m_vMax[uDim].m_value - b2.m_vMin[uDim].m_value)) / 2;
+            fCenterDist -= ((b1.m_vMax[uDim] - b1.m_vMin[uDim]) + (b2.m_vMax[uDim] - b2.m_vMin[uDim])) / 2;
             fCenterDist = std::max(0., fCenterDist);
             fDistSqr += sqr(fCenterDist);
-            if (fDistSqr >= _fDistSqr.m_value)
+            if (fDistSqr >= _fDistSqr)
                 return true;
         }
         return false;
@@ -239,11 +239,11 @@ struct PropagatorAtom
     }
 
 private:
-    MyUnits<T> m_fBeginTime;
+    T m_fBeginTime = 0;
 #if ASSERT_ONLY_CODE
     enum DBG_STATE { DBG_NOT_INITED = 0, DBG_INITED = 1, DBG_STEP1_DONE, DBG_STEP2_DONE };
     DBG_STATE m_dbgState = DBG_NOT_INITED;
-    MyUnits<T> m_fDbgEndTime;
+    T m_fDbgEndTime = 0;
 #endif
     MyUnits3<T> m_vBeginPos, m_vBeginSpeed, m_vBeginForce, m_vEndForce;
 };
@@ -451,17 +451,13 @@ struct Propagator
 {
     Propagator()
     {
-#if 0
-        m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 20);
-#else
-        m_c.m_bBox = BoxWrapper<T>(MyUnits<T>::angstrom() * 15);
-#endif
+        m_c.m_bBox = BoxWrapper<T>(MyUnits1<T>::angstrom() * 15);
     }
 
     const ForceMap<T>& getForces() const { return m_c.m_forces; }
     const std::vector<Atom<T>>& getAtoms() const { return m_c.m_atoms; }
     const MyUnits<T>& getCurTimeStep() const { return m_fTimeStep; }
-    rtvector<T, 3> getPointPos(const NvU32 index) const { return removeUnits(m_c.m_atoms[index].m_vPos); }
+    rtvector<T, 3> getPointPos(const NvU32 index) const { return m_c.m_atoms[index].m_vPos; }
     rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_c.m_bBox.computeDir(atom1, atom2); }
     const BBox3<MyUnits<T>>& getBoundingBox() const { return m_c.m_bBox; }
 
@@ -515,7 +511,7 @@ protected:
     PrContext<T> m_c;
 
 private:
-    MyUnits<T> m_fTimeStep = MyUnits<T>::nanoSecond() * 0.0000000005;
+    T m_fTimeStep = MyUnits1<T>::nanoSecond() * 0.0000000005;
     SimLayer<T> m_topSimLayer; // top simulation layer
 };
 
@@ -532,7 +528,7 @@ struct Water : public Propagator<_T>
     {
         MyUnits<T> volume = this->m_c.m_bBox.evalVolume();
         // one mole of water has volume of 18 milliliters
-        NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume.m_value / MyUnits<T>::milliLiter().m_value / 18);
+        NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume / MyUnits1<T>::milliLiter() / 18);
 
 #if 0
         this->m_atoms.resize(3 * nWaterMolecules);
@@ -585,7 +581,7 @@ struct Water : public Propagator<_T>
         this->propagate();
 
         MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
-        m_averageKinFilter.addValue(fInstantaneousAverageKin.m_value);
+        m_averageKinFilter.addValue(fInstantaneousAverageKin);
         MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
 
         m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
@@ -609,8 +605,8 @@ struct Water : public Propagator<_T>
         // check if we can treat srcNode as one point as opposed to looking at its individual sub-boxes or points
         if (leafIndex != nodeIndex)
         {
-            const auto& leafBox = setUnits<MyUnits<T>>(leafStack.getCurBox());
-            const auto& nodeBox = setUnits<MyUnits<T>>(nodeStack.getCurBox());
+            const auto& leafBox = leafStack.getCurBox();
+            const auto& nodeBox = nodeStack.getCurBox();
             // if boxes are too far - particles can't affect each other - rule that interactions are accounted for
             if (this->m_c.m_bBox.areBoxesFartherThan(leafBox, nodeBox, BondsDataBase<T>::s_zeroForceDistSqr))
             {
@@ -667,13 +663,13 @@ private:
     {
         this->dissociateWeakBonds();
 
-        m_ocTree.rebuild(removeUnits(this->m_c.m_bBox), (NvU32)this->m_c.m_atoms.size());
+        m_ocTree.rebuild(this->m_c.m_bBox, (NvU32)this->m_c.m_atoms.size());
 
 #if ASSERT_ONLY_CODE
         m_dbgNContributions = 0;
 #endif
 
-        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, removeUnits(this->m_c.m_bBox), *this);
+        m_ocTree.m_nodes[0].addNode2NodeInteractions(0, this->m_c.m_bBox, *this);
         nvAssert(m_dbgNContributions == this->m_c.m_atoms.size() * (this->m_c.m_atoms.size() - 1));
     }
 
