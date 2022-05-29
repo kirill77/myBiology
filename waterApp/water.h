@@ -91,10 +91,10 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
 {
     BoxWrapper(MyUnits<T> fBoxSide = MyUnits<T>(1.))
     {
-        m_fBoxSize = fBoxSide;
+        m_fBoxSize = fBoxSide.m_value;
         m_fHalfBoxSize = m_fBoxSize / 2.;
-        this->m_vMin = makeVector<MyUnits<T>, 3>(-m_fHalfBoxSize);
-        this->m_vMax = makeVector<MyUnits<T>, 3>( m_fHalfBoxSize);
+        this->m_vMin = makeVector<MyUnits<T>, 3>(MyUnits<T>(-m_fHalfBoxSize));
+        this->m_vMax = makeVector<MyUnits<T>, 3>(MyUnits<T>( m_fHalfBoxSize));
     }
     // if the atom exits bounding box, it enters from the other side
     MyUnits3<T> wrapThePos(const MyUnits3<T>& vPos) const
@@ -106,7 +106,7 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
             {
                 auto fOvershoot = (this->m_vMin[uDim] - vNewPos[uDim]);
                 int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                vNewPos[uDim] += m_fBoxSize * nBoxSizes;
+                vNewPos[uDim].m_value += m_fBoxSize * nBoxSizes;
                 nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
                 continue;
             }
@@ -114,7 +114,7 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
             {
                 auto fOvershoot = (vNewPos[uDim] - this->m_vMax[uDim]);
                 int nBoxSizes = 1 + (int)removeUnits(fOvershoot / m_fBoxSize);
-                vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
+                vNewPos[uDim].m_value -= m_fBoxSize * nBoxSizes;
                 nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
             }
         }
@@ -126,14 +126,33 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
         rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos - atom2.m_vPos;
         for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
         {
-            if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
-            else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
+            if (vOutDir[uDim].m_value < -m_fHalfBoxSize) vOutDir[uDim].m_value += m_fBoxSize;
+            else if (vOutDir[uDim].m_value > m_fHalfBoxSize) vOutDir[uDim].m_value -= m_fBoxSize;
         }
         return vOutDir;
     }
+    bool areBoxesFartherThan(const BBox3<MyUnits<T>>& b1, const BBox3<MyUnits<T>>& b2, MyUnits<T> _fDistSqr)
+    {
+        T fDistSqr = 0;
+        for (NvU32 uDim = 0; uDim < 3; ++uDim)
+        {
+            // compute distance between centers
+            T fCenterDist = abs((b1.m_vMax[uDim].m_value + b1.m_vMin[uDim].m_value) - (b2.m_vMax[uDim].m_value + b2.m_vMin[uDim].m_value)) / 2;
+            // wrap the distance around
+            fCenterDist -= m_fBoxSize * (int)(fCenterDist / m_fBoxSize);
+            if (fCenterDist > m_fHalfBoxSize) fCenterDist = m_fBoxSize - fCenterDist;
+            // subtract half box sizes
+            fCenterDist -= ((b1.m_vMax[uDim].m_value - b1.m_vMin[uDim].m_value) + (b2.m_vMax[uDim].m_value - b2.m_vMin[uDim].m_value)) / 2;
+            fCenterDist = std::max(0., fCenterDist);
+            fDistSqr += sqr(fCenterDist);
+            if (fDistSqr >= _fDistSqr.m_value)
+                return true;
+        }
+        return false;
+    }
 
 private:
-    MyUnits<T> m_fBoxSize, m_fHalfBoxSize;
+    T m_fBoxSize, m_fHalfBoxSize;
 };
 
 // * SimLayer provides hierarchy of diminishing timesteps for select atoms that require high accuracy (I call these the Detail atoms)
@@ -410,7 +429,6 @@ private:
             }
             if (uPass == 0)
             {
-                nvAssert(fabs(forceData.fNormalizedForce) < 1000);
                 prForce.m_fNormalizedForce0 = forceData.fNormalizedForce;
             }
             // if the normalized force has changed more than the threshold - need to simulate in more detail
@@ -419,10 +437,6 @@ private:
                 // since the force is changing dramatically, we have to move both atoms to most detail level of simulation
                 c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom1);
                 c.m_atomLayers.moveToLayer(m_uLevel + 1, uAtom2);
-            }
-            else
-            {
-                nvAssert(fabs(forceData.fNormalizedForce) < 1000);
             }
         }
     }
@@ -598,24 +612,12 @@ struct Water : public Propagator<_T>
             const auto& leafBox = setUnits<MyUnits<T>>(leafStack.getCurBox());
             const auto& nodeBox = setUnits<MyUnits<T>>(nodeStack.getCurBox());
             // if boxes are too far - particles can't affect each other - rule that interactions are accounted for
-            MyUnits<T> fDistSqr;
-            for (NvU32 uDim = 0; uDim < 3; ++uDim)
+            if (this->m_c.m_bBox.areBoxesFartherThan(leafBox, nodeBox, BondsDataBase<T>::s_zeroForceDistSqr))
             {
-                // add distance in this dimension to the square sum
-                if (leafBox.m_vMin[uDim] > nodeBox.m_vMax[uDim])
-                    fDistSqr += sqr(leafBox.m_vMin[uDim] - nodeBox.m_vMax[uDim]);
-                else if (nodeBox.m_vMin[uDim] > leafBox.m_vMax[uDim])
-                    fDistSqr += sqr(nodeBox.m_vMin[uDim] - leafBox.m_vMax[uDim]);
-                else continue;
-
-                // if result got too large - this means boxes are too far - bail out
-                if (fDistSqr >= BondsDataBase<T>::s_zeroForceDistSqr)
-                {
 #if ASSERT_ONLY_CODE
-                    m_dbgNContributions += 2 * m_ocTree.m_nodes[leafIndex].getNPoints() * m_ocTree.m_nodes[nodeIndex].getNPoints();
+                m_dbgNContributions += 2 * m_ocTree.m_nodes[leafIndex].getNPoints() * m_ocTree.m_nodes[nodeIndex].getNPoints();
 #endif
-                    return true;
-                }
+                return true;
             }
             // we want to descend until leafs because it's possible some nodes will be cut off early that way
             auto& node = m_ocTree.m_nodes[nodeIndex];
