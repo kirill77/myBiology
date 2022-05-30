@@ -608,7 +608,7 @@ struct Water : public Propagator<_T>
             const auto& leafBox = leafStack.getCurBox();
             const auto& nodeBox = nodeStack.getCurBox();
             // if boxes are too far - particles can't affect each other - rule that interactions are accounted for
-            if (this->m_c.m_bBox.areBoxesFartherThan(leafBox, nodeBox, BondsDataBase<T>::s_zeroForceDistSqr))
+            if (this->m_c.m_bBox.areBoxesFartherThan(leafBox, nodeBox, EBond<T>::s_zeroForceDistSqr))
             {
 #if ASSERT_ONLY_CODE
                 m_dbgNContributions += 2 * m_ocTree.m_nodes[leafIndex].getNPoints() * m_ocTree.m_nodes[nodeIndex].getNPoints();
@@ -635,24 +635,15 @@ struct Water : public Propagator<_T>
                 auto& atom1 = this->m_c.m_atoms[uPoint1];
                 auto vDir = this->m_c.m_bBox.computeDir(atom1, atom2);
                 auto fLengthSqr = lengthSquared(vDir);
-                if (fLengthSqr >= BondsDataBase<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
+                if (fLengthSqr >= EBond<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {
                     continue;
                 }
 
-                for (NvU32 uBond1 = 0; ; ++uBond1)
-                {
-                    if (uBond1 >= atom1.getNBonds())
-                    {
-                        this->m_c.m_forces.createForce(uPoint1, uPoint2);
-                        break;
-                    }
-                    // if this is covalent bond - we don't need to add it - it must already be in the list of forces
-                    if (atom1.getBond(uBond1) == uPoint2)
-                    {
-                        break;
-                    }
-                }
+                NvU32 uForce = this->m_c.m_forces.createForce(uPoint1, uPoint2);
+                auto& force = this->m_c.m_forces.accessForceByIndex(uForce);
+                // this should create covalent bond if conditions are right
+                force.createCovalentBondIfNeeded(atom1, atom2, fLengthSqr);
             }
         }
         return true;

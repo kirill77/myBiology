@@ -179,8 +179,13 @@ struct MyViewer : public Viewer
             if (!forces.isValid(uForce))
                 continue;
             const Force<T> &force = forces.accessForceByIndex(uForce);
+#if 1
+            if (!force.isCovalentBond())
+                continue;
+#else
             if (force.getAtom1Index() != m_pickedAtomIndex && force.getAtom2Index() != m_pickedAtomIndex)
                 continue;
+#endif
 
             const auto& atom1 = atoms[force.getAtom1Index()];
             const auto& atom2 = atoms[force.getAtom2Index()];
