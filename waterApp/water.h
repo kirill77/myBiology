@@ -66,7 +66,7 @@ struct SpeedScaler
             return;
         // if the speeds get too high - scale them to achieve required average kinetic energy (and thus required avg. temp)
         double fScaleCoeff = (m_globalState.getWantedAvgKin() / fFilteredAverageKin);
-        double fScaleCoeffSqrt = sqrt(fScaleCoeff);
+        T fScaleCoeffSqrt = (T)sqrt(fScaleCoeff);
         MyUnits<T> fSmallKinThreshold = m_globalState.getWantedAvgKin() / 2;
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
         {
@@ -143,7 +143,7 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
             if (fCenterDist > m_fHalfBoxSize) fCenterDist = m_fBoxSize - fCenterDist;
             // subtract half box sizes
             fCenterDist -= ((b1.m_vMax[uDim] - b1.m_vMin[uDim]) + (b2.m_vMax[uDim] - b2.m_vMin[uDim])) / 2;
-            fCenterDist = std::max(0., fCenterDist);
+            fCenterDist = std::max((T)0, fCenterDist);
             fDistSqr += sqr(fCenterDist);
             if (fDistSqr >= _fDistSqr)
                 return true;

@@ -14,7 +14,8 @@
 
 using namespace easy3d;
 
-inline static vec3 toVec3(const rtvector<MyUnits<double>, 3>& v)
+template <class T>
+inline static vec3 toVec3(const rtvector<MyUnits<T>, 3>& v)
 {
     return vec3((float)v[0], (float)v[1], (float)v[2]);
 }
@@ -43,7 +44,8 @@ private:
     std::vector<vec3> m_points;
 };
 
-static vec3 getBoxVertex(const BBox3<MyUnits<double>>& bbox, NvU32 u)
+template <class T>
+static vec3 getBoxVertex(const BBox3<MyUnits<T>>& bbox, NvU32 u)
 {
     vec3 r;
     for (NvU32 uBit = 0; uBit < 3; ++uBit)
@@ -251,8 +253,8 @@ private:
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        MyUnits<T> fTotalKin = fFilteredAverageKin * (double)m_water.getAtoms().size();
-        MyUnits<T> fPressure = MyUnits1<T>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
+        double fTotalKin = fFilteredAverageKin * (double)m_water.getAtoms().size();
+        double fPressure = MyUnits1<double>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
         sprintf_s(sBuffer, "P(atm): %.1lf", MyUnits1<double>::toAtmospheres(fPressure));
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
@@ -314,7 +316,7 @@ int main(int argc, char** argv)
 
     // Create the default Easy3D viewer.
     // Note: a viewer must be created before creating any drawables.
-    MyViewer<double> myModel;
+    MyViewer<float> myModel;
     auto result = myModel.run();
 
     return result;
