@@ -82,6 +82,8 @@ struct MyViewer : public Viewer
         Viewer::add_drawable(m_pBondsDrawable);
 
         Viewer::resize(3840, 2160);
+
+        m_water.init();
     }
 
     virtual bool key_press_event(int key, int modifiers)
@@ -239,8 +241,9 @@ private:
         Viewer::draw();
 
         const float font_size = 40.0f + font_size_delta_;
-        float x = 50.0f;
-        float y = 80.0f;
+        const float fLeftBoundary = 50.0f, fTopBoundary = 80.0f;
+        float x = fLeftBoundary;
+        float y = fTopBoundary;
 
         const int num_fonts = texter_->num_fonts();
         const float font_height = texter_->font_height(font_size);
@@ -264,6 +267,15 @@ private:
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
+
+        x = fLeftBoundary;
+        y += 40;
+        auto& network = m_water.getNeuralNetwork();
+        sprintf_s(sBuffer, "NN Cluster: %d, MB: %.2f", network.getMaxClusterSize(), network.getNBytes() / (double)(1024 * 1024));
+        texter_->draw(sBuffer,
+            x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
+            line_spacing_, upper_left_);
+
         if (m_pickedAtomIndex != -1)
         {
             x += 400;

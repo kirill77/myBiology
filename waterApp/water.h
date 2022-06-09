@@ -8,6 +8,7 @@
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
+#include "neural/network.h"
 
 extern NvU32 g_debugCount;
 
@@ -92,7 +93,7 @@ struct BoxWrapper : public BBox3<MyUnits<T>>
     BoxWrapper(MyUnits<T> fBoxSide = MyUnits<T>(1.))
     {
         m_fBoxSize = fBoxSide;
-        m_fHalfBoxSize = m_fBoxSize / 2.;
+        m_fHalfBoxSize = m_fBoxSize / 2;
         this->m_vMin = makeVector<MyUnits<T>, 3>(MyUnits<T>(-m_fHalfBoxSize));
         this->m_vMax = makeVector<MyUnits<T>, 3>(MyUnits<T>( m_fHalfBoxSize));
     }
@@ -496,7 +497,9 @@ struct Propagator
             if (force.dissociateWeakBond(atom1, atom2, m_c.m_bBox))
             {
                 m_c.m_forces.notifyForceDissociated(uForce);
+                continue;
             }
+            force.setPrevCovalentState(force.isCovalentBond());
         }
     }
 
@@ -511,7 +514,7 @@ protected:
     PrContext<T> m_c;
 
 private:
-    T m_fTimeStep = MyUnits1<T>::nanoSecond() * 0.0000000005;
+    T m_fTimeStep = (T)(MyUnits1<T>::nanoSecond() * 0.0000000005);
     SimLayer<T> m_topSimLayer; // top simulation layer
 };
 
@@ -526,6 +529,10 @@ struct Water : public Propagator<_T>
 
     Water() : m_ocTree(*this)
     {
+    }
+
+    void init()
+    {
         MyUnits<T> volume = this->m_c.m_bBox.evalVolume();
         // one mole of water has volume of 18 milliliters
         NvU32 nWaterMolecules = (NvU32)(AVOGADRO * volume / MyUnits1<T>::milliLiter() / 18);
@@ -539,7 +546,7 @@ struct Water : public Propagator<_T>
 
         for (NvU32 u = 0, nOs = 0, nHs = 0; u < this->m_c.m_atoms.size(); ++u)
         {
-            Atom<T> &atom = this->m_c.m_atoms[u];
+            Atom<T>& atom = this->m_c.m_atoms[u];
             if (nHs < nOs * 2)
             {
                 atom = Atom<T>(NPROTONS_H);
@@ -551,11 +558,11 @@ struct Water : public Propagator<_T>
                 ++nOs;
             }
 
-            rtvector<MyUnits<T>, 3> vNewPos;
+            rtvector<T, 3> vNewPos;
             for (NvU32 uDim = 0; uDim < 3; ++uDim)
             {
                 double f = m_rng.generate01();
-                vNewPos[uDim] = this->m_c.m_bBox.m_vMin[uDim] * f + this->m_c.m_bBox.m_vMax[uDim] * (1 - f);
+                vNewPos[uDim] = (T)(this->m_c.m_bBox.m_vMin[uDim] * f + this->m_c.m_bBox.m_vMax[uDim] * (1 - f));
             }
             atom.m_vPos = vNewPos;
             m_rng.nextSeed();
@@ -567,6 +574,8 @@ struct Water : public Propagator<_T>
         }
 
         this->m_c.m_forces.init((NvU32)this->m_c.m_atoms.size());
+
+        m_neuralNetwork.init(this->m_c.m_atoms);
     }
 
     MyUnits<T> getFilteredAverageKin() const
@@ -574,9 +583,13 @@ struct Water : public Propagator<_T>
         return MyUnits<T>(m_averageKinFilter.getAverage());
     }
 
+    const auto& getNeuralNetwork() const { return m_neuralNetwork; }
+
     void makeTimeStep()
     {
         updateListOfForces();
+
+        m_neuralNetwork.notifyStepBeginning(this->m_c.m_atoms, this->m_c.m_forces);
 
         this->propagate();
 
@@ -585,6 +598,8 @@ struct Water : public Propagator<_T>
         MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
 
         m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
+
+        m_neuralNetwork.notifyStepDone(this->m_c.m_atoms, this->m_c.m_forces);
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -673,4 +688,6 @@ private:
 #if ASSERT_ONLY_CODE
     NvU64 m_dbgNContributions = 0;
 #endif
+
+    NeuralNetwork<T, 64> m_neuralNetwork;
 };
