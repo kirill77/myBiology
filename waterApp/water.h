@@ -8,7 +8,7 @@
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
-#include "neural/network.h"
+#include "neural/atomsNetwork.h"
 
 extern NvU32 g_debugCount;
 
@@ -583,7 +583,7 @@ struct Water : public Propagator<_T>
         return MyUnits<T>(m_averageKinFilter.getAverage());
     }
 
-    const auto& getNeuralNetwork() const { return m_neuralNetwork; }
+    auto& accessNeuralNetwork() { return m_neuralNetwork; }
 
     void makeTimeStep()
     {
@@ -689,5 +689,5 @@ private:
     NvU64 m_dbgNContributions = 0;
 #endif
 
-    NeuralNetwork<T, 64> m_neuralNetwork;
+    AtomsNetwork<T, 64> m_neuralNetwork;
 };

@@ -224,11 +224,19 @@ private:
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
             if (!m_bSimulationPaused)
             {
-                m_water.makeTimeStep();
+                auto& network = m_water.accessNeuralNetwork();
+                if (!network.hasEnoughData())
+                {
+                    m_water.makeTimeStep();
+                    updateVertexBuffers();
+                }
             }
         }
+        else
+        {
+            updateVertexBuffers();
+        }
         m_prevDrawTS = curTS;
-        updateVertexBuffers();
         if (m_bIsFirstDraw)
         {
             this->fit_screen();
@@ -249,6 +257,18 @@ private:
         const float font_height = texter_->font_height(font_size);
 
         char sBuffer[64];
+
+        auto& network = m_water.accessNeuralNetwork();
+        if (network.hasEnoughData())
+        {
+            double fLossValue = network.train(64);
+            sprintf_s(sBuffer, "Loss: %lf", fLossValue);
+            texter_->draw(sBuffer,
+                x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
+                line_spacing_, upper_left_);
+            return;
+        }
+
         MyUnits<T> fFilteredAverageKin = m_water.getFilteredAverageKin();
         double fAverageTempC = MyUnits1<double>::toCelcius(fFilteredAverageKin);
         sprintf_s(sBuffer, "T(C): %.1lf", fAverageTempC);
@@ -270,7 +290,6 @@ private:
 
         x = fLeftBoundary;
         y += 40;
-        auto& network = m_water.getNeuralNetwork();
         sprintf_s(sBuffer, "NN Cluster: %d, MB: %.2f", network.getMaxClusterSize(), network.getNBytes() / (double)(1024 * 1024));
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
