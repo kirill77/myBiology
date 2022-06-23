@@ -217,6 +217,9 @@
     <ProjectReference Include="..\MonteCarlo\MonteCarlo.vcxproj">
       <Project>{b21ff890-4353-4486-9091-4bf3e4348b34}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\neural\neural.vcxproj">
+      <Project>{5b6023cf-cce0-48e8-9864-c75a9a2b2b6a}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ocTree\ocTree.h" />

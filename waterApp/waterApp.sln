@@ -4,6 +4,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 16.0.30413.136
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "waterApp", "waterApp.vcxproj", "{39A3E85D-4389-4884-8F3C-513C8052B476}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A} = {5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "easy3d", "easy3d", "{8939D4B4-5CA5-4AD0-ADDB-79EA638E994A}"
 EndProject
@@ -56,6 +59,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pathIntegrals", "..\pathInt
 		{80055C89-FBEB-4A0C-AD51-58B5F8F98A93} = {80055C89-FBEB-4A0C-AD51-58B5F8F98A93}
 		{B21FF890-4353-4486-9091-4BF3E4348B34} = {B21FF890-4353-4486-9091-4BF3E4348B34}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "neural", "..\neural\neural.vcxproj", "{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -361,6 +366,22 @@ Global
 		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x64.Build.0 = Release|x64
 		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
 		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x86.Build.0 = Release|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x64.ActiveCfg = Debug|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x64.Build.0 = Debug|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x86.ActiveCfg = Debug|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x86.Build.0 = Debug|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.MinSizeRel|x64.ActiveCfg = Debug|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.MinSizeRel|x64.Build.0 = Debug|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.MinSizeRel|x86.ActiveCfg = Debug|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.MinSizeRel|x86.Build.0 = Debug|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Release|x64.ActiveCfg = Release|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Release|x64.Build.0 = Release|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Release|x86.ActiveCfg = Release|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Release|x86.Build.0 = Release|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x64.ActiveCfg = Release|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x64.Build.0 = Release|x64
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
+		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

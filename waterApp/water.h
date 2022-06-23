@@ -86,76 +86,6 @@ private:
     GlobalState<T> m_globalState;
 };
 
-// class used to wrap coordinates and directions so that everything stays inside the simulation boundind box
-template <class T>
-struct BoxWrapper : public BBox3<MyUnits<T>>
-{
-    BoxWrapper(MyUnits<T> fBoxSide = MyUnits<T>(1.))
-    {
-        m_fBoxSize = fBoxSide;
-        m_fHalfBoxSize = m_fBoxSize / 2;
-        this->m_vMin = makeVector<MyUnits<T>, 3>(MyUnits<T>(-m_fHalfBoxSize));
-        this->m_vMax = makeVector<MyUnits<T>, 3>(MyUnits<T>( m_fHalfBoxSize));
-    }
-    // if the atom exits bounding box, it enters from the other side
-    MyUnits3<T> wrapThePos(const MyUnits3<T>& vPos) const
-    {
-        MyUnits3<T> vNewPos = vPos;
-        for (NvU32 uDim = 0; uDim < 3; ++uDim)
-        {
-            if (vNewPos[uDim] < this->m_vMin[uDim])
-            {
-                auto fOvershoot = (this->m_vMin[uDim] - vNewPos[uDim]);
-                int nBoxSizes = 1 + (int)(fOvershoot / m_fBoxSize);
-                vNewPos[uDim] += m_fBoxSize * nBoxSizes;
-                nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
-                continue;
-            }
-            if (vNewPos[uDim] > this->m_vMax[uDim])
-            {
-                auto fOvershoot = (vNewPos[uDim] - this->m_vMax[uDim]);
-                int nBoxSizes = 1 + (int)(fOvershoot / m_fBoxSize);
-                vNewPos[uDim] -= m_fBoxSize * nBoxSizes;
-                nvAssert(this->m_vMin[uDim] <= vNewPos[uDim] && vNewPos[uDim] <= this->m_vMax[uDim]);
-            }
-        }
-        nvAssert(this->includes(vNewPos)); // atom must be inside the bounding box
-        return vNewPos;
-    }
-    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const
-    {
-        rtvector<MyUnits<T>, 3> vOutDir = atom1.m_vPos - atom2.m_vPos;
-        for (NvU32 uDim = 0; uDim < 3; ++uDim) // particles positions must wrap around the boundary of bounding box
-        {
-            if (vOutDir[uDim] < -m_fHalfBoxSize) vOutDir[uDim] += m_fBoxSize;
-            else if (vOutDir[uDim] > m_fHalfBoxSize) vOutDir[uDim] -= m_fBoxSize;
-        }
-        return vOutDir;
-    }
-    bool areBoxesFartherThan(const BBox3<MyUnits<T>>& b1, const BBox3<MyUnits<T>>& b2, MyUnits<T> _fDistSqr)
-    {
-        T fDistSqr = 0;
-        for (NvU32 uDim = 0; uDim < 3; ++uDim)
-        {
-            // compute distance between centers
-            T fCenterDist = abs((b1.m_vMax[uDim] + b1.m_vMin[uDim]) - (b2.m_vMax[uDim] + b2.m_vMin[uDim])) / 2;
-            // wrap the distance around
-            fCenterDist -= m_fBoxSize * (int)(fCenterDist / m_fBoxSize);
-            if (fCenterDist > m_fHalfBoxSize) fCenterDist = m_fBoxSize - fCenterDist;
-            // subtract half box sizes
-            fCenterDist -= ((b1.m_vMax[uDim] - b1.m_vMin[uDim]) + (b2.m_vMax[uDim] - b2.m_vMin[uDim])) / 2;
-            fCenterDist = std::max((T)0, fCenterDist);
-            fDistSqr += sqr(fCenterDist);
-            if (fDistSqr >= _fDistSqr)
-                return true;
-        }
-        return false;
-    }
-
-private:
-    T m_fBoxSize, m_fHalfBoxSize;
-};
-
 // * SimLayer provides hierarchy of diminishing timesteps for select atoms that require high accuracy (I call these the Detail atoms)
 // * Each successive SimLayer divides time step by 2x
 // * Detail atoms can be affected by either detail or non-detail atoms (I call latter the Proxy atoms)
@@ -279,13 +209,10 @@ private:
 };
 
 template <class T>
-struct PrContext
+struct PrContext : public SimContext<T>
 {
-    std::vector<Atom<T>> m_atoms;
     std::vector<PropagatorAtom<T>> m_prAtoms;
-    ForceMap<T> m_forces;
     std::vector<PropagatorForce<T>> m_prForces;
-    BoxWrapper<T> m_bBox;
     SparseHierarchy m_atomLayers, m_forceLayers;
     GlobalState<T> m_globalState;
 };
@@ -455,12 +382,9 @@ struct Propagator
         m_c.m_bBox = BoxWrapper<T>(MyUnits1<T>::angstrom() * 15);
     }
 
-    const ForceMap<T>& getForces() const { return m_c.m_forces; }
-    const std::vector<Atom<T>>& getAtoms() const { return m_c.m_atoms; }
-    const MyUnits<T>& getCurTimeStep() const { return m_fTimeStep; }
     rtvector<T, 3> getPointPos(const NvU32 index) const { return m_c.m_atoms[index].m_vPos; }
-    rtvector<MyUnits<T>, 3> computeDir(const Atom<T>& atom1, const Atom<T>& atom2) const { return m_c.m_bBox.computeDir(atom1, atom2); }
-    const BBox3<MyUnits<T>>& getBoundingBox() const { return m_c.m_bBox; }
+    const MyUnits<T>& getCurTimeStep() const { return m_fTimeStep; }
+    const SimContext<T>& getSimContext() const { return this->m_c; }
 
     void propagate()
     {
@@ -583,13 +507,13 @@ struct Water : public Propagator<_T>
         return MyUnits<T>(m_averageKinFilter.getAverage());
     }
 
-    auto& accessNeuralNetwork() { return m_neuralNetwork; }
+    AtomsNetwork<T, 64>& accessNeuralNetwork() { return m_neuralNetwork; }
 
     void makeTimeStep()
     {
         updateListOfForces();
 
-        m_neuralNetwork.notifyStepBeginning(this->m_c.m_atoms, this->m_c.m_forces);
+        m_neuralNetwork.notifyStepBeginning(this->m_c);
 
         this->propagate();
 
@@ -599,7 +523,7 @@ struct Water : public Propagator<_T>
 
         m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
 
-        m_neuralNetwork.notifyStepDone(this->m_c.m_atoms, this->m_c.m_forces);
+        m_neuralNetwork.notifyStepDone(this->m_c);
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -648,7 +572,7 @@ struct Water : public Propagator<_T>
 #endif
                 NvU32 uPoint1 = m_ocTree.getPointIndex(uTreePoint1);
                 auto& atom1 = this->m_c.m_atoms[uPoint1];
-                auto vDir = this->m_c.m_bBox.computeDir(atom1, atom2);
+                auto vDir = this->m_c.m_bBox.computeDir(atom1.m_vPos, atom2.m_vPos);
                 auto fLengthSqr = lengthSquared(vDir);
                 if (fLengthSqr >= EBond<T>::s_zeroForceDistSqr) // if atoms are too far away - disregard
                 {

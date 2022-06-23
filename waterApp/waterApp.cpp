@@ -11,6 +11,7 @@
 #include <3rd_party/glfw/include/GLFW/glfw3.h>	// for the KEYs
 
 #include "water.h"
+#include "neural/neuralTest.h"
 
 using namespace easy3d;
 
@@ -101,7 +102,7 @@ struct MyViewer : public Viewer
         if (bFound)
         {
             double fDistSqrMin = 1e38;
-            const std::vector<Atom<T>>& atoms = m_water.getAtoms();
+            const std::vector<Atom<T>>& atoms = m_water.getSimContext().m_atoms;
             // find the closest atom to picked point
             for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
             {
@@ -125,7 +126,7 @@ struct MyViewer : public Viewer
     void updateVertexBuffers()
     {
         // update vertex buffer for atom drawables
-        const std::vector<Atom<T>>& atoms = m_water.getAtoms();
+        const std::vector<Atom<T>>& atoms = m_water.getSimContext().m_atoms;
         for (NvU32 u = 0, nO = 0, nH = 0; u < atoms.size(); ++u)
         {
             const auto& atom = atoms[u];
@@ -149,7 +150,7 @@ struct MyViewer : public Viewer
         if (!m_pBoxDrawable)
         {
             m_pBoxDrawable = new LinesDrawable;
-            const auto &bbox = m_water.getBoundingBox();
+            const auto &bbox = m_water.getSimContext().m_bBox;
 
             std::vector<vec3> pBuffer;
             for (NvU32 u1 = 0; u1 < 8; ++u1)
@@ -176,7 +177,8 @@ struct MyViewer : public Viewer
         }
 
         // update vertex buffer for bonds drawable
-        const auto& forces = m_water.getForces();
+        const auto& forces = m_water.getSimContext().m_forces;
+        const auto& boxWrapper = m_water.getSimContext().m_bBox;
         m_pBondPoints.resize(0);
         for (NvU32 uForce = 0; uForce < forces.size(); ++uForce)
         {
@@ -197,7 +199,7 @@ struct MyViewer : public Viewer
             vec3 atom1Pos = toVec3(atom1.m_vPos);
             vec3 atom2Pos = toVec3(atom2.m_vPos);
             vec3 vDir1 = atom1Pos - atom2Pos;
-            vec3 vDir2 = toVec3(m_water.computeDir(atom1, atom2));
+            vec3 vDir2 = toVec3(boxWrapper.computeDir(atom1.m_vPos, atom2.m_vPos));
             // if vDir1 is large - this means dir wraps around the bounding box - we have to draw two lines
             if (dot(vDir1, vDir1) > 2 * dot(vDir2, vDir2))
             {
@@ -224,12 +226,8 @@ private:
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
             if (!m_bSimulationPaused)
             {
-                auto& network = m_water.accessNeuralNetwork();
-                if (!network.hasEnoughData())
-                {
-                    m_water.makeTimeStep();
-                    updateVertexBuffers();
-                }
+                m_water.makeTimeStep();
+                updateVertexBuffers();
             }
         }
         else
@@ -259,15 +257,18 @@ private:
         char sBuffer[64];
 
         auto& network = m_water.accessNeuralNetwork();
+#if 0 // commented for now - but good code
         if (network.hasEnoughData())
         {
-            double fLossValue = network.train(64);
+            std::vector<TensorRef> inputs, wantedOutputs;
+            double fLossValue = network.train(64, inputs, wantedOutputs);
             sprintf_s(sBuffer, "Loss: %lf", fLossValue);
             texter_->draw(sBuffer,
                 x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
                 line_spacing_, upper_left_);
             return;
         }
+#endif
 
         MyUnits<T> fFilteredAverageKin = m_water.getFilteredAverageKin();
         double fAverageTempC = MyUnits1<double>::toCelcius(fFilteredAverageKin);
@@ -276,21 +277,21 @@ private:
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        double fTotalKin = fFilteredAverageKin * (double)m_water.getAtoms().size();
-        double fPressure = MyUnits1<double>::evalPressure(fTotalKin, m_water.getBoundingBox().evalVolume());
+        double fTotalKin = fFilteredAverageKin * (double)m_water.getSimContext().m_atoms.size();
+        double fPressure = MyUnits1<double>::evalPressure(fTotalKin, m_water.getSimContext().m_bBox.evalVolume());
         sprintf_s(sBuffer, "P(atm): %.1lf", MyUnits1<double>::toAtmospheres(fPressure));
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
         x += 200;
-        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", MyUnits1<double>::toFemtoseconds(m_water.getCurTimeStep()), (NvU32)m_water.getForces().size());
+        sprintf_s(sBuffer, "Tstep(fs): %.4lf, nForces=%d", MyUnits1<double>::toFemtoseconds(m_water.getCurTimeStep()), (NvU32)m_water.getSimContext().m_forces.size());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
 
         x = fLeftBoundary;
         y += 40;
-        sprintf_s(sBuffer, "NN Cluster: %d, MB: %.2f", network.getMaxClusterSize(), network.getNBytes() / (double)(1024 * 1024));
+        sprintf_s(sBuffer, "NN MB: %.2f", network.sizeInBytes() / (double)(1024 * 1024));
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
@@ -329,6 +330,7 @@ int main(int argc, char** argv)
 {
     DistributionsTest::test();
     MyUnitsTest::test();
+    NeuralTest::test();
 
     // initialize logging
     logging::initialize();
