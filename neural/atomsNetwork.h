@@ -283,7 +283,7 @@ private:
             for (NvU32 u = 0; u < indices.nIndices; ++u)
             {
                 NvU32 uAtom2 = indices.atomIndices[u];
-                NvU32 uForce = forceMap.findExistingForceIndex(uAtom1, uAtom2);
+                NvU32 uForce = forceMap.findExistingForce(uAtom1, uAtom2);
                 const Force<T>& force = forceMap.accessForceByIndex(uForce);
                 if (force.isCovalentBond())
                 {

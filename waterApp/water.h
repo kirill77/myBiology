@@ -579,7 +579,7 @@ struct Water : public Propagator<_T>
                     continue;
                 }
 
-                NvU32 uForce = this->m_c.m_forces.createForce(uPoint1, uPoint2);
+                NvU32 uForce = this->m_c.m_forces.findExistingOrCreateNewForce(uPoint1, uPoint2);
                 auto& force = this->m_c.m_forces.accessForceByIndex(uForce);
                 // this should create covalent bond if conditions are right
                 force.createCovalentBondIfNeeded(atom1, atom2, fLengthSqr);
