@@ -34,41 +34,79 @@ struct ForceIndices
 template <class T, NvU32 nAtomsPerCluster>
 struct AtomsNetwork : public NeuralNetwork
 {
+    using InternalLayerType = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
+
     inline NvU32 getNAtoms() const { return (NvU32)m_constAtomData.size(); }
+    void trainAtomsNetwork(NvU32 nSteps)
+    {
+        NvU32 nSimulationSteps = (NvU32)m_pForceIndices.size();
+        NvU32 nTotalClusters = nSimulationSteps * getNAtoms();
+        // create input and output
+        std::array<NvU32, 32> clusterIndices;
+        for (NvU32 u = 0; u < clusterIndices.size(); ++u)
+        {
+            clusterIndices[u] = m_rng.generateUnsigned(0, nTotalClusters);
+        }
+        for (NvU32 nPasses = 0; nPasses < 10; ++nPasses) // we have this many tries to get the array without repetitions
+        {
+            bool bRepetitionsFound = false;
+            std::sort(clusterIndices.begin(), clusterIndices.end());
+            for (NvU32 u = 1; u < clusterIndices.size(); ++u)
+            {
+                while (clusterIndices[u] == clusterIndices[u - 1])
+                {
+                    clusterIndices[u] = m_rng.generateUnsigned(0, nTotalClusters);
+                    bRepetitionsFound = true;
+                }
+            }
+            if (!bRepetitionsFound) break;
+        }
+
+        if (m_inputs.size() == 0)
+        {
+            TensorRef input = std::make_shared<Tensor<float>>();
+            m_inputs.push_back(input);
+            TensorRef wantedOutput = std::make_shared<Tensor<float>>();
+            m_wantedOutputs.push_back(wantedOutput);
+        }
+        std::array<int, 4> inputDims = { (NvU32)clusterIndices.size(), s_nInputValuesPerCluster, 1, 1 };
+        m_inputs[0]->init(inputDims);
+        m_inputs[0]->clearSubregion(0, (NvU32)m_inputs[0]->size());
+        std::array<int, 4> outputDims = { (NvU32)clusterIndices.size(), s_nOutputValuesPerCluster, 1, 1 };
+        m_wantedOutputs[0]->init(outputDims);
+        m_wantedOutputs[0]->clearSubregion(0, (NvU32)m_wantedOutputs[0]->size());
+
+        // copy all data to input and output tensors
+        for (NvU32 u = 0; u < clusterIndices.size(); ++u)
+        {
+            copyClusterToInputTensor(u, clusterIndices[u]);
+            copyClusterToOutputTensor(u, clusterIndices[u]);
+        }
+        train(nSteps, m_inputs, m_wantedOutputs);
+    }
     virtual bool createLayers_impl() override
     {
-        if (m_input.size() != 0) // already initialized?
-            return true;
+        nvAssert(m_pLayers.size() == 0);
 
-        NvU32 nSimulationSteps = (NvU32)m_pForceIndices.size();
-        int nClusters = nSimulationSteps * getNAtoms();
-        std::array<int, 4> inputDims = { nClusters, s_nInputValuesPerCluster, 1, 1 };
-        // copy all data to input tensor
-        for (NvU32 uStep = 0; uStep < nSimulationSteps; ++uStep)
-        {
-            copyStateToInputTensor(uStep);
-            copyStateToOutputTensor(uStep);
-        }
-        std::array<int, 4> outputDims = { nClusters, s_nOutputValuesPerCluster, 1, 1 };
-
-        using InternalLayerType = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
+        std::array<int, 4> prevInputDims = m_inputs[0]->getDims();
+        std::array<int, 4> globalOutputDims = m_wantedOutputs[0]->getDims();
         for ( ; ; )
         {
-            std::array<int, 4> internalOutDims = inputDims;
-            internalOutDims[1] /= 2;
-            internalOutDims[1] &= ~1; // must be even
-            if (internalOutDims[1] <= outputDims[1]) break;
-            m_pLayers.push_back(std::make_shared<InternalLayerType>(inputDims, internalOutDims));
-            inputDims = internalOutDims;
+            std::array<int, 4> outputDims = prevInputDims;
+            outputDims[1] /= 2;
+            outputDims[1] &= ~1; // must be even
+            if (outputDims[1] <= globalOutputDims[1]) break;
+            m_pLayers.push_back(std::make_shared<InternalLayerType>(prevInputDims, outputDims));
+            prevInputDims = outputDims;
         }
         using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        m_pLayers.push_back(std::make_shared<OutputLayerType>(inputDims, outputDims));
+        m_pLayers.push_back(std::make_shared<OutputLayerType>(prevInputDims, globalOutputDims));
 
         return true;
     }
     void init(std::vector<Atom<T>>& atoms)
     {
-        copyStateToGPU(atoms, m_constAtomData);
+        copyConstAtomsDataFromTheModel(atoms);
     }
     void notifyStepBeginning(const SimContext<T> &simContext)
     {
@@ -100,97 +138,107 @@ struct AtomsNetwork : public NeuralNetwork
     void makePrediction();
 
 private:
-    static constexpr NvU32 computeNInputValuesPerCluster()
+    // **** input offsets computation
+    static constexpr NvU32 computeInputAtomOffset(NvU32 uAtom)
     {
-        // input data per cluster consists of:
-        NvU32 nInputBytesPerCluster = nAtomsPerCluster * (sizeof(ConstantAtomData) + sizeof(TransientAtomData));
-        // this describes covalent bonds that the central atom has with the other atoms inside the cluster (-1 because it can't have bonds with itself)
-        nInputBytesPerCluster += sizeof(float) * (nAtomsPerCluster - 1);
-        nvAssert(nInputBytesPerCluster % sizeof(float) == 0);
-        return nInputBytesPerCluster / sizeof(float);
+        NvU32 inputAtomSizeInBytes = sizeof(ConstantAtomData) + sizeof(TransientAtomData);
+        nvAssert(inputAtomSizeInBytes % sizeof(float) == 0);
+        return uAtom * (inputAtomSizeInBytes / sizeof(float));
     }
-    static const NvU32 s_nInputValuesPerCluster = computeNInputValuesPerCluster();
+    static constexpr NvU32 computeInputForceOffset(NvU32 uForce)
+    {
+        return computeInputAtomOffset(nAtomsPerCluster) + uForce;
+    }
+    // this is essentially an offset to the force one after the last
+    static const NvU32 s_nInputValuesPerCluster = computeInputForceOffset(nAtomsPerCluster);
 
-    static constexpr NvU32 computeNOutputValuesPerCluster()
+    // **** output offsets computation
+    static constexpr NvU32 computeOutputAtomOffset(NvU32 uAtom)
     {
-        // output data per cluster consists of:
-        NvU32 nOutputBytesPerCluster = sizeof(TransientAtomData);
-        // this describes covalent bonds that the central atom has with the other atoms inside the cluster (-1 because it can't have bonds with itself)
-        nOutputBytesPerCluster += sizeof(float) * (nAtomsPerCluster - 1);
-        return nOutputBytesPerCluster / sizeof(float);
+        NvU32 outputAtomSizeInBytes = sizeof(TransientAtomData);
+        nvAssert(outputAtomSizeInBytes % sizeof(float) == 0);
+        return uAtom * (outputAtomSizeInBytes / sizeof(float));
     }
-    static const NvU32 s_nOutputValuesPerCluster = computeNOutputValuesPerCluster();
+    static constexpr NvU32 computeOutputForceOffset(NvU32 uForce)
+    {
+        return computeOutputAtomOffset(1) + uForce; // we output just one atom for now
+    }
+    // this is essentially an offset to the force one after the last
+    static const NvU32 s_nOutputValuesPerCluster = computeOutputForceOffset(nAtomsPerCluster);
 
-    void copyStateToInputTensor(NvU32 uSimStep)
+    void copyClusterToInputTensor(NvU32 uDstCluster, NvU32 uSrcCluster)
     {
-        clearTensorSubregionForSimStep(m_input, uSimStep);
-        for (NvU32 uAtom = 0; uAtom < getNAtoms(); ++uAtom)
+        NvU32 uSimStep = uSrcCluster / getNAtoms();
+        NvU32 uCentralAtom = uSrcCluster % getNAtoms();
+
+        const GPUBuffer<TransientAtomData>& transientData = *m_pTransientAtomData[(uSimStep + 1) / 2];
+        const ForceIndices<nAtomsPerCluster>& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
+        const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[uSimStep * 2])[uCentralAtom];
+
+        copyAtomToInputTensor(uDstCluster, 0, uCentralAtom, uCentralAtom, transientData); // copy the central atom
+        Tensor<float>& m_input = *m_inputs[0];
+        for (NvU32 u = 0; u < fi.nIndices; ++u)
         {
-            copyClusterToInputTensor(uSimStep, uAtom);
+            copyAtomToInputTensor(uDstCluster, u + 1, uCentralAtom, fi.atomIndices[u], transientData); // copy auxiliary atoms
+            m_input.access(uDstCluster, computeInputForceOffset(u), 1, 1) = fv.m_nCovalentBonds[u]; // copy the force information
         }
     }
-    void copyStateToOutputTensor(NvU32 uSimStep)
+    void copyAtomToInputTensor(NvU32 uDstCluster, NvU32 uDstSlot, NvU32 uCentralAtom, NvU32 uSrcAtom, const GPUBuffer<TransientAtomData> &transientData)
     {
-        clearTensorSubregionForSimStep(m_wantedOutput, uSimStep);
-        for (NvU32 uAtom = 0; uAtom < getNAtoms(); ++uAtom)
+        NvU32 hi = computeInputAtomOffset(uDstSlot);
+        const ConstantAtomData& constAtom = m_constAtomData[uSrcAtom];
+        const TransientAtomData& transAtom = transientData[uSrcAtom];
+        const TransientAtomData& centAtom = transientData[uSrcAtom];
+        Tensor<float>& m_input = *m_inputs[0];
+        m_input.access(uDstCluster, hi++, 1, 1) = constAtom.fElectroNegativity;
+        m_input.access(uDstCluster, hi++, 1, 1) = constAtom.fMass;
+        m_input.access(uDstCluster, hi++, 1, 1) = constAtom.fValence;
+        m_input.access(uDstCluster, hi++, 1, 1) = transAtom.fCharge;
+        rtvector<float, 3> vPos = transAtom.vPos - centAtom.vPos;
+        m_input.access(uDstCluster, hi++, 1, 1) = vPos[0];
+        m_input.access(uDstCluster, hi++, 1, 1) = vPos[1];
+        m_input.access(uDstCluster, hi++, 1, 1) = vPos[2];
+        rtvector<float, 3> vSpeed = transAtom.vSpeed - centAtom.vSpeed;
+        m_input.access(uDstCluster, hi++, 1, 1) = vSpeed[0];
+        m_input.access(uDstCluster, hi++, 1, 1) = vSpeed[1];
+        m_input.access(uDstCluster, hi++, 1, 1) = vSpeed[2];
+    }
+    void copyClusterToOutputTensor(NvU32 uDstCluster, NvU32 uSrcCluster)
+    {
+        NvU32 uSimStep = uSrcCluster / getNAtoms();
+        NvU32 uCentralAtom = uSrcCluster % getNAtoms();
+
+        const GPUBuffer<TransientAtomData>& transientDataPrev = *m_pTransientAtomData[(uSimStep + 1) / 2];
+        const GPUBuffer<TransientAtomData>& transientDataNext = *m_pTransientAtomData[(uSimStep + 1) / 2 + 1];
+        const TransientAtomData& centAtomIn = transientDataPrev[uCentralAtom];
+        const TransientAtomData& centAtomOut = transientDataNext[uCentralAtom];
+        const ForceIndices<nAtomsPerCluster>& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
+        const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[uSimStep * 2 + 1])[uCentralAtom];
+
+        // copy the central atom
+        NvU32 hi = 0;
+        rtvector<float, 3> vPos = centAtomOut.vPos - centAtomIn.vPos;
+        Tensor<float>& m_output = *m_wantedOutputs[0];
+        m_output.access(uDstCluster, hi++, 1, 1) = vPos[0];
+        m_output.access(uDstCluster, hi++, 1, 1) = vPos[1];
+        m_output.access(uDstCluster, hi++, 1, 1) = vPos[2];
+        rtvector<float, 3> vSpeed = centAtomOut.vSpeed - centAtomIn.vSpeed;
+        m_output.access(uDstCluster, hi++, 1, 1) = vSpeed[0];
+        m_output.access(uDstCluster, hi++, 1, 1) = vSpeed[1];
+        m_output.access(uDstCluster, hi++, 1, 1) = vSpeed[2];
+
+        // copy the force information
+        for (NvU32 u = 0; u < fi.nIndices; ++u)
         {
-            copyClusterToOutputTensor(uSimStep, uAtom);
+            m_output.access(uDstCluster, computeOutputForceOffset(u), 1, 1) = fv.m_nCovalentBonds[u];
         }
     }
-    void clearTensorSubregionForSimStep(Tensor<float> &tensor, NvU32 uSimStep)
+    void copyConstAtomsDataFromTheModel(const std::vector<Atom<T>>& atoms)
     {
-        NvU32 uClusterIndex = uSimStep * getNAtoms();
-        NvU32 uStartIndex = tensor.compute1DIndex(uClusterIndex, 0, 0, 0);
-        NvU32 uEndIndex = tensor.compute1DIndex(uClusterIndex + getNAtoms(), 0, 0, 0);
-        tensor.clearSubregion(uStartIndex, uEndIndex);
-    }
-    void copyClusterToInputTensor(NvU32 uSimStep, NvU32 uCluster)
-    {
-        NvU32 uClusterIndex = uSimStep * getNAtoms() + uCluster;
-        NvU32 uDstIndex = m_input.compute1DIndex(uClusterIndex, 0, 0, 0);
-#if ASSERT_ONLY_CODE
-        NvU32 uDbgEndIndex = m_input.compute1DIndex(uClusterIndex + 1, 0, 0, 0);
-#endif
-        // copy the main atom of the cluster
-        uDstIndex = copyAtomToTensor(m_input, uDstIndex, uSimStep, uCluster);
-        // copy all other atoms of the cluster
-        const ForceIndices<nAtomsPerCluster>& forceIndices = (*m_pForceIndices[uSimStep])[uCluster];
-        const ForceValues<nAtomsPerCluster>& forceValues = (*m_pForceValues[uSimStep * 2])[uCluster];
-        for (NvU32 u = 0; u < forceIndices.nIndices; ++u)
-        {
-            NvU32 uAtom = forceIndices.atomIndices[u];
-            uDstIndex = copyAtomToTensor(m_input, uDstIndex, uSimStep, uAtom);
-            m_input[uDstIndex++] = forceValues.m_nCovalentBonds[u];
-        }
-        nvAssert(uDstIndex < uDbgEndIndex);
-    }
-    void copyClusterToOutputTensor(NvU32 uSimStep, NvU32 uCluster)
-    {
-        NvU32 uClusterIndex = uSimStep * getNAtoms() + uCluster;
-        NvU32 uDstIndex = m_wantedOutput.compute1DIndex(uClusterIndex, 0, 0, 0);
-#if ASSERT_ONLY_CODE
-        NvU32 uDbgEndIndex = m_wantedOutput.compute1DIndex(uClusterIndex + 1, 0, 0, 0);
-#endif
-        // copy the main atom of the cluster
-        uDstIndex = copyAtomToTensor(m_wantedOutput, uDstIndex, uSimStep + 1, uCluster);
-        // copy all other atoms of the cluster
-        const ForceIndices<nAtomsPerCluster>& forceIndices = (*m_pForceIndices[uSimStep])[uCluster];
-        const ForceValues<nAtomsPerCluster>& forceValues = (*m_pForceValues[uSimStep * 2 + 1])[uCluster];
-        for (NvU32 u = 0; u < forceIndices.nIndices; ++u)
-        {
-            m_wantedOutput[uDstIndex++] = forceValues.m_nCovalentBonds[u];
-        }
-        nvAssert(uDstIndex < uDbgEndIndex);
-    }
-    NvU32 copyAtomToTensor(Tensor<float>& tensor, NvU32 dstOffset, NvU32 transientArrayIndex, NvU32 uAtom)
-    {
-        dstOffset = tensor.copySubregionFrom(dstOffset, m_constAtomData, uAtom, 1);
-        dstOffset = tensor.copySubregionFrom(dstOffset, *m_pTransientAtomData[transientArrayIndex], uAtom, 1);
-        return dstOffset;
-    }
-    void copyStateToGPU(const std::vector<Atom<T>>& atoms, GPUBuffer<ConstantAtomData> &dst)
-    {
+        GPUBuffer<ConstantAtomData>& dst = m_constAtomData;
         dst.resize(atoms.size());
+        m_totalBytes += dst.sizeInBytes();
+
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
         {
             const Atom<T>& srcAtom = atoms[uAtom];
@@ -206,6 +254,7 @@ private:
         GPUBuffer<TransientAtomData>& dst = **m_pTransientAtomData.rbegin();
         dst.resize(atoms.size());
         m_totalBytes += dst.sizeInBytes();
+
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
         {
             const Atom<T>& srcAtom = atoms[uAtom];
@@ -254,14 +303,14 @@ private:
             if (fi1.nIndices >= fi1.atomIndices.size())
             {
                 --fi1.nIndices;
-                // find the farthest atom
+                // find the farthest atom and place it at the last position (it will be replaced)
                 NvU32 iFarthest = findTheFarthestAtom(force.getAtom1Index(), fi1, simContext);
                 nvSwap(fi1.atomIndices[iFarthest], fi1.atomIndices[fi1.nIndices]);
             }
             if (fi2.nIndices >= fi2.atomIndices.size())
             {
                 --fi2.nIndices;
-                // find the farthest atom
+                // find the farthest atom and place it at the last position (it will be replaced)
                 NvU32 iFarthest = findTheFarthestAtom(force.getAtom2Index(), fi2, simContext);
                 nvSwap(fi2.atomIndices[iFarthest], fi2.atomIndices[fi2.nIndices]);
             }
@@ -302,6 +351,7 @@ private:
     std::vector<GPUBuffer<ForceIndices<nAtomsPerCluster>>*> m_pForceIndices; // 1 per simulation step
 
     // those tensors are created from the arrays above
-    Tensor<float> m_input;
-    Tensor<float> m_wantedOutput;
+    std::vector<TensorRef> m_inputs, m_wantedOutputs;
+
+    RNGUniform m_rng;
 };

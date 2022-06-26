@@ -238,6 +238,7 @@ struct NeuralNetwork
         {
             forwardPass(inputs);
             m_fLastError = computeCurrentError(wantedOutputs);
+            nvAssert(isfinite(m_fLastError));
             --nSteps;
             saveCurrentStateToBackup();
         }
@@ -250,7 +251,7 @@ struct NeuralNetwork
             {
                 m_nStepsWithoutErrorCheck = 0;
                 float fCurrentError = computeCurrentError(wantedOutputs);
-                if (fCurrentError > m_fLastError)
+                if (!isfinite(fCurrentError) || fCurrentError > m_fLastError)
                 {
                     restoreStateFromBackup();
                     m_nStepsPerErrorCheck = 1;

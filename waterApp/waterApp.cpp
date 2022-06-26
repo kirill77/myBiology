@@ -93,6 +93,10 @@ struct MyViewer : public Viewer
         {
             m_bSimulationPaused = !m_bSimulationPaused;
         }
+        if (key == GLFW_KEY_T)
+        {
+            m_bExecuteTraining = !m_bExecuteTraining;
+        }
         return false;
     }
     virtual bool mouse_press_event(int x, int y, int button, int modifiers)
@@ -224,10 +228,18 @@ private:
         if (!m_bIsFirstDraw)
         {
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
-            if (!m_bSimulationPaused)
+            if (!m_bSimulationPaused && !m_bExecuteTraining)
             {
                 m_water.makeTimeStep();
                 updateVertexBuffers();
+            }
+            if (m_bExecuteTraining)
+            {
+                auto& network = m_water.accessNeuralNetwork();
+                if (network.hasEnoughData())
+                {
+                    network.trainAtomsNetwork(100);
+                }
             }
         }
         else
@@ -314,7 +326,7 @@ private:
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
 
-    bool m_bSimulationPaused = false;
+    bool m_bSimulationPaused = false, m_bExecuteTraining = false;
     NvU32 m_pickedAtomIndex = -1;
 
     // for text rendering:
