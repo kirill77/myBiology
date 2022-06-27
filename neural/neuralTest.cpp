@@ -4,9 +4,9 @@
 
 bool NeuralTest::m_bTested = false;
 
-static std::array<int, 4> s_inputDims({ 10, 4, 4, 1 });
-static std::array<int, 4> s_layer0OutputDims({ 10, 4, 3, 1 });
-static std::array<int, 4> s_layer1OutputDims({ 10, 1, 1, 1 });
+static std::array<unsigned, 4> s_inputDims({ 10, 4, 4, 1 });
+static std::array<unsigned, 4> s_layer0OutputDims({ 10, 4, 3, 1 });
+static std::array<unsigned, 4> s_layer1OutputDims({ 10, 1, 1, 1 });
 
 struct TestNetwork : public NeuralNetwork
 {
@@ -43,6 +43,6 @@ void NeuralTest::test()
     }
 
     double fError = network.train(100, inputs, wantedOutputs);
-    m_bTested = m_bTested && fError < 0.8;
+    m_bTested = m_bTested && fError > 0 && fError < 0.6;
     nvAssert(m_bTested);
 }

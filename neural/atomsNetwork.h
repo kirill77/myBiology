@@ -13,8 +13,8 @@ struct ConstantAtomData
 };
 struct TransientAtomData
 {
-    float3 vPos = {};
-    float3 vSpeed = {};
+    kirill::float3 vPos = {};
+    kirill::float3 vSpeed = {};
     float fCharge = 0;
 };
 // ForceValues and ForceIndices are split to different structs because ForceIndices at the beginning and
@@ -69,10 +69,10 @@ struct AtomsNetwork : public NeuralNetwork
             TensorRef wantedOutput = std::make_shared<Tensor<float>>();
             m_wantedOutputs.push_back(wantedOutput);
         }
-        std::array<int, 4> inputDims = { (NvU32)clusterIndices.size(), s_nInputValuesPerCluster, 1, 1 };
+        std::array<unsigned, 4> inputDims = { (NvU32)clusterIndices.size(), s_nInputValuesPerCluster, 1, 1 };
         m_inputs[0]->init(inputDims);
         m_inputs[0]->clearSubregion(0, (NvU32)m_inputs[0]->size());
-        std::array<int, 4> outputDims = { (NvU32)clusterIndices.size(), s_nOutputValuesPerCluster, 1, 1 };
+        std::array<unsigned, 4> outputDims = { (NvU32)clusterIndices.size(), s_nOutputValuesPerCluster, 1, 1 };
         m_wantedOutputs[0]->init(outputDims);
         m_wantedOutputs[0]->clearSubregion(0, (NvU32)m_wantedOutputs[0]->size());
 
@@ -88,11 +88,11 @@ struct AtomsNetwork : public NeuralNetwork
     {
         nvAssert(m_pLayers.size() == 0);
 
-        std::array<int, 4> prevInputDims = m_inputs[0]->getDims();
-        std::array<int, 4> globalOutputDims = m_wantedOutputs[0]->getDims();
+        std::array<unsigned, 4> prevInputDims = m_inputs[0]->getDims();
+        std::array<unsigned, 4> globalOutputDims = m_wantedOutputs[0]->getDims();
         for ( ; ; )
         {
-            std::array<int, 4> outputDims = prevInputDims;
+            std::array<unsigned, 4> outputDims = prevInputDims;
             outputDims[1] /= 2;
             outputDims[1] &= ~1; // must be even
             if (outputDims[1] <= globalOutputDims[1]) break;

@@ -12,10 +12,10 @@ typedef std::shared_ptr<Tensor<float>> TensorRef;
 
 struct ILayer
 {
-    virtual void forward(const std::vector<TensorRef>& inputs) = 0;
+    virtual void forward(std::vector<TensorRef>& inputs) = 0;
 
     enum OUTPUTS_DATA_TYPE { WANTED_OUTPUTS, DELTA_OUTPUTS };
-    virtual void backward(const std::vector<TensorRef>& inputs,
+    virtual void backward(std::vector<TensorRef>& inputs,
         OUTPUTS_DATA_TYPE outputsDataType, const std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
     void allocateDeltaOutputs()
@@ -50,7 +50,7 @@ struct ILayer
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FullyConnectedLayer : public ILayer
 {
-    FullyConnectedLayer(const std::array<int, 4> &inputDims, const std::array<int, 4> &outputDims)
+    FullyConnectedLayer(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
     {
         // upper half of neurons uses different activation function 
         m_inputDims = inputDims;
@@ -78,42 +78,8 @@ struct FullyConnectedLayer : public ILayer
         output->init(outputDims);
         m_outputs.push_back(output);
     }
-    virtual void forward(const std::vector<TensorRef>& inputs) override
-    {
-        nvAssert(inputs.size() == 1 && m_outputs.size() == 1); // this layer has one input tensor and one output tensor
-        const Tensor<float>& input = *inputs[0];
-        nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
-        Tensor<float>& output = *m_outputs[0];
-        nvAssert(output.n() == m_outputDims[0] && output.h() == m_outputDims[1] && output.w() == m_outputDims[2] && output.c() == m_outputDims[3]);
-        for (int inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
-        {
-            for (int inOutCi = 0; inOutCi < m_outputDims[3]; ++inOutCi)
-            {
-                for (int outHi = 0, iWeight = 0, iBias = 0; outHi < m_outputDims[1]; outHi += (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2))
-                {
-                    for (int outWi = 0; outWi < m_outputDims[2]; ++outWi)
-                    {
-                        float fBeforeActivation = m_biases[iBias++];
-                        for (int inHi = 0; inHi < m_inputDims[1]; ++inHi)
-                        {
-                            for (int inWi = 0; inWi < m_inputDims[2]; ++inWi)
-                            {
-                                fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iWeight++];
-                            }
-                        }
-                        float fAfterActivation = TFunction<T_ACTIVATION1>(fBeforeActivation);
-                        output.access(inOutNi, outHi, outWi, inOutCi) = fAfterActivation;
-                        if (T_ACTIVATION1 != T_ACTIVATION2)
-                        {
-                            float fAfterActivation2 = TFunction<T_ACTIVATION2>(fBeforeActivation);
-                            output.access(inOutNi, outHi + 1, outWi, inOutCi) = fAfterActivation2;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    virtual void backward(const std::vector<TensorRef>& inputs,
+    virtual void forward(std::vector<TensorRef>& inputs) override;
+    virtual void backward(std::vector<TensorRef>& inputs,
         OUTPUTS_DATA_TYPE outputsDataType, const std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) override
     {
         nvAssert(inputs.size() == 1);
@@ -129,24 +95,24 @@ struct FullyConnectedLayer : public ILayer
         nvAssert(outputsData.size() == 1);
         const Tensor<float>& outputData = *outputsData[0];
         nvAssert(outputData.n() == m_outputDims[0] && outputData.h() == m_outputDims[1] && outputData.w() == m_outputDims[2] && outputData.c() == m_outputDims[3]);
-        for (int inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
+        for (unsigned inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
         {
-            for (int inOutCi = 0; inOutCi < m_outputDims[3]; ++inOutCi)
+            for (unsigned inOutCi = 0; inOutCi < m_outputDims[3]; ++inOutCi)
             {
                 if (pDeltaInput)
                 {
                     // clear delta input
-                    for (int inHi = 0; inHi < m_inputDims[1]; ++inHi)
+                    for (unsigned inHi = 0; inHi < m_inputDims[1]; ++inHi)
                     {
-                        for (int inWi = 0; inWi < m_inputDims[2]; ++inWi)
+                        for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi)
                         {
                             pDeltaInput->access(inOutNi, inHi, inWi, inOutCi) = 0;
                         }
                     }
                 }
-                for (int outHi = 0, iWeight = 0, iBias = 0; outHi < m_outputDims[1]; outHi += (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2))
+                for (unsigned outHi = 0, iWeight = 0, iBias = 0; outHi < m_outputDims[1]; outHi += (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2))
                 {
-                    for (int outWi = 0; outWi < m_outputDims[2]; ++outWi, iWeight += m_inputDims[1] * m_inputDims[2], ++iBias)
+                    for (unsigned outWi = 0; outWi < m_outputDims[2]; ++outWi, iWeight += m_inputDims[1] * m_inputDims[2], ++iBias)
                     {
                         std::array<float, 2> fWantedDeltaOut = { };
                         fWantedDeltaOut[0] = outputData.access(inOutNi, outHi, outWi, inOutCi);
@@ -165,9 +131,9 @@ struct FullyConnectedLayer : public ILayer
                         if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
                             continue;
                         float fBeforeActivation = m_biases[iBias];
-                        for (int inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+                        for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
                         {
-                            for (int inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+                            for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
                             {
                                 fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iiWeight];
                             }
@@ -183,9 +149,9 @@ struct FullyConnectedLayer : public ILayer
                         // modify the bias
                         m_biases[iBias] += fMult;
                         // modify all the weights corresponding to this summator
-                        for (int inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+                        for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
                         {
-                            for (int inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+                            for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
                             {
                                 float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
                                 float fW = m_weights[iiWeight];
@@ -204,7 +170,7 @@ struct FullyConnectedLayer : public ILayer
     }
 
 private:
-    std::array<int, 4> m_inputDims, m_outputDims;
+    std::array<unsigned, 4> m_inputDims, m_outputDims;
 };
 
 template <class T>
@@ -221,7 +187,7 @@ struct NeuralNetwork
     {
         nvAssert(NeuralTest::isTested());
     }
-    double train(NvU32 nSteps, const std::vector<TensorRef> &inputs, const std::vector<TensorRef> &wantedOutputs)
+    double train(NvU32 nSteps, std::vector<TensorRef> &inputs, std::vector<TensorRef> &wantedOutputs)
     {
         if (m_pLayers.size() == 0)
         {
@@ -310,12 +276,12 @@ private:
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    void backwardPass(const std::vector<TensorRef>& inputs, const std::vector<TensorRef>& wantedOutputs)
+    void backwardPass(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs)
     {
         NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
         while (uLayer < m_pLayers.size())
         {
-            const std::vector<TensorRef>& _inputs = (uLayer == 0) ? inputs : m_pLayers[uLayer - 1]->m_outputs;
+            std::vector<TensorRef>& _inputs = (uLayer == 0) ? inputs : m_pLayers[uLayer - 1]->m_outputs;
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayers[uLayer - 1]->m_deltaOutputs;
@@ -330,7 +296,7 @@ private:
             --uLayer;
         }
     }
-    void forwardPass(const std::vector<TensorRef>& pInputs)
+    void forwardPass(std::vector<TensorRef>& pInputs)
     {
         m_pLayers[0]->forward(pInputs);
         for (NvU32 uLayer = 1; uLayer < m_pLayers.size(); ++uLayer)

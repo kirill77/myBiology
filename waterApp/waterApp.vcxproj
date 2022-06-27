@@ -126,7 +126,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>opengl32.lib;glu32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cudart_static.lib;opengl32.lib;glu32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(CUDA_PATH_V11_7)\lib\x64</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -216,6 +217,9 @@
     </ProjectReference>
     <ProjectReference Include="..\MonteCarlo\MonteCarlo.vcxproj">
       <Project>{b21ff890-4353-4486-9091-4bf3e4348b34}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\mycuda1\mycuda1.vcxproj">
+      <Project>{07a6f418-bac9-406e-8b50-893b50dbe471}</Project>
     </ProjectReference>
     <ProjectReference Include="..\neural\neural.vcxproj">
       <Project>{5b6023cf-cce0-48e8-9864-c75a9a2b2b6a}</Project>

@@ -62,6 +62,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pathIntegrals", "..\pathInt
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "neural", "..\neural\neural.vcxproj", "{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mycuda1", "..\mycuda1\mycuda1.vcxproj", "{07A6F418-BAC9-406E-8B50-893B50DBE471}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -382,6 +384,20 @@ Global
 		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x64.Build.0 = Release|x64
 		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
 		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.RelWithDebInfo|x86.Build.0 = Release|Win32
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.Debug|x64.ActiveCfg = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.Debug|x64.Build.0 = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.Debug|x86.ActiveCfg = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.MinSizeRel|x64.ActiveCfg = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.MinSizeRel|x64.Build.0 = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.MinSizeRel|x86.ActiveCfg = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.MinSizeRel|x86.Build.0 = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.Release|x64.ActiveCfg = Release|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.Release|x64.Build.0 = Release|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.Release|x86.ActiveCfg = Release|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x64.ActiveCfg = Release|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x64.Build.0 = Release|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x86.ActiveCfg = Debug|x64
+		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
