@@ -3,20 +3,6 @@
 
 #define RUN_ON_CPU 1
 
-template <class T>
-T* GPUBuffer<T>::getDeviceMemPtr()
-{
-#if RUN_ON_CPU
-    return &m_pHost[0];
-#else
-    if (m_hostRev > m_deviceRev)
-    {
-        nvAssert(false);
-    }
-    return m_pDevice;
-#endif
-}
-
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FullyConnectedLayerCuda
 {
@@ -32,12 +18,12 @@ struct FullyConnectedLayerCuda
         unsigned outWi = threadX;
         unsigned outHi = threadY;
 
-        unsigned iBias = outHi / (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2) * m_output.w + outWi;
-        unsigned iWeight = m_input.h * m_input.w * iBias;
+        unsigned iBias = outHi / (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2) * m_output.w() + outWi;
+        unsigned iWeight = m_input.h() * m_input.w() * iBias;
         float fBeforeActivation = m_biases[iBias];
-        for (unsigned inHi = 0; inHi < m_input.h; ++inHi)
+        for (unsigned inHi = 0; inHi < m_input.h(); ++inHi)
         {
-            for (unsigned inWi = 0; inWi < m_input.w; ++inWi)
+            for (unsigned inWi = 0; inWi < m_input.w(); ++inWi)
             {
                 fBeforeActivation += m_input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iWeight++];
             }
@@ -51,13 +37,13 @@ struct FullyConnectedLayerCuda
         }
     }
 
-    CUDATensor<float> m_input, m_weights, m_biases, m_output;
+    Tensor<float> m_input, m_weights, m_biases, m_output;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 __global__ void fullyConnectedLayerForward(FullyConnectedLayerCuda<T_ACTIVATION1, T_ACTIVATION2> p)
 {
-    p.forward(blockIdx.x, blockIdx.y, threadIdx.x, T_ACTIVATION1 == T_ACTIVATION2 ? threadIdx.y : threadIdx.y * 2);
+    p.forward(blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -87,6 +73,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
         }
     }
 #else
+    
 #endif
 }
 
