@@ -4,7 +4,7 @@
 enum ACTIVATION { ACTIVATION_RELU, ACTIVATION_MRELU, ACTIVATION_IDENTITY };
 
 template <ACTIVATION T_ACTIVATION>
-float TFunction(float fInput)
+__host__ __device__ float TFunction(float fInput)
 {
     switch (T_ACTIVATION)
     {

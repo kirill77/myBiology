@@ -5,6 +5,13 @@
 #include <algorithm>
 #include "MonteCarlo/RNGUniform.h"
 
+#ifndef __host__
+#define __host__
+#endif
+#ifndef __device__
+#define __device__
+#endif
+
 template <class T>
 struct GPUBuffer
 {
@@ -13,38 +20,51 @@ struct GPUBuffer
         m_pOrig = this;
         m_pOrig->m_nRefs = 1;
     }
-    const T& operator[](NvU32 u) const
+    __host__ __device__ const T& operator[](NvU32 u) const
     {
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
+#ifdef __CUDA_ARCH__
+        nvAssert(u < m_nDeviceElems);
+        return m_pDevice[u];
+#else
+        nvAssert(u < m_nHostElems);
         return m_pOrig->m_pHost[u];
+#endif
     }
-    T& operator[](NvU32 u)
+    __host__ __device__ T& operator[](NvU32 u)
     {
+#ifdef __CUDA_ARCH__
+        nvAssert(u < m_nDeviceElems);
+        return m_pDevice[u];
+#else
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
+        nvAssert(u < m_pOrig->m_nHostElems);
         return m_pOrig->m_pHost[u];
+#endif
     }
     size_t size() const
     {
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        return m_pOrig->m_pHost.size();
+        return m_pOrig->m_nHostElems;
     }
     size_t sizeInBytes() const
     {
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        return sizeof(T) * m_pOrig->m_pHost.size();
+        return sizeof(T) * m_pOrig->m_nHostElems;
     }
-    void resize(size_t size)
-    {
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev && m_pOrig->m_nRefs == 1);
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        m_pOrig->m_pHost.resize(size);
-    }
-    const std::vector<T>& accessHostArray() const
+    void resize(size_t nElems)
     {
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        return m_pOrig->m_pHost;
+        m_pOrig->m_pHost = (T*)realloc(m_pOrig->m_pHost, nElems * sizeof(T));
+        // call constructors on all new objects
+        NvU32 u = m_pOrig->m_nHostElems;
+        m_pOrig->m_nHostElems = (NvU32)nElems;
+        for ( ; u < nElems; ++u)
+        {
+            new (&((*this)[u])) T();
+        }
     }
     void clearWithRandomValues(T fMin, T fMax)
     {
@@ -77,24 +97,26 @@ struct GPUBuffer
     }
     GPUBuffer<T>(const GPUBuffer<T>& other)
     {
-        m_nDeviceElems = other.m_nDeviceElems;
-        m_pDevice = other.m_pDevice;
         m_pOrig = other.m_pOrig;
         ++m_pOrig->m_nRefs;
+        m_pDevice = m_pOrig->m_pDevice;
+        m_nDeviceElems = m_pOrig->m_nDeviceElems;
     }
     virtual ~GPUBuffer<T>()
     {
         nvAssert(m_pOrig->m_nRefs > 0);
         --m_pOrig->m_nRefs;
     }
+    void notifyDeviceBind(bool isWriteBind);
+    void syncToHost();
 
-private:
+
+public:
     NvU32 m_hostRev = 0, m_deviceRev = 0;
-    std::vector<T> m_pHost;
-    NvU32 m_nDeviceElems = 0;
-    T* m_pDevice = nullptr;
-    GPUBuffer<T>* m_pOrig = nullptr;
+    T *m_pHost = nullptr, *m_pDevice = nullptr;
+    NvU32 m_nHostElems = 0, m_nDeviceElems = 0;
     int m_nRefs = 0;
+    GPUBuffer<T>* m_pOrig = nullptr;
 };
 
 template <class T>
@@ -118,25 +140,25 @@ struct Tensor : public GPUBuffer<T>
         init(other.getDims());
         this->copySubregionFromBuffer(0, other, 0, other.size());
     }
-    unsigned compute1DIndex(unsigned in, unsigned ih, unsigned iw, unsigned ic) const
+    __host__ __device__ unsigned compute1DIndex(unsigned in, unsigned ih, unsigned iw, unsigned ic) const
     {
         nvAssert(in < n() && ih < h() && iw < w() && ic < c());
         return ic + c() * (iw + w() * (ih + in * h()));
     }
-    T &access(unsigned in, unsigned ih, unsigned iw, unsigned ic)
+    __host__ __device__ T &access(unsigned in, unsigned ih, unsigned iw, unsigned ic)
     {
         return (*this)[compute1DIndex(in, ih, iw, ic)];
     }
-    const T& access(unsigned in, unsigned ih, unsigned iw, unsigned ic) const
+    __host__ __device__ const T& access(unsigned in, unsigned ih, unsigned iw, unsigned ic) const
     {
         return (*this)[compute1DIndex(in, ih, iw, ic)];
     }
-    unsigned n() const { return m_dims[0]; }
-    unsigned h() const { return m_dims[1]; }
-    unsigned w() const { return m_dims[2]; }
-    unsigned c() const { return m_dims[3]; }
-    const std::array<unsigned, 4>& getDims() const { return m_dims; }
+    __device__ __host__ unsigned n() const { return m_dims[0]; }
+    __device__ __host__ unsigned h() const { return m_dims[1]; }
+    __device__ __host__ unsigned w() const { return m_dims[2]; }
+    __device__ __host__ unsigned c() const { return m_dims[3]; }
+    std::array<unsigned, 4> getDims() const { return std::array<unsigned, 4>({ m_dims[0], m_dims[1], m_dims[2], m_dims[3] }); }
 
 private:
-    std::array<unsigned, 4> m_dims = { 0 };
+    unsigned m_dims[4] = {0};
 };

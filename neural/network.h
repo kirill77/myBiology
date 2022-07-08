@@ -16,7 +16,7 @@ struct ILayer
 
     enum OUTPUTS_DATA_TYPE { WANTED_OUTPUTS, DELTA_OUTPUTS };
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, const std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
+        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
     void allocateDeltaOutputs()
     {
@@ -80,10 +80,11 @@ struct FullyConnectedLayer : public ILayer
     }
     virtual void forward(std::vector<TensorRef>& inputs) override;
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, const std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) override
+        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) override
     {
         nvAssert(inputs.size() == 1);
-        const Tensor<float>& input = *inputs[0];
+        Tensor<float>& input = *inputs[0];
+        input.syncToHost();
         nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
         Tensor<float>* pDeltaInput = nullptr;
         if (pDeltaInputs)
@@ -93,7 +94,8 @@ struct FullyConnectedLayer : public ILayer
             nvAssert(pDeltaInput->n() == m_inputDims[0] && pDeltaInput->h() == m_inputDims[1] && pDeltaInput->w() == m_inputDims[2] && pDeltaInput->c() == m_inputDims[3]);
         }
         nvAssert(outputsData.size() == 1);
-        const Tensor<float>& outputData = *outputsData[0];
+        Tensor<float>& outputData = *outputsData[0];
+        m_outputs[0]->syncToHost();
         nvAssert(outputData.n() == m_outputDims[0] && outputData.h() == m_outputDims[1] && outputData.w() == m_outputDims[2] && outputData.c() == m_outputDims[3]);
         for (unsigned inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
         {
@@ -245,22 +247,24 @@ protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
 private:
-    float computeCurrentError(const std::vector<TensorRef>& wantedOutputs)
+    float computeCurrentError(std::vector<TensorRef>& wantedOutputs)
     {
         float fError = 0;
         const std::vector<TensorRef>& outputs = (*m_pLayers.rbegin())->m_outputs;
         nvAssert(outputs.size() == wantedOutputs.size());
         for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
         {
-            const Tensor<float>& output = (*outputs[uTensor]);
-            const Tensor<float>& wantedOutput = (*wantedOutputs[uTensor]);
+            Tensor<float>& output = (*outputs[uTensor]);
+            Tensor<float>& wantedOutput = (*wantedOutputs[uTensor]);
+            output.syncToHost();
+            wantedOutput.syncToHost();
             nvAssert(output.getDims() == wantedOutput.getDims());
             for (NvU32 u = 0; u < output.size(); ++u)
             {
                 fError += sqr(output[u] - wantedOutput[u]);
             }
         }
-        return fError;;
+        return fError;
     }
     void saveCurrentStateToBackup()
     {
