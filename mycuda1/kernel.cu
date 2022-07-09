@@ -1,7 +1,7 @@
 ﻿#include "neural/tensor.h"
 #include "neural/network.h"
 
-#define RUN_ON_CPU 0
+#define RUN_ON_CPU 1
 
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
@@ -129,6 +129,174 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
 #else
     fullyConnectedLayerForward << <grid, block >> > (cudaLayer);
 #endif
+}
+
+#if 0
+template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
+struct Backward
+{
+    Backward(Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases) :
+        m_input(input), m_output(output), m_weights(weights), m_biases(biases)
+    {
+    }
+
+    __host__ __device__ void go(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
+    {
+        unsigned outHi = threadY * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
+        unsigned iWeight = (outWi + _outHi * m_output.w()) * m_input.h() * m_input.w();
+        unsigned iBias = _outHi * m_output.w() + outWi;
+
+        std::array<float, 2> fWantedDeltaOut = { };
+        fWantedDeltaOut[0] = outputData.access(inOutNi, outHi, outWi, inOutCi);
+        if (outputsDataType == WANTED_OUTPUTS)
+        {
+            fWantedDeltaOut[0] -= m_outputs[0]->access(inOutNi, outHi, outWi, inOutCi);
+        }
+        if (T_ACTIVATION1 != T_ACTIVATION2)
+        {
+            fWantedDeltaOut[1] = outputData.access(inOutNi, outHi + 1, outWi, inOutCi);
+            if (outputsDataType == WANTED_OUTPUTS)
+            {
+                fWantedDeltaOut[1] -= m_outputs[0]->access(inOutNi, outHi + 1, outWi, inOutCi);
+            }
+        }
+        if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
+            continue;
+        float fBeforeActivation = m_biases[iBias];
+        for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+        {
+            for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+            {
+                fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iiWeight];
+            }
+        }
+        float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
+        float fMult = fWantedDeltaOut[0] * fActivationDer;
+        if (T_ACTIVATION1 != T_ACTIVATION2)
+        {
+            float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
+            fMult += fWantedDeltaOut[1] * fActivation2Der;
+        }
+        fMult *= fLearningRate;
+        // modify the bias
+        m_biases[iBias] += fMult;
+        // modify all the weights corresponding to this summator
+        for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+        {
+            for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+            {
+                float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
+                float fW = m_weights[iiWeight];
+                m_weights[iiWeight] += fMult * fInput;
+                if (pDeltaInput) // have we been asked to compute deltaInput?
+                {
+                    float& fDeltaInput = pDeltaInput->access(inOutNi, inHi, inWi, inOutCi);
+                    fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
+                }
+            }
+        }
+    }
+
+    Tensor<float> m_input, m_weights, m_biases, m_deltaOutput, m_output, m_wantedOutput;
+};
+#endif
+
+template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
+void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<TensorRef>& inputs,
+    OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr)
+{
+    nvAssert(inputs.size() == 1);
+    Tensor<float>& input = *inputs[0];
+    input.syncToHost();
+    nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
+    Tensor<float>* pDeltaInput = nullptr;
+    if (pDeltaInputs)
+    {
+        nvAssert(pDeltaInputs->size() == 1);
+        pDeltaInput = (*pDeltaInputs)[0].get();
+        nvAssert(pDeltaInput->n() == m_inputDims[0] && pDeltaInput->h() == m_inputDims[1] && pDeltaInput->w() == m_inputDims[2] && pDeltaInput->c() == m_inputDims[3]);
+    }
+    nvAssert(outputsData.size() == 1);
+    Tensor<float>& outputData = *outputsData[0];
+    m_outputs[0]->syncToHost();
+    nvAssert(outputData.n() == m_outputDims[0] && outputData.h() == m_outputDims[1] && outputData.w() == m_outputDims[2] && outputData.c() == m_outputDims[3]);
+    for (unsigned inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
+    {
+        for (unsigned inOutCi = 0; inOutCi < m_outputDims[3]; ++inOutCi)
+        {
+            if (pDeltaInput)
+            {
+                // clear delta input
+                for (unsigned inHi = 0; inHi < m_inputDims[1]; ++inHi)
+                {
+                    for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi)
+                    {
+                        pDeltaInput->access(inOutNi, inHi, inWi, inOutCi) = 0;
+                    }
+                }
+            }
+            unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2);
+            for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
+            {
+                for (unsigned outWi = 0; outWi < m_outputDims[2]; ++outWi)
+                {
+                    unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
+                    unsigned iWeight = (outWi + _outHi * m_outputDims[2]) * m_inputDims[1] * m_inputDims[2];
+                    unsigned iBias = _outHi * m_outputDims[2] + outWi;
+
+                    std::array<float, 2> fWantedDeltaOut = { };
+                    fWantedDeltaOut[0] = outputData.access(inOutNi, outHi, outWi, inOutCi);
+                    if (outputsDataType == WANTED_OUTPUTS)
+                    {
+                        fWantedDeltaOut[0] -= m_outputs[0]->access(inOutNi, outHi, outWi, inOutCi);
+                    }
+                    if (T_ACTIVATION1 != T_ACTIVATION2)
+                    {
+                        fWantedDeltaOut[1] = outputData.access(inOutNi, outHi + 1, outWi, inOutCi);
+                        if (outputsDataType == WANTED_OUTPUTS)
+                        {
+                            fWantedDeltaOut[1] -= m_outputs[0]->access(inOutNi, outHi + 1, outWi, inOutCi);
+                        }
+                    }
+                    if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
+                        continue;
+                    float fBeforeActivation = m_biases[iBias];
+                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+                    {
+                        for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+                        {
+                            fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iiWeight];
+                        }
+                    }
+                    float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
+                    float fMult = fWantedDeltaOut[0] * fActivationDer;
+                    if (T_ACTIVATION1 != T_ACTIVATION2)
+                    {
+                        float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
+                        fMult += fWantedDeltaOut[1] * fActivation2Der;
+                    }
+                    fMult *= fLearningRate;
+                    // modify the bias
+                    m_biases[iBias] += fMult;
+                    // modify all the weights corresponding to this summator
+                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+                    {
+                        for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+                        {
+                            float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
+                            float fW = m_weights[iiWeight];
+                            m_weights[iiWeight] += fMult * fInput;
+                            if (pDeltaInput) // have we been asked to compute deltaInput?
+                            {
+                                float& fDeltaInput = pDeltaInput->access(inOutNi, inHi, inWi, inOutCi);
+                                fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 template struct FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
