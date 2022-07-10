@@ -55,16 +55,7 @@ struct GPUBuffer
     }
     void resize(size_t nElems)
     {
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        m_pOrig->m_pHost = (T*)realloc(m_pOrig->m_pHost, nElems * sizeof(T));
-        // call constructors on all new objects
-        NvU32 u = m_pOrig->m_nHostElems;
-        m_pOrig->m_nHostElems = (NvU32)nElems;
-        for ( ; u < nElems; ++u)
-        {
-            new (&((*this)[u])) T();
-        }
+        m_pOrig->resizeInternal(nElems);
     }
     void clearWithRandomValues(T fMin, T fMax)
     {
@@ -102,16 +93,47 @@ struct GPUBuffer
         m_pDevice = m_pOrig->m_pDevice;
         m_nDeviceElems = m_pOrig->m_nDeviceElems;
     }
+    void operator =(const GPUBuffer<T> &other)
+    {
+        if (m_pOrig == other.m_pOrig) return;
+        decRef();
+        m_pOrig = other.m_pOrig;
+        ++m_pOrig->m_nRefs;
+        m_pDevice = m_pOrig->m_pDevice;
+        m_nDeviceElems = m_pOrig->m_nDeviceElems;
+    }
     virtual ~GPUBuffer<T>()
     {
-        nvAssert(m_pOrig->m_nRefs > 0);
-        --m_pOrig->m_nRefs;
+        m_pOrig->decRef();
     }
     void notifyDeviceBind(bool isWriteBind);
     void syncToHost();
 
-
 public:
+    void decRef()
+    {
+        nvAssert(this == m_pOrig && m_nRefs > 0);
+        if (--m_nRefs == 0)
+        {
+            delete[]m_pHost;
+            m_pHost = nullptr;
+        }
+    }
+    void resizeInternal(size_t nElemsNew)
+    {
+        nvAssert(this == m_pOrig);
+        if (nElemsNew == m_nHostElems)
+            return;
+        m_hostRev = m_deviceRev + 1;
+        if (nElemsNew > m_nHostElems)
+        {
+            T* p = new T[nElemsNew];
+            memcpy(p, m_pHost, m_nHostElems * sizeof(T));
+            delete[]m_pHost;
+            m_pHost = p;
+        }
+        m_nHostElems = (NvU32)nElemsNew;
+    }
     NvU32 m_hostRev = 0, m_deviceRev = 0;
     T *m_pHost = nullptr, *m_pDevice = nullptr;
     NvU32 m_nHostElems = 0, m_nDeviceElems = 0;

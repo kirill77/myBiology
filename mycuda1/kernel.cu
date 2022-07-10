@@ -209,29 +209,30 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     Tensor<float>& input = *inputs[0];
     input.syncToHost();
     nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
-    Tensor<float>* pDeltaInput = nullptr;
+    Tensor<float> deltaInput;
     if (pDeltaInputs)
     {
         nvAssert(pDeltaInputs->size() == 1);
-        pDeltaInput = (*pDeltaInputs)[0].get();
-        nvAssert(pDeltaInput->n() == m_inputDims[0] && pDeltaInput->h() == m_inputDims[1] && pDeltaInput->w() == m_inputDims[2] && pDeltaInput->c() == m_inputDims[3]);
+        deltaInput = *(*pDeltaInputs)[0];
+        nvAssert(deltaInput.n() == m_inputDims[0] && deltaInput.h() == m_inputDims[1] && deltaInput.w() == m_inputDims[2] && deltaInput.c() == m_inputDims[3]);
     }
     nvAssert(outputsData.size() == 1);
-    Tensor<float>& outputData = *outputsData[0];
+    Tensor<float> wantedOutput = *outputsData[0];
+    Tensor<float> output = *m_outputs[0];
     m_outputs[0]->syncToHost();
-    nvAssert(outputData.n() == m_outputDims[0] && outputData.h() == m_outputDims[1] && outputData.w() == m_outputDims[2] && outputData.c() == m_outputDims[3]);
+    nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
     for (unsigned inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
     {
         for (unsigned inOutCi = 0; inOutCi < m_outputDims[3]; ++inOutCi)
         {
-            if (pDeltaInput)
+            if (deltaInput.n())
             {
                 // clear delta input
                 for (unsigned inHi = 0; inHi < m_inputDims[1]; ++inHi)
                 {
                     for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi)
                     {
-                        pDeltaInput->access(inOutNi, inHi, inWi, inOutCi) = 0;
+                        deltaInput.access(inOutNi, inHi, inWi, inOutCi) = 0;
                     }
                 }
             }
@@ -245,17 +246,17 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
                     unsigned iBias = _outHi * m_outputDims[2] + outWi;
 
                     std::array<float, 2> fWantedDeltaOut = { };
-                    fWantedDeltaOut[0] = outputData.access(inOutNi, outHi, outWi, inOutCi);
+                    fWantedDeltaOut[0] = wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
                     if (outputsDataType == WANTED_OUTPUTS)
                     {
-                        fWantedDeltaOut[0] -= m_outputs[0]->access(inOutNi, outHi, outWi, inOutCi);
+                        fWantedDeltaOut[0] -= output.access(inOutNi, outHi, outWi, inOutCi);
                     }
                     if (T_ACTIVATION1 != T_ACTIVATION2)
                     {
-                        fWantedDeltaOut[1] = outputData.access(inOutNi, outHi + 1, outWi, inOutCi);
+                        fWantedDeltaOut[1] = wantedOutput.access(inOutNi, outHi + 1, outWi, inOutCi);
                         if (outputsDataType == WANTED_OUTPUTS)
                         {
-                            fWantedDeltaOut[1] -= m_outputs[0]->access(inOutNi, outHi + 1, outWi, inOutCi);
+                            fWantedDeltaOut[1] -= output.access(inOutNi, outHi + 1, outWi, inOutCi);
                         }
                     }
                     if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
@@ -286,9 +287,9 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
                             float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
                             float fW = m_weights[iiWeight];
                             m_weights[iiWeight] += fMult * fInput;
-                            if (pDeltaInput) // have we been asked to compute deltaInput?
+                            if (deltaInput.n()) // have we been asked to compute deltaInput?
                             {
-                                float& fDeltaInput = pDeltaInput->access(inOutNi, inHi, inWi, inOutCi);
+                                float& fDeltaInput = deltaInput.access(inOutNi, inHi, inWi, inOutCi);
                                 fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
                             }
                         }
