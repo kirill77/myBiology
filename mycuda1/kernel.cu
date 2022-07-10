@@ -225,29 +225,22 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     }
     m_outputs[0]->syncToHost();
     nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
-    for (unsigned inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
+    if (deltaInput.n())
     {
-        for (unsigned inOutCi = 0; inOutCi < m_outputDims[3]; ++inOutCi)
+        deltaInput.clearSubregion(0, deltaInput.size());
+    }
+    unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
+    for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
+    {
+        for (unsigned outWi = 0; outWi < wantedOutput.w(); ++outWi)
         {
-            if (deltaInput.n())
+            for (unsigned inOutNi = 0; inOutNi < wantedOutput.n(); ++inOutNi)
             {
-                // clear delta input
-                for (unsigned inHi = 0; inHi < input.h(); ++inHi)
-                {
-                    for (unsigned inWi = 0; inWi < input.w(); ++inWi)
-                    {
-                        deltaInput.access(inOutNi, inHi, inWi, inOutCi) = 0;
-                    }
-                }
-            }
-            unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2);
-            for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
-            {
-                for (unsigned outWi = 0; outWi < m_outputDims[2]; ++outWi)
+                for (unsigned inOutCi = 0; inOutCi < wantedOutput.c(); ++inOutCi)
                 {
                     unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
-                    unsigned iWeight = (outWi + _outHi * m_outputDims[2]) * input.h() * input.w();
-                    unsigned iBias = _outHi * m_outputDims[2] + outWi;
+                    unsigned iWeight = (outWi + _outHi * wantedOutput.w()) * input.h() * input.w();
+                    unsigned iBias = _outHi * wantedOutput.w() + outWi;
 
                     std::array<float, 2> fWantedDeltaOut = { };
                     fWantedDeltaOut[0] = wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
