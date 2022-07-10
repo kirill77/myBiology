@@ -218,7 +218,11 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     }
     nvAssert(outputsData.size() == 1);
     Tensor<float> wantedOutput = *outputsData[0];
-    Tensor<float> output = *m_outputs[0];
+    Tensor<float> output;
+    if (outputsDataType == WANTED_OUTPUTS)
+    {
+       output = *m_outputs[0];
+    }
     m_outputs[0]->syncToHost();
     nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
     for (unsigned inOutNi = 0; inOutNi < m_outputDims[0]; ++inOutNi)
@@ -228,9 +232,9 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
             if (deltaInput.n())
             {
                 // clear delta input
-                for (unsigned inHi = 0; inHi < m_inputDims[1]; ++inHi)
+                for (unsigned inHi = 0; inHi < input.h(); ++inHi)
                 {
-                    for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi)
+                    for (unsigned inWi = 0; inWi < input.w(); ++inWi)
                     {
                         deltaInput.access(inOutNi, inHi, inWi, inOutCi) = 0;
                     }
@@ -242,19 +246,19 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
                 for (unsigned outWi = 0; outWi < m_outputDims[2]; ++outWi)
                 {
                     unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
-                    unsigned iWeight = (outWi + _outHi * m_outputDims[2]) * m_inputDims[1] * m_inputDims[2];
+                    unsigned iWeight = (outWi + _outHi * m_outputDims[2]) * input.h() * input.w();
                     unsigned iBias = _outHi * m_outputDims[2] + outWi;
 
                     std::array<float, 2> fWantedDeltaOut = { };
                     fWantedDeltaOut[0] = wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
-                    if (outputsDataType == WANTED_OUTPUTS)
+                    if (output.n())
                     {
                         fWantedDeltaOut[0] -= output.access(inOutNi, outHi, outWi, inOutCi);
                     }
                     if (T_ACTIVATION1 != T_ACTIVATION2)
                     {
                         fWantedDeltaOut[1] = wantedOutput.access(inOutNi, outHi + 1, outWi, inOutCi);
-                        if (outputsDataType == WANTED_OUTPUTS)
+                        if (output.n())
                         {
                             fWantedDeltaOut[1] -= output.access(inOutNi, outHi + 1, outWi, inOutCi);
                         }
@@ -262,9 +266,9 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
                     if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
                         continue;
                     float fBeforeActivation = m_biases[iBias];
-                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < input.h(); ++inHi)
                     {
-                        for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+                        for (unsigned inWi = 0; inWi < input.w(); ++inWi, ++iiWeight)
                         {
                             fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iiWeight];
                         }
@@ -280,9 +284,9 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
                     // modify the bias
                     m_biases[iBias] += fMult;
                     // modify all the weights corresponding to this summator
-                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
+                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < input.h(); ++inHi)
                     {
-                        for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
+                        for (unsigned inWi = 0; inWi < input.w(); ++inWi, ++iiWeight)
                         {
                             float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
                             float fW = m_weights[iiWeight];
