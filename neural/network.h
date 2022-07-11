@@ -44,7 +44,7 @@ struct ILayer
     }
 
     std::vector<TensorRef> m_outputs, m_deltaOutputs;
-    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup;
+    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup, m_beforeActivation;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -77,6 +77,15 @@ struct FullyConnectedLayer : public ILayer
         TensorRef output = std::make_shared<Tensor<float>>();
         output->init(outputDims);
         m_outputs.push_back(output);
+
+        {
+            std::array<unsigned, 4> dimsTmp = outputDims;
+            if (T_ACTIVATION1 != T_ACTIVATION2)
+            {
+                dimsTmp[1] /= 2;
+            }
+            m_beforeActivation.init(dimsTmp);
+        }
     }
     virtual void forward(std::vector<TensorRef>& inputs) override;
     virtual void backward(std::vector<TensorRef>& inputs,

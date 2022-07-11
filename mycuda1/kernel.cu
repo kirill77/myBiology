@@ -54,8 +54,9 @@ void GPUBuffer<T>::syncToHost()
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FullyConnectedLayerCuda
 {
-    FullyConnectedLayerCuda(Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases) :
-        m_input(input), m_output(output), m_weights(weights), m_biases(biases)
+    FullyConnectedLayerCuda(Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases,
+        Tensor<float> &beforeActivation) :
+        m_input(input), m_output(output), m_weights(weights), m_biases(biases), m_beforeActivation(beforeActivation)
     {
     }
 
@@ -76,6 +77,7 @@ struct FullyConnectedLayerCuda
                 fBeforeActivation += m_input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iWeight++];
             }
         }
+        m_beforeActivation.access(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
         float fAfterActivation = TFunction<T_ACTIVATION1>(fBeforeActivation);
         m_output.access(inOutNi, outHi, outWi, inOutCi) = fAfterActivation;
         if (T_ACTIVATION1 != T_ACTIVATION2)
@@ -85,7 +87,7 @@ struct FullyConnectedLayerCuda
         }
     }
 
-    Tensor<float> m_input, m_weights, m_biases, m_output;
+    Tensor<float> m_input, m_weights, m_biases, m_beforeActivation, m_output;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -111,7 +113,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
     m_weights.notifyDeviceBind(false);
     m_biases.notifyDeviceBind(false);
 #endif
-    FullyConnectedLayerCuda<T_ACTIVATION1, T_ACTIVATION2> cudaLayer(input, output, m_weights, m_biases);
+    FullyConnectedLayerCuda<T_ACTIVATION1, T_ACTIVATION2> cudaLayer(input, output, m_weights, m_biases, m_beforeActivation);
 #if RUN_ON_CPU
     for (unsigned iBlockY = 0; iBlockY < grid.y; ++iBlockY)
     {
@@ -131,75 +133,78 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
 #endif
 }
 
-#if 0
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct Backward
 {
-    Backward(Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases) :
-        m_input(input), m_output(output), m_weights(weights), m_biases(biases)
+    Backward(float fLearningRate, Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases,
+    Tensor<float> &deltaInput, Tensor<float> &wantedOutput, Tensor<float> &beforeActivation) :
+        m_fLearningRate(fLearningRate), m_input(input), m_output(output), m_weights(weights), m_biases(biases),
+        m_deltaInput(deltaInput), m_wantedOutput(wantedOutput), m_beforeActivation(beforeActivation)
     {
     }
 
-    __host__ __device__ void go(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
+    __host__ __device__ void go(unsigned threadX, unsigned threadY)
     {
-        unsigned outHi = threadY * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
-        unsigned iWeight = (outWi + _outHi * m_output.w()) * m_input.h() * m_input.w();
-        unsigned iBias = _outHi * m_output.w() + outWi;
+        unsigned outWi = threadX;
+        unsigned _outHi = threadY;
 
-        std::array<float, 2> fWantedDeltaOut = { };
-        fWantedDeltaOut[0] = outputData.access(inOutNi, outHi, outWi, inOutCi);
-        if (outputsDataType == WANTED_OUTPUTS)
+        for (unsigned inOutNi = 0; inOutNi < m_wantedOutput.n(); ++inOutNi)
         {
-            fWantedDeltaOut[0] -= m_outputs[0]->access(inOutNi, outHi, outWi, inOutCi);
-        }
-        if (T_ACTIVATION1 != T_ACTIVATION2)
-        {
-            fWantedDeltaOut[1] = outputData.access(inOutNi, outHi + 1, outWi, inOutCi);
-            if (outputsDataType == WANTED_OUTPUTS)
+            for (unsigned inOutCi = 0; inOutCi < m_wantedOutput.c(); ++inOutCi)
             {
-                fWantedDeltaOut[1] -= m_outputs[0]->access(inOutNi, outHi + 1, outWi, inOutCi);
-            }
-        }
-        if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
-            continue;
-        float fBeforeActivation = m_biases[iBias];
-        for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
-        {
-            for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
-            {
-                fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iiWeight];
-            }
-        }
-        float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
-        float fMult = fWantedDeltaOut[0] * fActivationDer;
-        if (T_ACTIVATION1 != T_ACTIVATION2)
-        {
-            float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
-            fMult += fWantedDeltaOut[1] * fActivation2Der;
-        }
-        fMult *= fLearningRate;
-        // modify the bias
-        m_biases[iBias] += fMult;
-        // modify all the weights corresponding to this summator
-        for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_inputDims[1]; ++inHi)
-        {
-            for (unsigned inWi = 0; inWi < m_inputDims[2]; ++inWi, ++iiWeight)
-            {
-                float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
-                float fW = m_weights[iiWeight];
-                m_weights[iiWeight] += fMult * fInput;
-                if (pDeltaInput) // have we been asked to compute deltaInput?
+                unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
+                unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w();
+                unsigned iBias = _outHi * m_wantedOutput.w() + outWi;
+
+                float fWantedDeltaOut[2] = {0 , 0};
+                fWantedDeltaOut[0] = m_wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
+                if (m_output.n())
                 {
-                    float& fDeltaInput = pDeltaInput->access(inOutNi, inHi, inWi, inOutCi);
-                    fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
+                    fWantedDeltaOut[0] -= m_output.access(inOutNi, outHi, outWi, inOutCi);
+                }
+                if (T_ACTIVATION1 != T_ACTIVATION2)
+                {
+                    fWantedDeltaOut[1] = m_wantedOutput.access(inOutNi, outHi + 1, outWi, inOutCi);
+                    if (m_output.n())
+                    {
+                        fWantedDeltaOut[1] -= m_output.access(inOutNi, outHi + 1, outWi, inOutCi);
+                    }
+                }
+                if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
+                    continue;
+                float fBeforeActivation = m_beforeActivation.access(inOutNi, _outHi, outWi, inOutCi);
+                float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
+                float fMult = fWantedDeltaOut[0] * fActivationDer;
+                if (T_ACTIVATION1 != T_ACTIVATION2)
+                {
+                    float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
+                    fMult += fWantedDeltaOut[1] * fActivation2Der;
+                }
+                fMult *= m_fLearningRate;
+                // modify the bias
+                m_biases[iBias] += fMult;
+                // modify all the weights corresponding to this summator
+                for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_input.h(); ++inHi)
+                {
+                    for (unsigned inWi = 0; inWi < m_input.w(); ++inWi, ++iiWeight)
+                    {
+                        float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
+                        float fW = m_weights[iiWeight];
+                        m_weights[iiWeight] += fMult * fInput;
+                        if (m_deltaInput.n()) // have we been asked to compute deltaInput?
+                        {
+                            float& fDeltaInput = m_deltaInput.access(inOutNi, inHi, inWi, inOutCi);
+                            fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
+                        }
+                    }
                 }
             }
         }
     }
 
-    Tensor<float> m_input, m_weights, m_biases, m_deltaOutput, m_output, m_wantedOutput;
+    Tensor<float> m_input, m_weights, m_biases, m_deltaInput, m_output, m_wantedOutput, m_beforeActivation;
+    float m_fLearningRate = 0;
 };
-#endif
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<TensorRef>& inputs,
@@ -227,72 +232,15 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
     if (deltaInput.n())
     {
-        deltaInput.clearSubregion(0, deltaInput.size());
+        deltaInput.clearSubregion(0, (NvU32)deltaInput.size());
     }
+    Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fLearningRate, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
     unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
     for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
     {
         for (unsigned outWi = 0; outWi < wantedOutput.w(); ++outWi)
         {
-            for (unsigned inOutNi = 0; inOutNi < wantedOutput.n(); ++inOutNi)
-            {
-                for (unsigned inOutCi = 0; inOutCi < wantedOutput.c(); ++inOutCi)
-                {
-                    unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
-                    unsigned iWeight = (outWi + _outHi * wantedOutput.w()) * input.h() * input.w();
-                    unsigned iBias = _outHi * wantedOutput.w() + outWi;
-
-                    std::array<float, 2> fWantedDeltaOut = { };
-                    fWantedDeltaOut[0] = wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
-                    if (output.n())
-                    {
-                        fWantedDeltaOut[0] -= output.access(inOutNi, outHi, outWi, inOutCi);
-                    }
-                    if (T_ACTIVATION1 != T_ACTIVATION2)
-                    {
-                        fWantedDeltaOut[1] = wantedOutput.access(inOutNi, outHi + 1, outWi, inOutCi);
-                        if (output.n())
-                        {
-                            fWantedDeltaOut[1] -= output.access(inOutNi, outHi + 1, outWi, inOutCi);
-                        }
-                    }
-                    if (fWantedDeltaOut[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fWantedDeltaOut[1] == 0)) // if no error - nothing to do
-                        continue;
-                    float fBeforeActivation = m_biases[iBias];
-                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < input.h(); ++inHi)
-                    {
-                        for (unsigned inWi = 0; inWi < input.w(); ++inWi, ++iiWeight)
-                        {
-                            fBeforeActivation += input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iiWeight];
-                        }
-                    }
-                    float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
-                    float fMult = fWantedDeltaOut[0] * fActivationDer;
-                    if (T_ACTIVATION1 != T_ACTIVATION2)
-                    {
-                        float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
-                        fMult += fWantedDeltaOut[1] * fActivation2Der;
-                    }
-                    fMult *= fLearningRate;
-                    // modify the bias
-                    m_biases[iBias] += fMult;
-                    // modify all the weights corresponding to this summator
-                    for (unsigned inHi = 0, iiWeight = iWeight; inHi < input.h(); ++inHi)
-                    {
-                        for (unsigned inWi = 0; inWi < input.w(); ++inWi, ++iiWeight)
-                        {
-                            float fInput = input.access(inOutNi, inHi, inWi, inOutCi);
-                            float fW = m_weights[iiWeight];
-                            m_weights[iiWeight] += fMult * fInput;
-                            if (deltaInput.n()) // have we been asked to compute deltaInput?
-                            {
-                                float& fDeltaInput = deltaInput.access(inOutNi, inHi, inWi, inOutCi);
-                                fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
-                            }
-                        }
-                    }
-                }
-            }
+            backward.go(outWi, _outHi);
         }
     }
 }

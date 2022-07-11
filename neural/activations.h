@@ -21,7 +21,7 @@ __host__ __device__ float TFunction(float fInput)
 }
 
 template <ACTIVATION T_ACTIVATION>
-float TFunctionDer(float fInput)
+__host__ __device__ float TFunctionDer(float fInput)
 {
     switch (T_ACTIVATION)
     {
