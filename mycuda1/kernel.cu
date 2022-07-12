@@ -1,8 +1,6 @@
 ﻿#include "neural/tensor.h"
 #include "neural/network.h"
 
-#define RUN_ON_CPU 0
-
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
 void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind)
@@ -58,7 +56,7 @@ struct FullyConnectedLayerCuda
         Tensor<float> &beforeActivation) :
         m_input(input), m_output(output), m_weights(weights), m_biases(biases), m_beforeActivation(beforeActivation)
     {
-#if !RUN_ON_CPU
+#if RUN_ON_GPU
         m_input.notifyDeviceBind(false);
         m_output.notifyDeviceBind(true);
         m_weights.notifyDeviceBind(false);
@@ -115,7 +113,9 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
     dim3 grid(m_outputDims[0], m_outputDims[3], 1);
     dim3 block(m_outputDims[2], T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2, 1);
     FullyConnectedLayerCuda<T_ACTIVATION1, T_ACTIVATION2> cudaLayer(input, output, m_weights, m_biases, m_beforeActivation);
-#if RUN_ON_CPU
+#if RUN_ON_GPU
+    fullyConnectedLayerForward << <grid, block >> > (cudaLayer);
+#else
     for (unsigned iBlockY = 0; iBlockY < grid.y; ++iBlockY)
     {
         for (unsigned iBlockX = 0; iBlockX < grid.x; ++iBlockX)
@@ -129,8 +129,6 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
             }
         }
     }
-#else
-    fullyConnectedLayerForward << <grid, block >> > (cudaLayer);
 #endif
 }
 
@@ -142,7 +140,7 @@ struct Backward
         m_fLearningRate(fLearningRate), m_input(input), m_output(output), m_weights(weights), m_biases(biases),
         m_deltaInput(deltaInput), m_wantedOutput(wantedOutput), m_beforeActivation(beforeActivation)
     {
-#if !RUN_ON_CPU
+#if RUN_ON_GPU
         m_input.notifyDeviceBind(false);
         m_output.notifyDeviceBind(false);
         m_weights.notifyDeviceBind(true);
@@ -252,7 +250,11 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     }
     Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fLearningRate, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
     unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
-#if RUN_ON_CPU
+#if RUN_ON_GPU
+    dim3 grid(1, 1, 1);
+    dim3 block(wantedOutput.w(), _outHiNum, 1);
+    fullyConnectedLayerBackward << <grid, block >> > (backward);
+#else
     for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
     {
         for (unsigned outWi = 0; outWi < wantedOutput.w(); ++outWi)
@@ -260,13 +262,36 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
             backward.go(outWi, _outHi);
         }
     }
-#else
-    dim3 grid(1, 1, 1);
-    dim3 block(wantedOutput.w(), _outHiNum, 1);
-    fullyConnectedLayerBackward<<<grid, block>>>(backward);
 #endif
 }
 
+template <class T>
+template <class SRC_T>
+NvU32 GPUBuffer<T>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy)
+{
+    syncToHost();
+    src.syncToHost();
+    nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
+    m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
+    NvU32 nDstElems = nSrcElemsToCopy * sizeof(SRC_T) / sizeof(T);
+    nvAssert(nDstElems * sizeof(T) == nSrcElemsToCopy * sizeof(SRC_T));
+    nvAssert(dstOffset + nDstElems <= size());
+    nvAssert(srcOffset + nSrcElemsToCopy <= src.size());
+    memcpy(&((*m_pOrig)[dstOffset]), &(src[srcOffset]), nSrcElemsToCopy * sizeof(SRC_T));
+    return dstOffset + nDstElems;
+}
+// explicit instantiation
+template NvU32 GPUBuffer<float>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<float>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy);
+
+template <class T>
+void GPUBuffer<T>::clearSubregion(NvU32 offset, NvU32 nElemsToClear)
+{
+    m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
+    nvAssert(offset + nElemsToClear <= size());
+    memset(&((*m_pOrig)[offset]), 0, nElemsToClear * sizeof(T));
+}
+
+// explicit instantiation
 template struct FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
 template struct FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
 template struct GPUBuffer<float>;
