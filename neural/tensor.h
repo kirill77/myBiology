@@ -5,6 +5,8 @@
 #include <algorithm>
 #include "MonteCarlo/RNGUniform.h"
 
+#define RUN_ON_GPU 0
+
 #ifndef __host__
 #define __host__
 #endif
@@ -67,25 +69,8 @@ struct GPUBuffer
         }
     }
     template <class SRC_T>
-    NvU32 copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy)
-    {
-        syncToHost();
-        src.syncToHost();
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        NvU32 nDstElems = nSrcElemsToCopy * sizeof(SRC_T) / sizeof(T);
-        nvAssert(nDstElems * sizeof(T) == nSrcElemsToCopy * sizeof(SRC_T));
-        nvAssert(dstOffset + nDstElems <= size());
-        nvAssert(srcOffset + nSrcElemsToCopy <= src.size());
-        memcpy(&((*m_pOrig)[dstOffset]), &(src[srcOffset]), nSrcElemsToCopy * sizeof(SRC_T));
-        return dstOffset + nDstElems;
-    }
-    void clearSubregion(NvU32 offset, NvU32 nElemsToClear)
-    {
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        nvAssert(offset + nElemsToClear <= size());
-        memset(&((*m_pOrig)[offset]), 0, nElemsToClear * sizeof(T));
-    }
+    NvU32 copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy);
+    void clearSubregion(NvU32 offset, NvU32 nElemsToClear);
     GPUBuffer<T>(const GPUBuffer<T>& other)
     {
         m_pOrig = other.m_pOrig;
