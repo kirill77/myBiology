@@ -45,7 +45,6 @@ struct GPUBuffer
     }
     size_t size() const
     {
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         return m_pOrig->m_nHostElems;
     }
     size_t sizeInBytes() const
@@ -68,8 +67,10 @@ struct GPUBuffer
         }
     }
     template <class SRC_T>
-    NvU32 copySubregionFrom(NvU32 dstOffset, const GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy)
+    NvU32 copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy)
     {
+        syncToHost();
+        src.syncToHost();
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
         NvU32 nDstElems = nSrcElemsToCopy * sizeof(SRC_T) / sizeof(T);
@@ -81,7 +82,6 @@ struct GPUBuffer
     }
     void clearSubregion(NvU32 offset, NvU32 nElemsToClear)
     {
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
         nvAssert(offset + nElemsToClear <= size());
         memset(&((*m_pOrig)[offset]), 0, nElemsToClear * sizeof(T));

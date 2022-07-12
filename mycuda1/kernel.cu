@@ -1,7 +1,7 @@
 ﻿#include "neural/tensor.h"
 #include "neural/network.h"
 
-#define RUN_ON_CPU 1
+#define RUN_ON_CPU 0
 
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
@@ -58,6 +58,13 @@ struct FullyConnectedLayerCuda
         Tensor<float> &beforeActivation) :
         m_input(input), m_output(output), m_weights(weights), m_biases(biases), m_beforeActivation(beforeActivation)
     {
+#if !RUN_ON_CPU
+        m_input.notifyDeviceBind(false);
+        m_output.notifyDeviceBind(true);
+        m_weights.notifyDeviceBind(false);
+        m_biases.notifyDeviceBind(false);
+        m_beforeActivation.notifyDeviceBind(true);
+#endif
     }
 
     __host__ __device__ void forward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
@@ -107,12 +114,6 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
 
     dim3 grid(m_outputDims[0], m_outputDims[3], 1);
     dim3 block(m_outputDims[2], T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2, 1);
-#if !RUN_ON_CPU
-    input.notifyDeviceBind(false);
-    output.notifyDeviceBind(true);
-    m_weights.notifyDeviceBind(false);
-    m_biases.notifyDeviceBind(false);
-#endif
     FullyConnectedLayerCuda<T_ACTIVATION1, T_ACTIVATION2> cudaLayer(input, output, m_weights, m_biases, m_beforeActivation);
 #if RUN_ON_CPU
     for (unsigned iBlockY = 0; iBlockY < grid.y; ++iBlockY)
@@ -141,6 +142,15 @@ struct Backward
         m_fLearningRate(fLearningRate), m_input(input), m_output(output), m_weights(weights), m_biases(biases),
         m_deltaInput(deltaInput), m_wantedOutput(wantedOutput), m_beforeActivation(beforeActivation)
     {
+#if !RUN_ON_CPU
+        m_input.notifyDeviceBind(false);
+        m_output.notifyDeviceBind(false);
+        m_weights.notifyDeviceBind(true);
+        m_biases.notifyDeviceBind(true);
+        m_deltaInput.notifyDeviceBind(true);
+        m_wantedOutput.notifyDeviceBind(false);
+        m_beforeActivation.notifyDeviceBind(false);
+#endif
     }
 
     __host__ __device__ void go(unsigned threadX, unsigned threadY)
@@ -207,6 +217,12 @@ struct Backward
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
+__global__ void fullyConnectedLayerBackward(Backward<T_ACTIVATION1, T_ACTIVATION2> backward)
+{
+    backward.go(threadIdx.x, threadIdx.y);
+}
+
+template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<TensorRef>& inputs,
     OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr)
 {
@@ -236,6 +252,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     }
     Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fLearningRate, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
     unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
+#if RUN_ON_CPU
     for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
     {
         for (unsigned outWi = 0; outWi < wantedOutput.w(); ++outWi)
@@ -243,6 +260,11 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
             backward.go(outWi, _outHi);
         }
     }
+#else
+    dim3 grid(1, 1, 1);
+    dim3 block(wantedOutput.w(), _outHiNum, 1);
+    fullyConnectedLayerBackward<<<grid, block>>>(backward);
+#endif
 }
 
 template struct FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
