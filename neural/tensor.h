@@ -7,6 +7,8 @@
 
 #define RUN_ON_GPU 1
 
+enum EXECUTE_MODE { EXECUTE_MODE_DEFAULT, EXECUTE_MODE_FORCE_GPU, EXECUTE_MODE_FORCE_CPU };
+
 #ifndef __host__
 #define __host__
 #endif
@@ -69,7 +71,9 @@ struct GPUBuffer
     }
     template <class SRC_T>
     NvU32 copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy);
-    void clearSubregion(NvU32 offset, NvU32 nElemsToClear);
+
+    void clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE mode);
+
     GPUBuffer<T>(const GPUBuffer<T>& other)
     {
         m_pOrig = other.m_pOrig;

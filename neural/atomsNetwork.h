@@ -69,12 +69,14 @@ struct AtomsNetwork : public NeuralNetwork
             TensorRef wantedOutput = std::make_shared<Tensor<float>>();
             m_wantedOutputs.push_back(wantedOutput);
         }
+
+        // initialize inputs and outputs to zero (force CPU because we have to fill those buffers on CPU)
         std::array<unsigned, 4> inputDims = { (NvU32)clusterIndices.size(), s_nInputValuesPerCluster, 1, 1 };
         m_inputs[0]->init(inputDims);
-        m_inputs[0]->clearSubregion(0, (NvU32)m_inputs[0]->size());
+        m_inputs[0]->clearSubregion(0, (NvU32)m_inputs[0]->size(), EXECUTE_MODE_FORCE_CPU);
         std::array<unsigned, 4> outputDims = { (NvU32)clusterIndices.size(), s_nOutputValuesPerCluster, 1, 1 };
         m_wantedOutputs[0]->init(outputDims);
-        m_wantedOutputs[0]->clearSubregion(0, (NvU32)m_wantedOutputs[0]->size());
+        m_wantedOutputs[0]->clearSubregion(0, (NvU32)m_wantedOutputs[0]->size(), EXECUTE_MODE_FORCE_CPU);
 
         // copy all data to input and output tensors
         for (NvU32 u = 0; u < clusterIndices.size(); ++u)

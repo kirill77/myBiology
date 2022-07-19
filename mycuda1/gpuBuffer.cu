@@ -61,20 +61,39 @@ __global__ void clearKernel(float* p, NvU32 nElemsToClear)
     p[uElemToClear] = 0;
 }
 
-template <class T>
-void GPUBuffer<T>::clearSubregion(NvU32 offset, NvU32 nElemsToClear)
+static inline bool doesRunOnGPU(EXECUTE_MODE mode)
 {
-#if RUN_ON_GPU
-    m_pOrig->notifyDeviceBind(true, nElemsToClear == m_pOrig->m_nHostElems);
-    nvAssert(sizeof(T) == sizeof(float));
-    dim3 block(256, 1, 1);
-    dim3 grid((nElemsToClear + block.x - 1) / block.x, 1, 1);
-    clearKernel << <grid, block >> > (((float*)m_pOrig->m_pDevice) + offset, nElemsToClear);
-#else
-    m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-    nvAssert(offset + nElemsToClear <= size());
-    memset(&((*m_pOrig)[offset]), 0, nElemsToClear * sizeof(T));
-#endif
+    switch (mode)
+    {
+    case EXECUTE_MODE_DEFAULT:
+        return (RUN_ON_GPU ? true : false);
+    case EXECUTE_MODE_FORCE_GPU:
+        return true;
+    case EXECUTE_MODE_FORCE_CPU:
+        return false;
+    default:
+        nvAssert(false);
+        return true;
+    }
+}
+
+template <class T>
+void GPUBuffer<T>::clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE mode)
+{
+    if (doesRunOnGPU(mode))
+    {
+        m_pOrig->notifyDeviceBind(true, nElemsToClear == m_pOrig->m_nHostElems);
+        nvAssert(sizeof(T) == sizeof(float));
+        dim3 block(256, 1, 1);
+        dim3 grid((nElemsToClear + block.x - 1) / block.x, 1, 1);
+        clearKernel << <grid, block >> > (((float*)m_pOrig->m_pDevice) + offset, nElemsToClear);
+    }
+    else
+    {
+        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
+        nvAssert(offset + nElemsToClear <= size());
+        memset(&((*m_pOrig)[offset]), 0, nElemsToClear * sizeof(T));
+    }
 }
 
 __global__ void copyKernel(float* pDst, float *pSrc, NvU32 nElems)

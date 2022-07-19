@@ -178,7 +178,6 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
 {
     nvAssert(inputs.size() == 1);
     Tensor<float>& input = *inputs[0];
-    input.syncToHost();
     nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
     Tensor<float> deltaInput;
     if (pDeltaInputs)
@@ -194,11 +193,10 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     {
        output = *m_outputs[0];
     }
-    m_outputs[0]->syncToHost();
     nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
     if (deltaInput.n())
     {
-        deltaInput.clearSubregion(0, (NvU32)deltaInput.size());
+        deltaInput.clearSubregion(0, (NvU32)deltaInput.size(), EXECUTE_MODE_DEFAULT);
     }
     FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fLearningRate, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
     unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
@@ -207,6 +205,8 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     dim3 block(wantedOutput.w(), _outHiNum, 1);
     fclBackwardKernel << <grid, block >> > (backward);
 #else
+    input.syncToHost();
+    output.syncToHost();
     for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
     {
         for (unsigned outWi = 0; outWi < wantedOutput.w(); ++outWi)
