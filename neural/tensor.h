@@ -5,7 +5,7 @@
 #include <algorithm>
 #include "MonteCarlo/RNGUniform.h"
 
-#define RUN_ON_GPU 0
+#define RUN_ON_GPU 1
 
 #ifndef __host__
 #define __host__
@@ -51,7 +51,6 @@ struct GPUBuffer
     }
     size_t sizeInBytes() const
     {
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         return sizeof(T) * m_pOrig->m_nHostElems;
     }
     void resize(size_t nElems)
@@ -91,8 +90,13 @@ struct GPUBuffer
     {
         m_pOrig->decRef();
     }
-    void notifyDeviceBind(bool isWriteBind);
+    void notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent = false);
     void syncToHost();
+    T* getDevicePointer() const
+    {
+        nvAssert(m_pOrig->m_deviceRev >= m_pOrig->m_hostRev);
+        return m_pDevice;
+    }
 
 public:
     void decRef()

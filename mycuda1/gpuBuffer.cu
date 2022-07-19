@@ -3,7 +3,7 @@
 
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
-void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind)
+void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
 {
     if (this != m_pOrig)
     {
@@ -30,7 +30,10 @@ void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind)
             }
             m_nDeviceElems = m_nHostElems;
         }
-        cudaMemcpy(m_pDevice, m_pHost, m_nHostElems * sizeof(T), cudaMemcpyHostToDevice);
+        if (!bDiscardPrevContent)
+        {
+            cudaMemcpy(m_pDevice, m_pHost, m_nHostElems * sizeof(T), cudaMemcpyHostToDevice);
+        }
     }
     m_deviceRev = m_hostRev + (isWriteBind ? 1 : 0);
 }
@@ -50,27 +53,62 @@ void GPUBuffer<T>::syncToHost()
     m_hostRev = m_deviceRev;
 }
 
+__global__ void clearKernel(float* p, NvU32 nElemsToClear)
+{
+    NvU32 uElemToClear = blockIdx.x * blockDim.x + threadIdx.x;
+    if (uElemToClear >= nElemsToClear)
+        return;
+    p[uElemToClear] = 0;
+}
+
 template <class T>
 void GPUBuffer<T>::clearSubregion(NvU32 offset, NvU32 nElemsToClear)
 {
+#if RUN_ON_GPU
+    m_pOrig->notifyDeviceBind(true, nElemsToClear == m_pOrig->m_nHostElems);
+    nvAssert(sizeof(T) == sizeof(float));
+    dim3 block(256, 1, 1);
+    dim3 grid((nElemsToClear + block.x - 1) / block.x, 1, 1);
+    clearKernel << <grid, block >> > (((float*)m_pOrig->m_pDevice) + offset, nElemsToClear);
+#else
     m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
     nvAssert(offset + nElemsToClear <= size());
     memset(&((*m_pOrig)[offset]), 0, nElemsToClear * sizeof(T));
+#endif
+}
+
+__global__ void copyKernel(float* pDst, float *pSrc, NvU32 nElems)
+{
+    NvU32 uElem = blockIdx.x * blockDim.x + threadIdx.x;
+    if (uElem >= nElems)
+        return;
+    pDst[uElem] = pSrc[uElem];
 }
 
 template <class T>
 template <class SRC_T>
 NvU32 GPUBuffer<T>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy)
 {
-    syncToHost();
-    src.syncToHost();
-    nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-    m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
     NvU32 nDstElems = nSrcElemsToCopy * sizeof(SRC_T) / sizeof(T);
     nvAssert(nDstElems * sizeof(T) == nSrcElemsToCopy * sizeof(SRC_T));
     nvAssert(dstOffset + nDstElems <= size());
     nvAssert(srcOffset + nSrcElemsToCopy <= src.size());
+#if RUN_ON_GPU
+    src.notifyDeviceBind(false);
+    m_pOrig->notifyDeviceBind(true, src.sizeInBytes() == m_pOrig->sizeInBytes());
+    nvAssert(sizeof(T) == sizeof(float) && sizeof(SRC_T) == sizeof(float));
+    float* pSrc = ((float*)src.getDevicePointer()) + srcOffset;
+    float* pDst = ((float*)getDevicePointer()) + dstOffset;
+    dim3 block(256, 1, 1);
+    dim3 grid((nDstElems + block.x - 1) / block.x, 1, 1);
+    copyKernel<<<grid, block>>>(pDst, pSrc, nDstElems);
+#else
+    syncToHost();
+    src.syncToHost();
+    nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
+    m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
     memcpy(&((*m_pOrig)[dstOffset]), &(src[srcOffset]), nSrcElemsToCopy * sizeof(SRC_T));
+#endif
     return dstOffset + nDstElems;
 }
 
