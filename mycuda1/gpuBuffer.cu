@@ -26,7 +26,8 @@ void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
             }
             else
             {
-                cudaMalloc(&m_pDevice, m_nHostElems * sizeof(T));
+                cudaError_t error = cudaMalloc(&m_pDevice, m_nHostElems * sizeof(T));
+                nvAssert(error == cudaSuccess);
             }
             m_nDeviceElems = m_nHostElems;
         }
@@ -49,7 +50,8 @@ void GPUBuffer<T>::syncToHost()
     if (m_hostRev >= m_deviceRev)
         return;
     nvAssert(m_nHostElems == m_nDeviceElems);
-    cudaMemcpy(m_pHost, m_pDevice, m_nHostElems * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaError_t error = cudaMemcpy(m_pHost, m_pDevice, m_nHostElems * sizeof(T), cudaMemcpyDeviceToHost);
+    nvAssert(error == cudaSuccess);
     m_hostRev = m_deviceRev;
 }
 

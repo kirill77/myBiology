@@ -5,6 +5,7 @@
 #include <vector>
 #include "basics/vectors.h"
 #include "tensor.h"
+#include "l2Computer.h"
 #include "activations.h"
 #include "neuralTest.h"
 
@@ -165,25 +166,20 @@ protected:
 
     virtual bool createLayers_impl() = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
+    L2Computer m_l2Computer;
 
 private:
     float computeCurrentError(std::vector<TensorRef>& wantedOutputs)
     {
-        float fError = 0;
         const std::vector<TensorRef>& outputs = (*m_pLayers.rbegin())->m_outputs;
         nvAssert(outputs.size() == wantedOutputs.size());
         for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
         {
             Tensor<float>& output = (*outputs[uTensor]);
             Tensor<float>& wantedOutput = (*wantedOutputs[uTensor]);
-            output.syncToHost();
-            wantedOutput.syncToHost();
-            nvAssert(output.getDims() == wantedOutput.getDims());
-            for (NvU32 u = 0; u < output.size(); ++u)
-            {
-                fError += sqr(output[u] - wantedOutput[u]);
-            }
+            m_l2Computer.accumulateL2Error(output, wantedOutput, (uTensor == 0) ? L2_MODE_RESET : L2_MODE_ADD);
         }
+        float fError = m_l2Computer.getAccumulatedError();
         return fError;
     }
     void saveCurrentStateToBackup()

@@ -158,6 +158,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="atomsNetwork.h" />
+    <ClInclude Include="gpuBuffer.h" />
+    <ClInclude Include="l2Computer.h" />
     <ClInclude Include="network.h" />
     <ClInclude Include="tensor.h" />
   </ItemGroup>
