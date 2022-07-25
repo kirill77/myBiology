@@ -110,11 +110,12 @@ struct NeuralNetwork
     {
         nvAssert(NeuralTest::isTested());
     }
-    double train(NvU32 nSteps, std::vector<TensorRef> &inputs, std::vector<TensorRef> &wantedOutputs)
+    double train(NvU32 nStepsToMake, std::vector<TensorRef> &inputs, std::vector<TensorRef> &wantedOutputs)
     {
+        NvU32 uEndStep = m_nTotalStepsMade + nStepsToMake;
         if (m_pLayers.size() == 0)
         {
-            createLayers_impl();
+            createLayers_impl(m_pLayers);
             nvAssert(m_pLayers.size() != 0);
             // allocate delta outputs
             for (NvU32 uLayer = 0; uLayer < m_pLayers.size() - 1; ++uLayer)
@@ -128,14 +129,15 @@ struct NeuralNetwork
             forwardPass(inputs);
             m_fLastError = computeCurrentError(wantedOutputs);
             nvAssert(isfinite(m_fLastError));
-            --nSteps;
+            ++m_nTotalStepsMade;
             saveCurrentStateToBackup();
         }
 
-        for (NvU32 uStep = 0; uStep < nSteps; ++uStep)
+        for ( ; m_nTotalStepsMade < uEndStep; ++m_nTotalStepsMade)
         {
             backwardPass(inputs, wantedOutputs);
             forwardPass(inputs);
+
             if (++m_nStepsWithoutErrorCheck >= m_nStepsPerErrorCheck)
             {
                 m_nStepsWithoutErrorCheck = 0;
@@ -155,20 +157,20 @@ struct NeuralNetwork
                 }
             }
         }
-        m_nTotalStepsMade += nSteps;
 
         return m_fLastError;
     }
+    double getLastError() const { return m_fLastError; }
+    NvU32 getNStepsMade() const { return m_nTotalStepsMade; }
 
-protected:
+private:
     float m_fLearningRate = 1, m_fLastError = -1;
     NvU32 m_nTotalStepsMade = 0, m_nStepsPerErrorCheck = 1, m_nStepsWithoutErrorCheck = 0;
 
-    virtual bool createLayers_impl() = 0;
+    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
     L2Computer m_l2Computer;
 
-private:
     float computeCurrentError(std::vector<TensorRef>& wantedOutputs)
     {
         const std::vector<TensorRef>& outputs = (*m_pLayers.rbegin())->m_outputs;

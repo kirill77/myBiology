@@ -37,12 +37,72 @@ struct AtomsNetwork : public NeuralNetwork
     using InternalLayerType = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
 
     inline NvU32 getNAtoms() const { return (NvU32)m_constAtomData.size(); }
-    void trainAtomsNetwork(NvU32 nSteps)
+    double trainAtomsNetwork(NvU32 nSteps)
+    {
+        if (getNStepsMade() == 0)// % NATOMS_IN_TRAINING == 0)
+        {
+            initializeTrainingData();
+        }
+        return train(nSteps, m_inputs, m_wantedOutputs);
+    }
+    void init(std::vector<Atom<T>>& atoms)
+    {
+        copyConstAtomsDataFromTheModel(atoms);
+    }
+    void notifyStepBeginning(const SimContext<T> &simContext)
+    {
+        if (hasEnoughData())
+            return;
+        m_bSimStepStarted = true;
+
+        if (m_pTransientAtomData.size() == 0)
+        {
+            copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        }
+        copyForceIndicesFromTheModel(simContext);
+        copyBondsFromTheModel(simContext.m_forces);
+    }
+    size_t sizeInBytes() const { return m_totalBytes; }
+    void notifyStepDone(const SimContext<T> &simContext)
+    {
+        if (!m_bSimStepStarted)
+            return;
+
+        copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        copyBondsFromTheModel(simContext.m_forces);
+
+        m_bSimStepStarted = false;
+    }
+    bool hasEnoughData() const { return !m_bSimStepStarted && sizeInBytes() > 1024 * 1024 * 1; }
+
+private:
+    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers) override
+    {
+        nvAssert(pLayers.size() == 0);
+
+        std::array<unsigned, 4> prevInputDims = m_inputs[0]->getDims();
+        std::array<unsigned, 4> globalOutputDims = m_wantedOutputs[0]->getDims();
+        for (; ; )
+        {
+            std::array<unsigned, 4> outputDims = prevInputDims;
+            outputDims[1] /= 2;
+            outputDims[1] &= ~1; // must be even
+            if (outputDims[1] <= globalOutputDims[1]) break;
+            pLayers.push_back(std::make_shared<InternalLayerType>(prevInputDims, outputDims));
+            prevInputDims = outputDims;
+        }
+        using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
+        pLayers.push_back(std::make_shared<OutputLayerType>(prevInputDims, globalOutputDims));
+
+        return true;
+    }
+    static const NvU32 NATOMS_IN_TRAINING = 32; // number of atoms we train on simultaneously
+    void initializeTrainingData()
     {
         NvU32 nSimulationSteps = (NvU32)m_pForceIndices.size();
         NvU32 nTotalClusters = nSimulationSteps * getNAtoms();
         // out of all clusters, randomly select some number of clusters we'll train on
-        std::array<NvU32, 32> clusterIndices;
+        std::array<NvU32, NATOMS_IN_TRAINING> clusterIndices;
         for (NvU32 u = 0; u < clusterIndices.size(); ++u)
         {
             clusterIndices[u] = m_rng.generateUnsigned(0, nTotalClusters);
@@ -84,59 +144,7 @@ struct AtomsNetwork : public NeuralNetwork
             copyClusterToInputTensor(u, clusterIndices[u]);
             copyClusterToOutputTensor(u, clusterIndices[u]);
         }
-        train(nSteps, m_inputs, m_wantedOutputs);
     }
-    virtual bool createLayers_impl() override
-    {
-        nvAssert(m_pLayers.size() == 0);
-
-        std::array<unsigned, 4> prevInputDims = m_inputs[0]->getDims();
-        std::array<unsigned, 4> globalOutputDims = m_wantedOutputs[0]->getDims();
-        for ( ; ; )
-        {
-            std::array<unsigned, 4> outputDims = prevInputDims;
-            outputDims[1] /= 2;
-            outputDims[1] &= ~1; // must be even
-            if (outputDims[1] <= globalOutputDims[1]) break;
-            m_pLayers.push_back(std::make_shared<InternalLayerType>(prevInputDims, outputDims));
-            prevInputDims = outputDims;
-        }
-        using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        m_pLayers.push_back(std::make_shared<OutputLayerType>(prevInputDims, globalOutputDims));
-
-        return true;
-    }
-    void init(std::vector<Atom<T>>& atoms)
-    {
-        copyConstAtomsDataFromTheModel(atoms);
-    }
-    void notifyStepBeginning(const SimContext<T> &simContext)
-    {
-        if (hasEnoughData())
-            return;
-        m_bSimStepStarted = true;
-
-        if (m_pTransientAtomData.size() == 0)
-        {
-            copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        }
-        copyForceIndicesFromTheModel(simContext);
-        copyBondsFromTheModel(simContext.m_forces);
-    }
-    size_t sizeInBytes() const { return m_totalBytes; }
-    void notifyStepDone(const SimContext<T> &simContext)
-    {
-        if (!m_bSimStepStarted)
-            return;
-
-        copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        copyBondsFromTheModel(simContext.m_forces);
-
-        m_bSimStepStarted = false;
-    }
-    bool hasEnoughData() const { return !m_bSimStepStarted && sizeInBytes() > 1024 * 1024 * 1; }
-
-private:
     // **** input offsets computation
     static constexpr NvU32 computeInputAtomOffset(NvU32 uAtom)
     {

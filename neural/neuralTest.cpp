@@ -10,15 +10,15 @@ static std::array<unsigned, 4> s_layer1OutputDims({ 10, 1, 1, 1 });
 
 struct TestNetwork : public NeuralNetwork
 {
-    virtual bool createLayers_impl() override
+    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers) override
     {
         using Layer0Type = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
         std::shared_ptr<Layer0Type> pLayer0 = std::make_shared<Layer0Type>(s_inputDims, s_layer0OutputDims);
-        m_pLayers.push_back(pLayer0);
+        pLayers.push_back(pLayer0);
 
         using Layer1Type = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
         std::shared_ptr<Layer1Type> pLayer1 = std::make_shared<Layer1Type>(s_layer0OutputDims, s_layer1OutputDims);
-        m_pLayers.push_back(pLayer1);
+        pLayers.push_back(pLayer1);
         return true;
     }
 };
