@@ -73,7 +73,7 @@ struct AtomsNetwork : public NeuralNetwork
 
         m_bSimStepStarted = false;
     }
-    bool hasEnoughData() const { return !m_bSimStepStarted && sizeInBytes() > 1024 * 1024 * 1; }
+    bool hasEnoughData() const { return !m_bSimStepStarted && sizeInBytes() > 1024 * 1024 * 10; }
 
 private:
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers) override
@@ -96,7 +96,7 @@ private:
 
         return true;
     }
-    static const NvU32 NATOMS_IN_TRAINING = 32; // number of atoms we train on simultaneously
+    static const NvU32 NATOMS_IN_TRAINING = 256; // number of atoms we train on simultaneously
     void initializeTrainingData()
     {
         NvU32 nSimulationSteps = (NvU32)m_pForceIndices.size();

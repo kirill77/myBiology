@@ -103,17 +103,18 @@ struct FCL_Backward
 #endif
     }
 
-    __host__ __device__ void go(unsigned threadX, unsigned threadY)
+    __host__ __device__ void backward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
     {
         unsigned outWi = threadX;
         unsigned _outHi = threadY;
+        unsigned inWi = blockX;
+        unsigned inHi = blockY;
 
         for (unsigned inOutNi = 0; inOutNi < m_wantedOutput.n(); ++inOutNi)
         {
             for (unsigned inOutCi = 0; inOutCi < m_wantedOutput.c(); ++inOutCi)
             {
                 unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
-                unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w();
                 unsigned iBias = _outHi * m_wantedOutput.w() + outWi;
 
                 float fWantedDeltaOut[2] = {0 , 0};
@@ -143,20 +144,15 @@ struct FCL_Backward
                 fMult *= m_fLearningRate;
                 // modify the bias
                 m_biases[iBias] += fMult;
-                // modify all the weights corresponding to this summator
-                for (unsigned inHi = 0, iiWeight = iWeight; inHi < m_input.h(); ++inHi)
+                // modify the weight corresponding to this summator
+                unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
+                float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
+                float fW = m_weights[iWeight];
+                m_weights[iWeight] += fMult * fInput;
+                if (m_deltaInput.n()) // have we been asked to compute deltaInput?
                 {
-                    for (unsigned inWi = 0; inWi < m_input.w(); ++inWi, ++iiWeight)
-                    {
-                        float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
-                        float fW = m_weights[iiWeight];
-                        m_weights[iiWeight] += fMult * fInput;
-                        if (m_deltaInput.n()) // have we been asked to compute deltaInput?
-                        {
-                            float& fDeltaInput = m_deltaInput.access(inOutNi, inHi, inWi, inOutCi);
-                            fDeltaInput += fMult * (fW + m_weights[iiWeight]) / 2;
-                        }
-                    }
+                    float& fDeltaInput = m_deltaInput.access(inOutNi, inHi, inWi, inOutCi);
+                    fDeltaInput += fMult * (fW + m_weights[iWeight]) / 2;
                 }
             }
         }
@@ -169,7 +165,7 @@ struct FCL_Backward
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 __global__ void fclBackwardKernel(FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward)
 {
-    backward.go(threadIdx.x, threadIdx.y);
+    backward.backward(blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -199,19 +195,26 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
         deltaInput.clearSubregion(0, (NvU32)deltaInput.size(), EXECUTE_MODE_DEFAULT);
     }
     FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fLearningRate, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
-    unsigned _outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
+    nvAssert(T_ACTIVATION1 == T_ACTIVATION2 || wantedOutput.h() % 2 == 0);
+    unsigned outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
+    dim3 grid(input.w(), input.h(), 1);
+    dim3 block(wantedOutput.w(), outHiNum, 1);
 #if RUN_ON_GPU
-    dim3 grid(1, 1, 1);
-    dim3 block(wantedOutput.w(), _outHiNum, 1);
     fclBackwardKernel << <grid, block >> > (backward);
 #else
     input.syncToHost();
     output.syncToHost();
-    for (unsigned _outHi = 0; _outHi < _outHiNum; ++_outHi)
+    for (unsigned blockY = 0; blockY < grid.y; ++blockY)
     {
-        for (unsigned outWi = 0; outWi < wantedOutput.w(); ++outWi)
+        for (unsigned blockX = 0; blockX < grid.x; ++blockX)
         {
-            backward.go(outWi, _outHi);
+            for (unsigned outHi = 0; outHi < block.y; ++outHi)
+            {
+                for (unsigned outWi = 0; outWi < block.x; ++outWi)
+                {
+                    backward.backward(blockX, blockY, outWi, outHi);
+                }
+            }
         }
     }
 #endif
