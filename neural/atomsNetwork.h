@@ -80,20 +80,32 @@ private:
     {
         nvAssert(pLayers.size() == 0);
 
-        std::array<unsigned, 4> prevInputDims = m_inputs[0]->getDims();
-        std::array<unsigned, 4> globalOutputDims = m_wantedOutputs[0]->getDims();
+        std::array<unsigned, 4> prevOutputDims = m_inputs[0]->getDims();
+        std::array<unsigned, 4> idealOutputDims = prevOutputDims;
+        std::array<unsigned, 4> wantedOutputDims = m_wantedOutputs[0]->getDims();
         for (; ; )
         {
-            std::array<unsigned, 4> outputDims = prevInputDims;
-            outputDims[1] /= 2;
-            outputDims[1] &= ~1; // must be even
-            if (outputDims[1] <= globalOutputDims[1]) break;
-            pLayers.push_back(std::make_shared<InternalLayerType>(prevInputDims, outputDims));
-            prevInputDims = outputDims;
+            NvU32 nLayers = (NvU32)pLayers.size();
+            for (NvU32 uDim = 0; uDim < idealOutputDims.size(); ++uDim)
+            {
+                if (idealOutputDims[uDim] / 2 <= wantedOutputDims[uDim])
+                    continue;
+                idealOutputDims[uDim] /= 2;
+
+                std::array<unsigned, 4> outputDims = idealOutputDims;
+                // to avoid dying neuron problem, we duplicate and mirror all neurons in H direction
+                outputDims[1] *= 2;
+                // to get nice alignment to CUDA warps - align H up to 32
+                outputDims[1] = ((outputDims[1] + 31) / 32) * 32;
+                pLayers.push_back(std::make_shared<InternalLayerType>(prevOutputDims, outputDims));
+                prevOutputDims = outputDims;
+                break;
+            }
+            if (nLayers == pLayers.size()) // no new layers created? we're done then
+                break;
         }
         using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        pLayers.push_back(std::make_shared<OutputLayerType>(prevInputDims, globalOutputDims));
-
+        pLayers.push_back(std::make_shared<OutputLayerType>(prevOutputDims, wantedOutputDims));
         return true;
     }
     static const NvU32 NATOMS_IN_TRAINING = 256; // number of atoms we train on simultaneously
