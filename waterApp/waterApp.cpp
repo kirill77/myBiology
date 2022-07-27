@@ -238,7 +238,7 @@ private:
                 auto& network = m_water.accessNeuralNetwork();
                 if (network.hasEnoughData())
                 {
-                    network.trainAtomsNetwork(1);
+                    network.trainAtomsNetwork(2);
                 }
             }
         }
@@ -303,8 +303,8 @@ private:
 
         x = fLeftBoundary;
         y += 40;
-        sprintf_s(sBuffer, "NN MB: %.2f, steps: %d, error: %e", network.sizeInBytes() / (double)(1024 * 1024),
-            network.getNStepsMade(), network.getLastError());
+        sprintf_s(sBuffer, "NN StoredSimSteps: %d, TrainSteps: %d, error: %e", network.getNStoredSimSteps(),
+            network.getNCompletedTrainSteps(), network.getLastError());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);

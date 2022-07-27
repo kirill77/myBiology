@@ -3,6 +3,7 @@
 #include <memory>
 #include "../basics/vectors.h"
 #include "../basics/simContext.h"
+#include "../basics/serializer.h"
 #include "network.h"
 
 struct ConstantAtomData
@@ -39,7 +40,7 @@ struct AtomsNetwork : public NeuralNetwork
     inline NvU32 getNAtoms() const { return (NvU32)m_constAtomData.size(); }
     double trainAtomsNetwork(NvU32 nSteps)
     {
-        if (getNStepsMade() == 0)// % NATOMS_IN_TRAINING == 0)
+        if (getNCompletedTrainSteps() == 0)// % NATOMS_IN_TRAINING == 0)
         {
             initializeTrainingData();
         }
@@ -52,8 +53,17 @@ struct AtomsNetwork : public NeuralNetwork
     void notifyStepBeginning(const SimContext<T> &simContext)
     {
         if (hasEnoughData())
+        {
+            if (m_bNeedToSave)
+            {
+                m_bNeedToSave = false;
+                MyWriter writer("atomsNetwork.bin");
+                serialize(writer);
+            }
             return;
+        }
         m_bSimStepStarted = true;
+        m_bNeedToSave = true;
 
         if (m_pTransientAtomData.size() == 0)
         {
@@ -62,7 +72,7 @@ struct AtomsNetwork : public NeuralNetwork
         copyForceIndicesFromTheModel(simContext);
         copyBondsFromTheModel(simContext.m_forces);
     }
-    size_t sizeInBytes() const { return m_totalBytes; }
+
     void notifyStepDone(const SimContext<T> &simContext)
     {
         if (!m_bSimStepStarted)
@@ -73,7 +83,8 @@ struct AtomsNetwork : public NeuralNetwork
 
         m_bSimStepStarted = false;
     }
-    bool hasEnoughData() const { return !m_bSimStepStarted && sizeInBytes() > 1024 * 1024 * 10; }
+    NvU32 getNStoredSimSteps() const { return (NvU32)m_pForceIndices.size(); }
+    bool hasEnoughData() const { return !m_bSimStepStarted && getNStoredSimSteps() >= 1000; }
 
 private:
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers) override
@@ -257,7 +268,6 @@ private:
     {
         GPUBuffer<ConstantAtomData>& dst = m_constAtomData;
         dst.resize(atoms.size());
-        m_totalBytes += dst.sizeInBytes();
 
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
         {
@@ -273,7 +283,6 @@ private:
         m_pTransientAtomData.push_back(new GPUBuffer<TransientAtomData>);
         GPUBuffer<TransientAtomData>& dst = **m_pTransientAtomData.rbegin();
         dst.resize(atoms.size());
-        m_totalBytes += dst.sizeInBytes();
 
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
         {
@@ -311,7 +320,6 @@ private:
         m_pForceIndices.push_back(new GPUBuffer<ForceIndices<nAtomsPerCluster>>);
         GPUBuffer<ForceIndices<nAtomsPerCluster>>& pIndices = **m_pForceIndices.rbegin();
         pIndices.resize(getNAtoms());
-        m_totalBytes += pIndices.sizeInBytes();
 
         for (NvU32 uForce = 0; uForce < forceMap.size(); ++uForce)
         {
@@ -343,7 +351,6 @@ private:
         m_pForceValues.push_back(new GPUBuffer<ForceValues<nAtomsPerCluster>>);
         GPUBuffer<ForceValues<nAtomsPerCluster>>& pValues = **m_pForceValues.rbegin();
         pValues.resize(getNAtoms());
-        m_totalBytes += pValues.sizeInBytes();
 
         const GPUBuffer<ForceIndices<nAtomsPerCluster>>& pIndices = **m_pForceIndices.rbegin();
         for (NvU32 uAtom1 = 0; uAtom1 < getNAtoms(); ++uAtom1)
@@ -362,10 +369,17 @@ private:
         }
     }
 
-    size_t m_totalBytes = 0; // used to limit the amount of training data
-    bool m_bSimStepStarted = false;
+    bool m_bSimStepStarted = false, m_bNeedToSave = false;
 
-    GPUBuffer<ConstantAtomData> m_constAtomData; // 1
+    void serialize(ISerializer &s)
+    {
+        m_constAtomData.serialize(s);
+        s.serialize(m_pTransientAtomData);
+        s.serialize(m_pForceValues);
+        s.serialize(m_pForceIndices);
+    }
+
+    GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
     std::vector<GPUBuffer<TransientAtomData>*> m_pTransientAtomData; // 1 in the beginning + 1 per simulation step
     std::vector<GPUBuffer<ForceValues<nAtomsPerCluster>>*> m_pForceValues; // 2 per simulation step
     std::vector<GPUBuffer<ForceIndices<nAtomsPerCluster>>*> m_pForceIndices; // 1 per simulation step

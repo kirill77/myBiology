@@ -112,7 +112,7 @@ struct NeuralNetwork
     }
     double train(NvU32 nStepsToMake, std::vector<TensorRef> &inputs, std::vector<TensorRef> &wantedOutputs)
     {
-        NvU32 uEndStep = m_nTotalStepsMade + nStepsToMake;
+        NvU32 uEndStep = m_nCompletedTrainSteps + nStepsToMake;
         if (m_pLayers.size() == 0)
         {
             createLayers_impl(m_pLayers);
@@ -124,16 +124,16 @@ struct NeuralNetwork
             }
         }
 
-        if (m_nTotalStepsMade == 0)
+        if (m_nCompletedTrainSteps == 0)
         {
             forwardPass(inputs);
             m_fLastError = computeCurrentError(wantedOutputs);
             nvAssert(isfinite(m_fLastError));
-            ++m_nTotalStepsMade;
+            ++m_nCompletedTrainSteps;
             saveCurrentStateToBackup();
         }
 
-        for ( ; m_nTotalStepsMade < uEndStep; ++m_nTotalStepsMade)
+        for ( ; m_nCompletedTrainSteps < uEndStep; ++m_nCompletedTrainSteps)
         {
             backwardPass(inputs, wantedOutputs);
             forwardPass(inputs);
@@ -161,11 +161,11 @@ struct NeuralNetwork
         return m_fLastError;
     }
     double getLastError() const { return m_fLastError; }
-    NvU32 getNStepsMade() const { return m_nTotalStepsMade; }
+    NvU32 getNCompletedTrainSteps() const { return m_nCompletedTrainSteps; }
 
 private:
     float m_fLearningRate = 1, m_fLastError = -1;
-    NvU32 m_nTotalStepsMade = 0, m_nStepsPerErrorCheck = 1, m_nStepsWithoutErrorCheck = 0;
+    NvU32 m_nCompletedTrainSteps = 0, m_nStepsPerErrorCheck = 1, m_nStepsWithoutErrorCheck = 0;
 
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;

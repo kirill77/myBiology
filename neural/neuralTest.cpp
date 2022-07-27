@@ -44,7 +44,7 @@ void NeuralTest::test()
 
 #if 1
     double fError = network.train(100, inputs, wantedOutputs);
-    m_bTested = m_bTested && fError > 0.45 && fError < 0.55;
+    m_bTested = m_bTested && fError > 0.45 && fError < 0.6;
     nvAssert(m_bTested);
 #endif
 }

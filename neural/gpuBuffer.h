@@ -1,6 +1,7 @@
 #pragma once
 
 #include <basics/mybasics.h>
+#include <basics/serializer.h>
 #include <MonteCarlo/RNGUniform.h>
 
 #define RUN_ON_GPU 1
@@ -89,6 +90,15 @@ struct GPUBuffer
     {
         nvAssert(m_pOrig->m_deviceRev >= m_pOrig->m_hostRev);
         return m_pDevice;
+    }
+    void serialize(ISerializer& s)
+    {
+        nvAssert(m_pOrig == this);
+        nvAssert(m_hostRev >= m_deviceRev);
+        NvU32 nElems = m_nHostElems;
+        s.serializePreallocatedMem(&nElems, sizeof(nElems));
+        resize(nElems);
+        s.serializePreallocatedMem(m_pHost, sizeof(T) * m_nHostElems);
     }
 
 public:

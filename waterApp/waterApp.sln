@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30413.136
+# Visual Studio Version 17
+VisualStudioVersion = 17.2.32616.157
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "waterApp", "waterApp.vcxproj", "{39A3E85D-4389-4884-8F3C-513C8052B476}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -54,15 +54,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MonteCarlo", "..\MonteCarlo
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "basics", "..\basics\basics.vcxproj", "{80055C89-FBEB-4A0C-AD51-58B5F8F98A93}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pathIntegrals", "..\pathIntegrals\pathIntegrals.vcxproj", "{A9C02EB8-5839-4E1F-A38C-8111545C50F5}"
-	ProjectSection(ProjectDependencies) = postProject
-		{80055C89-FBEB-4A0C-AD51-58B5F8F98A93} = {80055C89-FBEB-4A0C-AD51-58B5F8F98A93}
-		{B21FF890-4353-4486-9091-4BF3E4348B34} = {B21FF890-4353-4486-9091-4BF3E4348B34}
-	EndProjectSection
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "neural", "..\neural\neural.vcxproj", "{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mycuda1", "..\mycuda1\mycuda1.vcxproj", "{07A6F418-BAC9-406E-8B50-893B50DBE471}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mycuda", "..\mycuda1\mycuda1.vcxproj", "{07A6F418-BAC9-406E-8B50-893B50DBE471}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -352,22 +346,6 @@ Global
 		{80055C89-FBEB-4A0C-AD51-58B5F8F98A93}.RelWithDebInfo|x64.Build.0 = Release|x64
 		{80055C89-FBEB-4A0C-AD51-58B5F8F98A93}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
 		{80055C89-FBEB-4A0C-AD51-58B5F8F98A93}.RelWithDebInfo|x86.Build.0 = Release|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Debug|x64.ActiveCfg = Debug|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Debug|x64.Build.0 = Debug|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Debug|x86.ActiveCfg = Debug|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Debug|x86.Build.0 = Debug|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.MinSizeRel|x64.ActiveCfg = Debug|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.MinSizeRel|x64.Build.0 = Debug|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.MinSizeRel|x86.ActiveCfg = Debug|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.MinSizeRel|x86.Build.0 = Debug|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Release|x64.ActiveCfg = Release|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Release|x64.Build.0 = Release|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Release|x86.ActiveCfg = Release|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.Release|x86.Build.0 = Release|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x64.ActiveCfg = Release|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x64.Build.0 = Release|x64
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
-		{A9C02EB8-5839-4E1F-A38C-8111545C50F5}.RelWithDebInfo|x86.Build.0 = Release|Win32
 		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x64.ActiveCfg = Debug|x64
 		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x64.Build.0 = Debug|x64
 		{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}.Debug|x86.ActiveCfg = Debug|Win32
