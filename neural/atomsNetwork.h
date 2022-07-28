@@ -85,6 +85,11 @@ struct AtomsNetwork : public NeuralNetwork
     }
     NvU32 getNStoredSimSteps() const { return (NvU32)m_pForceIndices.size(); }
     bool hasEnoughData() const { return !m_bSimStepStarted && getNStoredSimSteps() >= 1000; }
+    void loadFromFile(const std::string& sFileName)
+    {
+        MyReader s(sFileName);
+        serialize(s);
+    }
 
 private:
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers) override

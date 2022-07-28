@@ -50,13 +50,15 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_tetgen", "..\Easy3D\bui
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "3rd_triangle", "..\Easy3D\build\3rd_party\triangle\3rd_triangle.vcxproj", "{5EA137D9-8510-37A7-AFA4-0408B245FDBB}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MonteCarlo", "..\MonteCarlo\MonteCarlo.vcxproj", "{B21FF890-4353-4486-9091-4BF3E4348B34}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "monteCarlo", "..\MonteCarlo\MonteCarlo.vcxproj", "{B21FF890-4353-4486-9091-4BF3E4348B34}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "basics", "..\basics\basics.vcxproj", "{80055C89-FBEB-4A0C-AD51-58B5F8F98A93}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "neural", "..\neural\neural.vcxproj", "{5B6023CF-CCE0-48E8-9864-C75A9A2B2B6A}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mycuda", "..\mycuda1\mycuda1.vcxproj", "{07A6F418-BAC9-406E-8B50-893B50DBE471}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "offlineTrainer", "..\OfflineTrainer\OfflineTrainer.vcxproj", "{731AFC4C-02F6-421F-868C-5195D8678AD9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -376,6 +378,22 @@ Global
 		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x64.Build.0 = Release|x64
 		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x86.ActiveCfg = Debug|x64
 		{07A6F418-BAC9-406E-8B50-893B50DBE471}.RelWithDebInfo|x86.Build.0 = Debug|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Debug|x64.ActiveCfg = Debug|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Debug|x64.Build.0 = Debug|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Debug|x86.ActiveCfg = Debug|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Debug|x86.Build.0 = Debug|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.MinSizeRel|x64.ActiveCfg = Debug|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.MinSizeRel|x64.Build.0 = Debug|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.MinSizeRel|x86.ActiveCfg = Debug|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.MinSizeRel|x86.Build.0 = Debug|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Release|x64.ActiveCfg = Release|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Release|x64.Build.0 = Release|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Release|x86.ActiveCfg = Release|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.Release|x86.Build.0 = Release|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.RelWithDebInfo|x64.ActiveCfg = Release|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.RelWithDebInfo|x64.Build.0 = Release|x64
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.RelWithDebInfo|x86.ActiveCfg = Release|Win32
+		{731AFC4C-02F6-421F-868C-5195D8678AD9}.RelWithDebInfo|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
