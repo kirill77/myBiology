@@ -1,4 +1,5 @@
 #include <neural/atomsNetwork.h>
+#include <chrono>
 
 int main()
 {
@@ -8,18 +9,23 @@ int main()
 
     FILE* fp = nullptr;
     fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "wt");
-    fprintf(fp, "nSteps, error\n");
+    fprintf(fp, "nSteps, fError, fLRate, MSecsPerStep\n");
     fclose(fp);
 
-    for ( ; ; )
-    {
-        network.trainAtomsNetwork(1024);
+    auto start = std::chrono::high_resolution_clock::now();
 
-        printf("CompletedTrainSteps: %d, lastError: %e\n", network.getNCompletedTrainSteps(), network.getLastError());
+    const NvU32 nStepsPerCycle = 1024;
+    for (NvU32 nCycles = 0; ; ++nCycles)
+    {
+        network.trainAtomsNetwork(nStepsPerCycle);
+
+        std::chrono::duration<double> elapsed_seconds = std::chrono::high_resolution_clock::now() - start;
+        double fMSecsPerTrainingStep = (elapsed_seconds.count() / network.getNCompletedTrainSteps()) * 1000;
 
         fp = nullptr;
         fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "a+");
-        fprintf(fp, "%d, %e\n", network.getNCompletedTrainSteps(), network.getLastError());
+        fprintf(fp, "%d, %e, %e, %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getLearningRate(), fMSecsPerTrainingStep);
         fclose(fp);
+        printf("nSteps: %d, fError: %.2e, fLRate: %.2e, MSecsPerStep: %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getLearningRate(), fMSecsPerTrainingStep);
     }
 }

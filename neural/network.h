@@ -162,6 +162,7 @@ struct NeuralNetwork
     }
     double getLastError() const { return m_fLastError; }
     NvU32 getNCompletedTrainSteps() const { return m_nCompletedTrainSteps; }
+    float getLearningRate() const { return m_fLearningRate; }
 
 private:
     float m_fLearningRate = 1, m_fLastError = -1;
