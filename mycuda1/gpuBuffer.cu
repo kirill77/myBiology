@@ -1,5 +1,6 @@
 #include "neural/tensor.h"
 #include "neural/network.h"
+#include "neural/atomsNetwork.h"
 
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
@@ -136,3 +137,8 @@ NvU32 GPUBuffer<T>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, Nv
 // explicit instantiations
 template NvU32 GPUBuffer<float>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<float>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy);
 template struct GPUBuffer<float>;
+template struct GPUBuffer<ConstantAtomData>;
+template struct GPUBuffer<TransientAtomData>;
+template struct GPUBuffer<ForceIndices<64>>;
+template struct GPUBuffer<ForceValues<64>>;
+

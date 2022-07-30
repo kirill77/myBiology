@@ -55,14 +55,15 @@ struct GPUBuffer
     {
         m_pOrig->resizeInternal(nElems);
     }
-    void clearWithRandomValues(T fMin, T fMax)
+    void clearWithRandomValues(float fMin, float fMax)
     {
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
         RNGUniform rng;
+        nvAssert(sizeof(T) == sizeof(float));
         for (NvU32 i = 0; i < size(); ++i)
         {
-            (*m_pOrig)[i] = (T)(rng.generate01() * (fMax - fMin) + fMin);
+            (float &)((*m_pOrig)[i]) = (float)(rng.generate01() * (fMax - fMin) + fMin);
         }
     }
     template <class SRC_T>
@@ -91,10 +92,10 @@ struct GPUBuffer
         nvAssert(m_pOrig->m_deviceRev >= m_pOrig->m_hostRev);
         return m_pDevice;
     }
-    void serialize(ISerializer& s)
+    virtual void serialize(ISerializer& s)
     {
         nvAssert(m_pOrig == this);
-        nvAssert(m_hostRev >= m_deviceRev);
+        syncToHost();
         NvU32 nElems = m_nHostElems;
         s.serializePreallocatedMem(&nElems, sizeof(nElems));
         resize(nElems);

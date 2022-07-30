@@ -125,6 +125,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -162,6 +163,11 @@
     <ClInclude Include="l2Computer.h" />
     <ClInclude Include="network.h" />
     <ClInclude Include="tensor.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\mycuda1\mycuda1.vcxproj">
+      <Project>{07a6f418-bac9-406e-8b50-893b50dbe471}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

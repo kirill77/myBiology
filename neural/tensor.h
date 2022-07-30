@@ -45,6 +45,12 @@ struct Tensor : public GPUBuffer<T>
     __device__ __host__ unsigned c() const { return m_dims[3]; }
     std::array<unsigned, 4> getDims() const { return std::array<unsigned, 4>({ m_dims[0], m_dims[1], m_dims[2], m_dims[3] }); }
 
+    virtual void serialize(ISerializer& s) override
+    {
+        GPUBuffer<T>::serialize(s);
+        s.serializeSimpleType(m_dims);
+    }
+
 private:
     unsigned m_dims[4] = {0};
 };

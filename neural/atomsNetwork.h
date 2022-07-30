@@ -1,9 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <filesystem>
 #include "../basics/vectors.h"
 #include "../basics/simContext.h"
-#include "../basics/serializer.h"
 #include "network.h"
 
 struct ConstantAtomData
@@ -57,8 +57,7 @@ struct AtomsNetwork : public NeuralNetwork
             if (m_bNeedToSave)
             {
                 m_bNeedToSave = false;
-                MyWriter writer("atomsNetwork.bin");
-                serialize(writer);
+                saveToFile("networkFromWaterApp.bin");
             }
             return;
         }
@@ -85,9 +84,14 @@ struct AtomsNetwork : public NeuralNetwork
     }
     NvU32 getNStoredSimSteps() const { return (NvU32)m_pForceIndices.size(); }
     bool hasEnoughData() const { return !m_bSimStepStarted && getNStoredSimSteps() >= 1000; }
-    void loadFromFile(const std::string& sFileName)
+    void loadFromFile(const std::filesystem::path& path)
     {
-        MyReader s(sFileName);
+        MyReader s(path);
+        serialize(s);
+    }
+    void saveToFile(const std::filesystem::path& path)
+    {
+        MyWriter s(path);
         serialize(s);
     }
 
@@ -113,7 +117,9 @@ private:
                 outputDims[1] *= 2;
                 // to get nice alignment to CUDA warps - align H up to 32
                 outputDims[1] = ((outputDims[1] + 31) / 32) * 32;
-                pLayers.push_back(std::make_shared<InternalLayerType>(prevOutputDims, outputDims));
+                auto pLayer = std::make_shared<InternalLayerType>();
+                pLayer->init(prevOutputDims, outputDims);
+                pLayers.push_back(pLayer);
                 prevOutputDims = outputDims;
                 break;
             }
@@ -121,7 +127,9 @@ private:
                 break;
         }
         using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        pLayers.push_back(std::make_shared<OutputLayerType>(prevOutputDims, wantedOutputDims));
+        auto pLayer = std::make_shared<OutputLayerType>();
+        pLayer->init(prevOutputDims, wantedOutputDims);
+        pLayers.push_back(pLayer);
         return true;
     }
     static const NvU32 NATOMS_IN_TRAINING = 256; // number of atoms we train on simultaneously
@@ -303,7 +311,7 @@ private:
         const std::vector<Atom<T>>& atoms = simContext.m_atoms;
         const BoxWrapper<T>& boxWrapper = simContext.m_bBox;
         const Atom<T>& atom1 = atoms[uAtom];
-        NvU32 uFarthestIndex = -1;
+        NvU32 uFarthestIndex = 0xffffffff;
         T fMaxDistSqr = 0;
         for (NvU32 u = 0; u < indices.nIndices; ++u)
         {
@@ -376,12 +384,15 @@ private:
 
     bool m_bSimStepStarted = false, m_bNeedToSave = false;
 
-    void serialize(ISerializer &s)
+    virtual void serialize(ISerializer &s) override
     {
+        NeuralNetwork::serialize(s);
         m_constAtomData.serialize(s);
-        s.serialize(m_pTransientAtomData);
-        s.serialize(m_pForceValues);
-        s.serialize(m_pForceIndices);
+        s.serializeArrayOfPointers(m_pTransientAtomData);
+        s.serializeArrayOfPointers(m_pForceValues);
+        s.serializeArrayOfPointers(m_pForceIndices);
+        serializeArrayOfTensorRefs(s, m_inputs);
+        serializeArrayOfTensorRefs(s, m_wantedOutputs);
     }
 
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms

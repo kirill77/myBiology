@@ -4,12 +4,33 @@
 #include <array>
 #include <vector>
 #include "basics/vectors.h"
+#include "basics/serializer.h"
 #include "tensor.h"
 #include "l2Computer.h"
 #include "activations.h"
 #include "neuralTest.h"
 
 typedef std::shared_ptr<Tensor<float>> TensorRef;
+inline void serializeArrayOfTensorRefs(ISerializer &s, std::vector<TensorRef> &tensorRefs)
+{
+    s.serializeArraySize(tensorRefs);
+    for (NvU32 u = 0; u < tensorRefs.size(); ++u)
+    {
+        NvU32 exists = (tensorRefs[u] != nullptr);
+        s.serializePreallocatedMem(&exists, sizeof(exists));
+        if (!exists)
+        {
+            continue;
+        }
+        if (tensorRefs[u] == nullptr)
+        {
+            tensorRefs[u] = std::make_shared<Tensor<float>>();
+        }
+        tensorRefs[u]->serialize(s);
+    }
+}
+
+enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FCL_MIRRORED };
 
 struct ILayer
 {
@@ -46,12 +67,46 @@ struct ILayer
 
     std::vector<TensorRef> m_outputs, m_deltaOutputs;
     Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup, m_beforeActivation;
+    const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
+
+    static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType);
+    virtual void serialize(ISerializer& s)
+    {
+        m_weights.serialize(s);
+        m_biases.serialize(s);
+        m_weightsBackup.serialize(s);
+        m_biasesBackup.serialize(s);
+        m_beforeActivation.serialize(s);
+        
+        serializeArrayOfTensorRefs(s, m_outputs);
+        serializeArrayOfTensorRefs(s, m_deltaOutputs);
+    }
+
+protected:
+    ILayer(LAYER_TYPE type) : m_type(type)
+    {
+    }
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FullyConnectedLayer : public ILayer
 {
-    FullyConnectedLayer(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
+    static LAYER_TYPE computeFCLType(ACTIVATION a1, ACTIVATION a2)
+    {
+        if (a1 == ACTIVATION_IDENTITY && a2 == ACTIVATION_IDENTITY)
+        {
+            return LAYER_TYPE_FCL_IDENTITY;
+        }
+        if (a1 == ACTIVATION_RELU && a2 == ACTIVATION_MRELU)
+        {
+            return LAYER_TYPE_FCL_MIRRORED;
+        }
+        nvAssert(false);
+        return LAYER_TYPE_UNKNOWN;
+    }
+    FullyConnectedLayer() : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2))
+    { }
+    void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
     {
         // upper half of neurons uses different activation function 
         m_inputDims = inputDims;
@@ -92,8 +147,15 @@ struct FullyConnectedLayer : public ILayer
     virtual void backward(std::vector<TensorRef>& inputs,
         OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) override;
 
+    virtual void serialize(ISerializer& s) override
+    {
+        ILayer::serialize(s);
+        s.serializeSimpleType(m_inputDims);
+        s.serializeSimpleType(m_outputDims);
+    }
+
 private:
-    std::array<unsigned, 4> m_inputDims, m_outputDims;
+    std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
 };
 
 template <class T>
@@ -163,6 +225,38 @@ struct NeuralNetwork
     double getLastError() const { return m_fLastError; }
     NvU32 getNCompletedTrainSteps() const { return m_nCompletedTrainSteps; }
     float getLearningRate() const { return m_fLearningRate; }
+
+protected:
+    virtual void serialize(ISerializer& s)
+    {
+        s.serializeSimpleType(m_fLearningRate);
+        s.serializeSimpleType(m_fLastError);
+        s.serializeSimpleType(m_nCompletedTrainSteps);
+        s.serializeSimpleType(m_nStepsPerErrorCheck);
+        s.serializeSimpleType(m_nStepsWithoutErrorCheck);
+
+        s.serializeArraySize(m_pLayers);
+
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
+        {
+            LAYER_TYPE layerType = LAYER_TYPE_UNKNOWN;
+            if (m_pLayers[uLayer] != nullptr)
+            {
+                layerType = m_pLayers[uLayer]->m_type;
+            }
+            s.serializeSimpleType(layerType);
+            if (layerType == LAYER_TYPE_UNKNOWN)
+            {
+                nvAssert(m_pLayers[uLayer] == nullptr);
+                continue;
+            }
+            if (m_pLayers[uLayer] == nullptr)
+            {
+                m_pLayers[uLayer] = ILayer::createLayer(layerType);
+            }
+            m_pLayers[uLayer]->serialize(s);
+        }
+    }
 
 private:
     float m_fLearningRate = 1, m_fLastError = -1;
