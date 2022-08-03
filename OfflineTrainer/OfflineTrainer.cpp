@@ -72,7 +72,7 @@ int main()
             fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "a+");
             if (fp != nullptr)
             {
-                fprintf(fp, "%d, %e, %e, %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getLearningRate(), fMSecsPerTrainingStep);
+                fprintf(fp, "%d, %e, %e, %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
                 fclose(fp);
             }
         }
@@ -88,6 +88,6 @@ int main()
             printf("saving completed\n");
         }
 
-        printf("nSteps: %d, fError: %.2e, fLRate: %.2e, MSecsPerStep: %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getLearningRate(), fMSecsPerTrainingStep);
+        printf("nSteps: %d, fError: %.2e, fLRate: %.2e, MSecsPerStep: %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
     }
 }
