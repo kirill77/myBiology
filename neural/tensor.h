@@ -45,10 +45,12 @@ struct Tensor : public GPUBuffer<T>
     __device__ __host__ unsigned c() const { return m_dims[3]; }
     std::array<unsigned, 4> getDims() const { return std::array<unsigned, 4>({ m_dims[0], m_dims[1], m_dims[2], m_dims[3] }); }
 
-    virtual void serialize(ISerializer& s) override
+    virtual void serialize(const char* sName, ISerializer& s) override
     {
-        GPUBuffer<T>::serialize(s);
-        s.serializeSimpleType(m_dims);
+        std::string sIndent = std::string("Tensor ") + sName;
+        std::shared_ptr<Indent> pIndent = s.pushIndent(sIndent.c_str());
+        GPUBuffer<T>::serialize(sName, s);
+        s.serializeSimpleType("m_dims", m_dims);
     }
 
 private:

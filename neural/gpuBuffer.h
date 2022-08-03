@@ -92,14 +92,16 @@ struct GPUBuffer
         nvAssert(m_pOrig->m_deviceRev >= m_pOrig->m_hostRev);
         return m_pDevice;
     }
-    virtual void serialize(ISerializer& s)
+    virtual void serialize(const char* sName, ISerializer& s)
     {
+        std::string sIndent = std::string("GPUBuffer ") + sName;
+        std::shared_ptr<Indent> pIndent = s.pushIndent(sIndent.c_str());
         nvAssert(m_pOrig == this);
         syncToHost();
         NvU32 nElems = m_nHostElems;
-        s.serializePreallocatedMem(&nElems, sizeof(nElems));
+        s.serializeSimpleType("m_nHostElems", nElems);
         resize(nElems);
-        s.serializePreallocatedMem(m_pHost, sizeof(T) * m_nHostElems);
+        s.serializePreallocatedMem("m_pHost", m_pHost, sizeof(T) * m_nHostElems);
     }
 
 public:

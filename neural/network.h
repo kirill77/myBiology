@@ -12,24 +12,6 @@
 #include "learningRateOptimizer.h"
 
 typedef std::shared_ptr<Tensor<float>> TensorRef;
-inline void serializeArrayOfTensorRefs(ISerializer &s, std::vector<TensorRef> &tensorRefs)
-{
-    s.serializeArraySize(tensorRefs);
-    for (NvU32 u = 0; u < tensorRefs.size(); ++u)
-    {
-        NvU32 exists = (tensorRefs[u] != nullptr);
-        s.serializePreallocatedMem(&exists, sizeof(exists));
-        if (!exists)
-        {
-            continue;
-        }
-        if (tensorRefs[u] == nullptr)
-        {
-            tensorRefs[u] = std::make_shared<Tensor<float>>();
-        }
-        tensorRefs[u]->serialize(s);
-    }
-}
 
 enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FCL_MIRRORED };
 
@@ -71,16 +53,17 @@ struct ILayer
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
 
     static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType);
+
     virtual void serialize(ISerializer& s)
     {
-        m_weights.serialize(s);
-        m_biases.serialize(s);
-        m_weightsBackup.serialize(s);
-        m_biasesBackup.serialize(s);
-        m_beforeActivation.serialize(s);
+        m_weights.serialize("m_weights", s);
+        m_biases.serialize("m_biases", s);
+        m_weightsBackup.serialize("m_weightsBackup", s);
+        m_biasesBackup.serialize("m_biasesBackup", s);
+        m_beforeActivation.serialize("m_beforeActivation", s);
         
-        serializeArrayOfTensorRefs(s, m_outputs);
-        serializeArrayOfTensorRefs(s, m_deltaOutputs);
+        s.serializeArrayOfSharedPtrs("m_outputs", m_outputs);
+        s.serializeArrayOfSharedPtrs("m_deltaOutputs", m_deltaOutputs);
     }
 
 protected:
@@ -150,9 +133,10 @@ struct FullyConnectedLayer : public ILayer
 
     virtual void serialize(ISerializer& s) override
     {
+        std::shared_ptr<Indent> pIndent = s.pushIndent("FullyConnectedLayer");
         ILayer::serialize(s);
-        s.serializeSimpleType(m_inputDims);
-        s.serializeSimpleType(m_outputDims);
+        s.serializeSimpleType("m_inputDims", m_inputDims);
+        s.serializeSimpleType("m_outputDims", m_outputDims);
     }
 
 private:
@@ -231,34 +215,39 @@ struct NeuralNetwork
 protected:
     virtual void serialize(ISerializer& s)
     {
-        s.serializeSimpleType(m_fFilteredLearningRate);
-        s.serializeSimpleType(m_fLastError);
-        s.serializeSimpleType(m_nCompletedTrainSteps);
-        s.serializeSimpleType(m_nStepsPerErrorCheck);
-        s.serializeSimpleType(m_nStepsWithoutErrorCheck);
+        s.serializeSimpleType("m_fFilteredLearningRate", m_fFilteredLearningRate);
+        s.serializeSimpleType("m_fLastError", m_fLastError);
+        s.serializeSimpleType("m_nCompletedTrainSteps", m_nCompletedTrainSteps);
+        s.serializeSimpleType("m_nStepsPerErrorCheck", m_nStepsPerErrorCheck);
+        s.serializeSimpleType("m_nStepsWithoutErrorCheck", m_nStepsWithoutErrorCheck);
         
         m_lrOptimizer.serialize(s);
 
-        s.serializeArraySize(m_pLayers);
-
-        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
-            LAYER_TYPE layerType = LAYER_TYPE_UNKNOWN;
-            if (m_pLayers[uLayer] != nullptr)
+            std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
+            s.serializeArraySize("m_pLayers", m_pLayers);
+            for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
             {
-                layerType = m_pLayers[uLayer]->m_type;
+                LAYER_TYPE layerType = LAYER_TYPE_UNKNOWN;
+                if (m_pLayers[uLayer] != nullptr)
+                {
+                    layerType = m_pLayers[uLayer]->m_type;
+                }
+                s.serializeSimpleType("layerType", layerType);
+                if (layerType == LAYER_TYPE_UNKNOWN)
+                {
+                    nvAssert(m_pLayers[uLayer] == nullptr);
+                    continue;
+                }
+                if (m_pLayers[uLayer] == nullptr)
+                {
+                    m_pLayers[uLayer] = ILayer::createLayer(layerType);
+                }
+                char sBuffer[16];
+                sprintf_s(sBuffer, "[%d]", uLayer);
+                std::shared_ptr<Indent> pIndent = s.pushIndent(sBuffer);
+                m_pLayers[uLayer]->serialize(s);
             }
-            s.serializeSimpleType(layerType);
-            if (layerType == LAYER_TYPE_UNKNOWN)
-            {
-                nvAssert(m_pLayers[uLayer] == nullptr);
-                continue;
-            }
-            if (m_pLayers[uLayer] == nullptr)
-            {
-                m_pLayers[uLayer] = ILayer::createLayer(layerType);
-            }
-            m_pLayers[uLayer]->serialize(s);
         }
     }
 

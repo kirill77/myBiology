@@ -125,14 +125,18 @@ struct LearningRateOptimizer
     }
     void serialize(ISerializer& s)
     {
-        s.serializeStdArray(m_layerRates);
-        s.serializeSimpleType(m_curHistIndex);
-        s.serializeSimpleType(m_nBadSteps);
-        s.serializeSimpleType(m_fLargestAcceptableError);
-        s.serializeArraySize(m_stateHistory);
-        for (NvU32 u = 0; u < m_stateHistory.size(); ++u)
+        s.serializeStdArray("m_layerRates", m_layerRates);
+        s.serializeSimpleType("m_curHistIndex", m_curHistIndex);
+        s.serializeSimpleType("m_nBadSteps", m_nBadSteps);
+        s.serializeSimpleType("m_fLargestAcceptableError", m_fLargestAcceptableError);
+        
         {
-            m_stateHistory[u].serialize(s);
+            std::shared_ptr<Indent> pIndent = s.pushIndent("m_stateHistory");
+            s.serializeArraySize("m_stateHistory", m_stateHistory);
+            for (NvU32 u = 0; u < m_stateHistory.size(); ++u)
+            {
+                m_stateHistory[u].serialize(s);
+            }
         }
     }
 
@@ -152,11 +156,11 @@ private:
         }
         void serialize(ISerializer& s)
         {
-            s.serializeSimpleType(m_state);
-            s.serializeStdArray(m_layerRatesBackup);
-            s.serializeSimpleType(m_layerIndex);
-            s.serializeSimpleType(m_nStepsToMake);
-            s.serializeSimpleType(m_fError);
+            s.serializeSimpleType("m_state", m_state);
+            s.serializeStdArray("m_layerRatesBackup", m_layerRatesBackup);
+            s.serializeSimpleType("m_layerIndex", m_layerIndex);
+            s.serializeSimpleType("m_nStepsToMake", m_nStepsToMake);
+            s.serializeSimpleType("m_fError", m_fError);
         }
 
         LRO_STATE m_state = LRO_STATE_INIT;

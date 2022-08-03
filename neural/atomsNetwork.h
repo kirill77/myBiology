@@ -387,12 +387,12 @@ private:
     virtual void serialize(ISerializer &s) override
     {
         NeuralNetwork::serialize(s);
-        m_constAtomData.serialize(s);
-        s.serializeArrayOfPointers(m_pTransientAtomData);
-        s.serializeArrayOfPointers(m_pForceValues);
-        s.serializeArrayOfPointers(m_pForceIndices);
-        serializeArrayOfTensorRefs(s, m_inputs);
-        serializeArrayOfTensorRefs(s, m_wantedOutputs);
+        m_constAtomData.serialize("m_constAtomDataTensor", s);
+        s.serializeArrayOfPointers("m_pTransientAtomDataArray", m_pTransientAtomData);
+        s.serializeArrayOfPointers("m_pForceValuesArray", m_pForceValues);
+        s.serializeArrayOfPointers("m_pForceIndicesArray", m_pForceIndices);
+        s.serializeArrayOfSharedPtrs("m_inputsArray", m_inputs);
+        s.serializeArrayOfSharedPtrs("m_wantedOutputsArray", m_wantedOutputs);
     }
 
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
