@@ -1,5 +1,6 @@
 ﻿#include "neural/tensor.h"
 #include "neural/network.h"
+#include "myCudaMath.h"
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FCL_Forward
@@ -143,7 +144,7 @@ struct FCL_Backward
                 }
                 fMult *= m_fLearningRate;
                 // bias address only depends on threadId - meaning the same threadIds from different blocks may race
-                atomicAdd(&m_biases[iBias], fMult);
+                myAtomicAdd(&m_biases[iBias], fMult);
                 // modify the weight corresponding to this summator
                 unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);

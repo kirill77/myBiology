@@ -93,6 +93,9 @@
     <CudaCompile Include="fullyConnectedLayer.cu" />
     <CudaCompile Include="l2Computer.cu" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="myCudaMath.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 11.7.targets" />
