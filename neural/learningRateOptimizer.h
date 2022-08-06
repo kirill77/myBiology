@@ -156,6 +156,7 @@ private:
         }
         void serialize(ISerializer& s)
         {
+            std::shared_ptr<Indent> pIndent = s.pushIndent("State");
             s.serializeSimpleType("m_state", m_state);
             s.serializeStdArray("m_layerRatesBackup", m_layerRatesBackup);
             s.serializeSimpleType("m_layerIndex", m_layerIndex);

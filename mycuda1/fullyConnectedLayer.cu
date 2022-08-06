@@ -142,8 +142,8 @@ struct FCL_Backward
                     fMult += fWantedDeltaOut[1] * fActivation2Der;
                 }
                 fMult *= m_fLearningRate;
-                // modify the bias
-                m_biases[iBias] += fMult;
+                // bias address only depends on threadId - meaning the same threadIds from different blocks may race
+                atomicAdd(&m_biases[iBias], fMult);
                 // modify the weight corresponding to this summator
                 unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
