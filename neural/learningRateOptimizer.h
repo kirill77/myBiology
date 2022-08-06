@@ -11,6 +11,8 @@ struct LearningRateOptimizer
         (*this) = LearningRateOptimizer();
         m_layerRates.resize(nLayers);
         std::fill(m_layerRates.begin(), m_layerRates.end(), 1.f);
+        m_layerRatesMax.resize(nLayers);
+        std::fill(m_layerRatesMax.begin(), m_layerRatesMax.end(), 1.f);
 
         // that's because we go over layers in round-robin fashion and we want to remember information about each
         // layer on previous iteration
@@ -79,13 +81,21 @@ struct LearningRateOptimizer
             ++m_nBadSteps;
             switch (prevState.m_state)
             {
+            case LRO_STATE_DONE:
+                // make allowed rates a bit lower
+                for (NvU32 u = 0; u < m_layerRatesMax.size(); ++u)
+                {
+                    m_layerRatesMax[u] *= 0.9f;
+                }
+                // pass-through intentional
             case LRO_STATE_INIT:
             case LRO_STATE_GLOBAL_DESCENT:
-            case LRO_STATE_DONE:
                 // continue global descent until we arrive to acceptable error
                 pushNewState(LRO_STATE_GLOBAL_DESCENT);
                 break;
             case LRO_STATE_LOCAL_ASCENT:
+                // remember not to go higher than that next time
+                m_layerRatesMax[prevState.m_layerIndex] = std::min(m_layerRatesMax[prevState.m_layerIndex], m_layerRates[prevState.m_layerIndex]);
                 backUpPushedState(); // unsuccessfull local accent - back it up
                 if (m_nBadSteps > m_layerRates.size())
                 {
@@ -126,6 +136,7 @@ struct LearningRateOptimizer
     void serialize(ISerializer& s)
     {
         s.serializeStdArray("m_layerRates", m_layerRates);
+        s.serializeStdArray("m_layerRatesMax", m_layerRatesMax);
         s.serializeSimpleType("m_curHistIndex", m_curHistIndex);
         s.serializeSimpleType("m_nBadSteps", m_nBadSteps);
         s.serializeSimpleType("m_fLargestAcceptableError", m_fLargestAcceptableError);
@@ -141,7 +152,7 @@ struct LearningRateOptimizer
     }
 
 private:
-    std::vector<float> m_layerRates;
+    std::vector<float> m_layerRates, m_layerRatesMax;
     NvU32 m_curHistIndex = 0xffffffff, m_nBadSteps = 0;
     float m_fLargestAcceptableError = std::numeric_limits<float>::max();
     enum LRO_STATE { LRO_STATE_INIT, LRO_STATE_GLOBAL_DESCENT, LRO_STATE_LOCAL_ASCENT, LRO_STATE_DONE };
@@ -190,9 +201,9 @@ private:
             for (NvU32 u = 0; ; )
             {
                 layerIndex = (layerIndex + 1) % m_layerRates.size();
-                if (m_layerRates[layerIndex] < 1)
+                fMultiplier = std::min(2.f, m_layerRatesMax[layerIndex] / m_layerRates[layerIndex]);
+                if (fMultiplier > 1.1f) // can we increase learning rate substantially?
                 {
-                    fMultiplier = 2;
                     break;
                 }
                 if (++u >= m_layerRates.size())
