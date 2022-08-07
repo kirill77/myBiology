@@ -130,7 +130,6 @@ struct LearningRateOptimizer
     float getLearningRate(NvU32 uLayer)
     {
         float fLearningRate = m_layerRates[uLayer];
-        nvAssert(fLearningRate > 0);
         return fLearningRate;
     }
     void serialize(ISerializer& s)

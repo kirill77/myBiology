@@ -18,7 +18,7 @@ struct FCL_Forward
 #endif
     }
 
-    __host__ __device__ void go(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
+    __host__ __device__ void forward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
     {
         unsigned inOutNi = blockX;
         unsigned inOutCi = blockY;
@@ -51,7 +51,7 @@ struct FCL_Forward
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 __global__ void fclForwardKernel(FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> p)
 {
-    p.go(blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+    p.forward(blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -77,7 +77,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
             {
                 for (unsigned iThreadX = 0; iThreadX < block.x; ++iThreadX)
                 {
-                    forward.go(iBlockX, iBlockY, iThreadX, iThreadY);
+                    forward.forward(iBlockX, iBlockY, iThreadX, iThreadY);
                 }
             }
         }
@@ -111,12 +111,12 @@ struct FCL_Backward
         unsigned inWi = blockX;
         unsigned inHi = blockY;
 
+        float fDeltaBias = 0;
         for (unsigned inOutNi = 0; inOutNi < m_wantedOutput.n(); ++inOutNi)
         {
             for (unsigned inOutCi = 0; inOutCi < m_wantedOutput.c(); ++inOutCi)
             {
                 unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
-                unsigned iBias = _outHi * m_wantedOutput.w() + outWi;
 
                 float fWantedDeltaOut[2] = {0 , 0};
                 fWantedDeltaOut[0] = m_wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
@@ -143,8 +143,7 @@ struct FCL_Backward
                     fMult += fWantedDeltaOut[1] * fActivation2Der;
                 }
                 fMult *= m_fLearningRate;
-                // bias address only depends on threadId - meaning the same threadIds from different blocks may race
-                myAtomicAdd(&m_biases[iBias], fMult);
+                fDeltaBias += fMult;
                 // modify the weight corresponding to this summator
                 unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
@@ -157,6 +156,9 @@ struct FCL_Backward
                 }
             }
         }
+        // bias address only depends on threadId - meaning the same threadIds from different blocks may race
+        unsigned iBias = _outHi * m_wantedOutput.w() + outWi;
+        myAtomicAdd(&m_biases[iBias], fDeltaBias);
     }
 
     Tensor<float> m_input, m_weights, m_biases, m_deltaInput, m_output, m_wantedOutput, m_beforeActivation;
