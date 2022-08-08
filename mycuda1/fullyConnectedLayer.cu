@@ -142,17 +142,17 @@ struct FCL_Backward
                     float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
                     fMult += fWantedDeltaOut[1] * fActivation2Der;
                 }
-                fMult *= m_fLearningRate;
-                fDeltaBias += fMult;
+                fDeltaBias += fMult * m_fLearningRate;
                 // modify the weight corresponding to this summator
                 unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
                 float fW = m_weights[iWeight];
-                m_weights[iWeight] += fMult * fInput;
+                float& fWnew = m_weights[iWeight];
+                fWnew += fMult * fInput * m_fLearningRate;
                 if (m_deltaInput.n()) // have we been asked to compute deltaInput?
                 {
                     float& fDeltaInput = m_deltaInput.access(inOutNi, inHi, inWi, inOutCi);
-                    fDeltaInput += fMult * (fW + m_weights[iWeight]) / 2;
+                    myAtomicAdd(&fDeltaInput, fMult * (fW + fWnew) / 2);
                 }
             }
         }

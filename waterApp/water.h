@@ -499,7 +499,7 @@ struct Water : public Propagator<_T>
 
         this->m_c.m_forces.init((NvU32)this->m_c.m_atoms.size());
 
-        m_neuralNetwork.init(this->m_c.m_atoms);
+        m_neuralNetwork.init(this->m_c);
     }
 
     MyUnits<T> getFilteredAverageKin() const
