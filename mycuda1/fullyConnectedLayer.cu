@@ -111,12 +111,14 @@ struct FCL_Backward
         unsigned inWi = blockX;
         unsigned inHi = blockY;
 
-        float fDeltaBias = 0;
+        float fDeltaBias = 0, fDeltaWeight = 0;
+        unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
+        float fW = m_weights[iWeight];
         for (unsigned inOutNi = 0; inOutNi < m_wantedOutput.n(); ++inOutNi)
         {
             for (unsigned inOutCi = 0; inOutCi < m_wantedOutput.c(); ++inOutCi)
             {
-                unsigned outHi = _outHi * (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2);
+                unsigned outHi = _outHi * (T_ACTIVATION1 != T_ACTIVATION2 ? 2 : 1);
 
                 float fWantedDeltaOut[2] = {0 , 0};
                 fWantedDeltaOut[0] = m_wantedOutput.access(inOutNi, outHi, outWi, inOutCi);
@@ -142,23 +144,21 @@ struct FCL_Backward
                     float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
                     fMult += fWantedDeltaOut[1] * fActivation2Der;
                 }
-                fDeltaBias += fMult * m_fLearningRate;
+                fDeltaBias += fMult;
                 // modify the weight corresponding to this summator
-                unsigned iWeight = (outWi + _outHi * m_wantedOutput.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
-                float fW = m_weights[iWeight];
-                float& fWnew = m_weights[iWeight];
-                fWnew += fMult * fInput * m_fLearningRate;
+                fDeltaWeight += fMult * fInput;
                 if (m_deltaInput.n()) // have we been asked to compute deltaInput?
                 {
                     float& fDeltaInput = m_deltaInput.access(inOutNi, inHi, inWi, inOutCi);
-                    myAtomicAdd(&fDeltaInput, fMult * (fW + fWnew) / 2);
+                    myAtomicAdd(&fDeltaInput, fMult * fW);
                 }
             }
         }
         // bias address only depends on threadId - meaning the same threadIds from different blocks may race
         unsigned iBias = _outHi * m_wantedOutput.w() + outWi;
-        myAtomicAdd(&m_biases[iBias], fDeltaBias);
+        myAtomicAdd(&m_biases[iBias], fDeltaBias * m_fLearningRate);
+        m_weights[iWeight] += fDeltaWeight * m_fLearningRate;
     }
 
     Tensor<float> m_input, m_weights, m_biases, m_deltaInput, m_output, m_wantedOutput, m_beforeActivation;

@@ -103,7 +103,7 @@ private:
 
         std::array<std::array<unsigned, 4>, 1> outputDims =
         { {
-            { NATOMS_IN_TRAINING, 64, 1, 1 }
+            { NATOMS_IN_TRAINING, 128, 1, 1 },
         } };
         std::array<unsigned, 4> prevOutputDims = m_inputs[0]->getDims();
         for (NvU32 u = 0; u < outputDims.size(); ++u )
