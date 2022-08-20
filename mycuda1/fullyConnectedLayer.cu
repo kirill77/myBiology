@@ -88,9 +88,10 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<Tens
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FCL_Backward
 {
-    FCL_Backward(float fLearningRate, Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases,
+    FCL_Backward(float fBiasesLR, float fWeightsLR, Tensor<float>& input, Tensor<float>& output, Tensor<float>& weights, Tensor<float>& biases,
     Tensor<float> &deltaInput, Tensor<float> &wantedOutput, Tensor<float> &beforeActivation) :
-        m_fLearningRate(fLearningRate), m_input(input), m_output(output), m_weights(weights), m_biases(biases),
+        m_fBiasesLR(fBiasesLR), m_fWeightsLR(fWeightsLR),
+        m_input(input), m_output(output), m_weights(weights), m_biases(biases),
         m_deltaInput(deltaInput), m_wantedOutput(wantedOutput), m_beforeActivation(beforeActivation)
     {
 #if RUN_ON_GPU
@@ -157,12 +158,12 @@ struct FCL_Backward
         }
         // bias address only depends on threadId - meaning the same threadIds from different blocks may race
         unsigned iBias = _outHi * m_wantedOutput.w() + outWi;
-        myAtomicAdd(&m_biases[iBias], fDeltaBias * m_fLearningRate);
-        m_weights[iWeight] += fDeltaWeight * m_fLearningRate;
+        myAtomicAdd(&m_biases[iBias], fDeltaBias * m_fBiasesLR);
+        m_weights[iWeight] += fDeltaWeight * m_fWeightsLR;
     }
 
     Tensor<float> m_input, m_weights, m_biases, m_deltaInput, m_output, m_wantedOutput, m_beforeActivation;
-    float m_fLearningRate = 0;
+    float m_fBiasesLR = 0, m_fWeightsLR = 0;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -173,7 +174,7 @@ __global__ void fclBackwardKernel(FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> bac
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<TensorRef>& inputs,
-    OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs)
+    OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs)
 {
     nvAssert(inputs.size() == 1);
     Tensor<float>& input = *inputs[0];
@@ -197,7 +198,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     {
         deltaInput.clearSubregion(0, (NvU32)deltaInput.size(), EXECUTE_MODE_DEFAULT);
     }
-    FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fLearningRate, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
+    FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fBiasesLR, fWeightsLR, input, output, m_weights, m_biases, deltaInput, wantedOutput, m_beforeActivation);
     nvAssert(T_ACTIVATION1 == T_ACTIVATION2 || wantedOutput.h() % 2 == 0);
     unsigned outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? wantedOutput.h() : wantedOutput.h() / 2);
     dim3 grid(input.w(), input.h(), 1);

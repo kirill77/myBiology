@@ -21,7 +21,7 @@ struct ILayer
 
     enum OUTPUTS_DATA_TYPE { WANTED_OUTPUTS, DELTA_OUTPUTS };
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
+        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
     void allocateDeltaOutputs()
     {
@@ -129,7 +129,7 @@ struct FullyConnectedLayer : public ILayer
     }
     virtual void forward(std::vector<TensorRef>& inputs) override;
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fLearningRate, std::vector<TensorRef>* pDeltaInputs = nullptr) override;
+        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs = nullptr) override;
 
     virtual void serialize(ISerializer& s) override
     {
@@ -297,15 +297,16 @@ private:
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayers[uLayer - 1]->m_deltaOutputs;
-            float fLearningRate = m_lrOptimizer.getLearningRate(uLayer);
-            m_fFilteredLearningRate = fLearningRate * 0.01 + m_fFilteredLearningRate * 0.99;
+            float fBiasesLR = m_lrOptimizer.getLearningRate(uLayer);
+            float fWeightsLR = m_lrOptimizer.getLearningRate(uLayer);
+            m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
             if (uLayer == m_pLayers.size() - 1)
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, wantedOutputs, fLearningRate, pDeltaInputs);
+                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, wantedOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
             }
             else
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS, m_pLayers[uLayer]->m_deltaOutputs, fLearningRate, pDeltaInputs);
+                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS, m_pLayers[uLayer]->m_deltaOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
             }
             --uLayer;
         }

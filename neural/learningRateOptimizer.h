@@ -45,11 +45,11 @@ struct LearningRateOptimizer
                     {
                         nvAssert(r.m_fPrevValue < r.m_fValue);
                         r.m_fValue = r.m_fPrevValue;
-                        r.m_uAttemptThreshold = std::max(2u, r.m_uAttemptThreshold * 2);
+                        r.m_uAttemptThreshold = std::min(1024u, std::max(2u, (NvU32)(r.m_uAttemptThreshold * 1.5)));
                         break;
                     }
-                    // if the attempt was good - decrement the threshold for trying again
-                    r.m_uAttemptThreshold = std::max(r.m_uAttemptThreshold, r.m_uAttemptThreshold - 1);
+                    // if the attempt was good - reward by decrementing the threshold
+                    r.m_uAttemptThreshold = std::max(1u, r.m_uAttemptThreshold - 1);
                 }
                 // loop some limited amount trying to find which learning rate to increase
                 for (NvU32 u = std::min((NvU32)m_pRatesInfo.size(), 8u); u != 0; --u)
@@ -75,7 +75,7 @@ struct LearningRateOptimizer
                     RateInfo& r = m_pRatesInfo[m_uLastAttemptedRate];
                     nvAssert(r.m_fPrevValue < r.m_fValue);
                     r.m_fValue = r.m_fPrevValue;
-                    r.m_uAttemptThreshold = std::max(2u, r.m_uAttemptThreshold * 2);
+                    r.m_uAttemptThreshold = std::min(1024u, std::max(2u, r.m_uAttemptThreshold * 2));
                     break;
                 }
                 // if it wasn't global before - make rate increases less likely
@@ -84,7 +84,7 @@ struct LearningRateOptimizer
                     for (NvU32 u = 0; u < m_pRatesInfo.size(); ++u)
                     {
                         RateInfo& r = m_pRatesInfo[m_uLastAttemptedRate];
-                        r.m_uAttemptThreshold = std::max(2u, r.m_uAttemptThreshold * 2);
+                        r.m_uAttemptThreshold = std::min(1024u, std::max(2u, r.m_uAttemptThreshold * 2));
                     }
                 }
                 m_isGlobal = true;

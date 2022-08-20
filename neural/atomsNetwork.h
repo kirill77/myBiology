@@ -101,8 +101,10 @@ private:
     {
         nvAssert(pLayers.size() == 0);
 
-        std::array<std::array<unsigned, 4>, 1> outputDims =
+        std::array<std::array<unsigned, 4>, 3> outputDims =
         { {
+            { NATOMS_IN_TRAINING, 128, 1, 1 },
+            { NATOMS_IN_TRAINING, 128, 1, 1 },
             { NATOMS_IN_TRAINING, 128, 1, 1 },
         } };
         std::array<unsigned, 4> prevOutputDims = m_inputs[0]->getDims();
@@ -120,7 +122,7 @@ private:
         pLayers.push_back(pLayer);
         return true;
     }
-    static const NvU32 NATOMS_IN_TRAINING = 128; // number of atoms we train on simultaneously
+    static const NvU32 NATOMS_IN_TRAINING = 256; // number of atoms we train on simultaneously
     void initializeTrainingData()
     {
         NvU32 nSimulationSteps = getNStoredSimSteps();
