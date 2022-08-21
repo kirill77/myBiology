@@ -1,5 +1,5 @@
-﻿#include "neural/tensor.h"
-#include "neural/network.h"
+﻿#include "mycuda1/tensor.h"
+#include "mycuda1/network.h"
 #include "myCudaMath.h"
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>

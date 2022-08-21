@@ -1,4 +1,4 @@
-#include <neural/atomsNetwork.h>
+#include <mycuda1/atomsNetwork.h>
 #include <chrono>
 #include <filesystem>
 

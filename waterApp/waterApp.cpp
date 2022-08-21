@@ -11,7 +11,7 @@
 #include <3rd_party/glfw/include/GLFW/glfw3.h>	// for the KEYs
 
 #include "water.h"
-#include "neural/neuralTest.h"
+#include "mycuda1/neuralTest.h"
 
 using namespace easy3d;
 

@@ -8,7 +8,7 @@
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
-#include "neural/atomsNetwork.h"
+#include "mycuda1/atomsNetwork.h"
 
 extern NvU32 g_debugCount;
 

@@ -1,4 +1,4 @@
-#include "neural/l2Computer.h"
+#include "mycuda1/l2Computer.h"
 
 __global__ void l2ErrorKernel(GPUBuffer<float> p1, GPUBuffer<float> p2, GPUBuffer<float> pDst, L2_MODE mode)
 {

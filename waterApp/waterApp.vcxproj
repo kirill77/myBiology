@@ -221,9 +221,6 @@
     <ProjectReference Include="..\mycuda1\mycuda1.vcxproj">
       <Project>{07a6f418-bac9-406e-8b50-893b50dbe471}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\neural\neural.vcxproj">
-      <Project>{5b6023cf-cce0-48e8-9864-c75a9a2b2b6a}</Project>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ocTree\ocTree.h" />

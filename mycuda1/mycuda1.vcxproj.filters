@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CudaCompile Include="fullyConnectedLayer.cu">
+      <Filter>CU</Filter>
+    </CudaCompile>
+    <CudaCompile Include="gpuBuffer.cu">
+      <Filter>CU</Filter>
+    </CudaCompile>
+    <CudaCompile Include="l2Computer.cu">
+      <Filter>CU</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="myCudaMath.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CPP">
+      <UniqueIdentifier>{cbaec504-ad1f-4c52-a253-892550101ea7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CU">
+      <UniqueIdentifier>{127a1ceb-eb24-4cc0-8c5a-2666ae4d89bb}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="neural.cpp">
+      <Filter>CPP</Filter>
+    </ClCompile>
+    <ClCompile Include="neuralTest.cpp">
+      <Filter>CPP</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
