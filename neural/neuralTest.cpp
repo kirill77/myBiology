@@ -45,7 +45,8 @@ void NeuralTest::test()
     }
 
 #if 1
-    double fError = network.train(10000, inputs, wantedOutputs);
+    network.initBatch(inputs, wantedOutputs);
+    double fError = network.train(10000);
     m_bTested = m_bTested && fError < 2.6e-11;
     nvAssert(m_bTested);
 #endif

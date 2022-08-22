@@ -43,8 +43,10 @@ struct AtomsNetwork : public NeuralNetwork
         if (getNCompletedTrainSteps() == 0)// % NATOMS_IN_TRAINING == 0)
         {
             initializeTrainingData();
+            initBatch(m_inputs, m_wantedOutputs);
         }
-        return train(nSteps, m_inputs, m_wantedOutputs);
+
+        return train(nSteps);
     }
     void init(const SimContext<T>& simContext)
     {

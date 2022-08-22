@@ -157,9 +157,12 @@ struct NeuralNetwork
     {
         nvAssert(NeuralTest::isTested());
     }
-    double train(NvU32 nStepsToMake, std::vector<TensorRef> &inputs, std::vector<TensorRef> &wantedOutputs)
+
+    void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs)
     {
-        NvU32 uEndStep = m_nCompletedTrainSteps + nStepsToMake;
+        m_inputs = inputs;
+        m_wantedOutputs = wantedOutputs;
+
         if (m_pLayers.size() == 0)
         {
             createLayers_impl(m_pLayers);
@@ -171,32 +174,31 @@ struct NeuralNetwork
             }
         }
 
-        if (m_nCompletedTrainSteps == 0)
+        forwardPass(inputs);
+        m_fLastError = computeCurrentError(wantedOutputs);
+        nvAssert(isfinite(m_fLastError));
+        ++m_nCompletedTrainSteps;
+        saveCurrentStateToBackup();
+        m_nStepsPerErrorCheck = m_lrOptimizer.init((NvU32)m_pLayers.size(), m_fLastError);
+        m_nStepsWithoutErrorCheck = 0;
+    }
+    double train(NvU32 nStepsToMake)
+    {
+        for (NvU32 uEndStep = m_nCompletedTrainSteps + nStepsToMake; m_nCompletedTrainSteps < uEndStep; ++m_nCompletedTrainSteps)
         {
-            forwardPass(inputs);
-            m_fLastError = computeCurrentError(wantedOutputs);
-            nvAssert(isfinite(m_fLastError));
-            ++m_nCompletedTrainSteps;
-            saveCurrentStateToBackup();
-            m_nStepsPerErrorCheck = m_lrOptimizer.init((NvU32)m_pLayers.size(), m_fLastError);
-            m_nStepsWithoutErrorCheck = 0;
-        }
-
-        for ( ; m_nCompletedTrainSteps < uEndStep; ++m_nCompletedTrainSteps)
-        {
-            backwardPass(inputs, wantedOutputs);
-            forwardPass(inputs);
+            backwardPass(m_inputs, m_wantedOutputs);
+            forwardPass(m_inputs);
 
             if (++m_nStepsWithoutErrorCheck >= m_nStepsPerErrorCheck)
             {
-                float fCurrentError = computeCurrentError(wantedOutputs);
+                float fCurrentError = computeCurrentError(m_wantedOutputs);
                 bool bShouldRedo = true;
                 m_nStepsPerErrorCheck = m_lrOptimizer.notifyNewError(fCurrentError, bShouldRedo);
                 m_nStepsWithoutErrorCheck = 0;
                 if (bShouldRedo)
                 {
                     restoreStateFromBackup();
-                    forwardPass(inputs);
+                    forwardPass(m_inputs);
                 }
                 else
                 {
@@ -252,6 +254,7 @@ protected:
     }
 
 private:
+    std::vector<TensorRef> m_inputs, m_wantedOutputs;
     double m_fFilteredLearningRate = 0;
     float m_fLastError = -1;
     NvU32 m_nCompletedTrainSteps = 0, m_nStepsPerErrorCheck = 1, m_nStepsWithoutErrorCheck = 0;
