@@ -12,7 +12,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{07A6F418-BAC9-406E-8B50-893B50DBE471}</ProjectGuid>
-    <RootNamespace>mycuda1</RootNamespace>
+    <RootNamespace>neural</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>neural</ProjectName>
   </PropertyGroup>

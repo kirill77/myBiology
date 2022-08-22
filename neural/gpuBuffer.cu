@@ -1,6 +1,6 @@
-#include "mycuda1/tensor.h"
-#include "mycuda1/network.h"
-#include "mycuda1/atomsNetwork.h"
+#include "neural/tensor.h"
+#include "neural/network.h"
+#include "neural/atomsNetwork.h"
 
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
