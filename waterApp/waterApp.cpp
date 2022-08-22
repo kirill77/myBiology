@@ -235,10 +235,11 @@ private:
             }
             if (m_bExecuteTraining)
             {
+                LearningRateOptimizer& batchOptimizer = m_water.accessBatchOptimizer();
                 auto& network = m_water.accessNeuralNetwork();
                 if (network.hasEnoughData())
                 {
-                    network.trainAtomsNetwork(2);
+                    network.trainAtomsNetwork(2, batchOptimizer);
                 }
             }
         }

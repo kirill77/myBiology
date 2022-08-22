@@ -57,10 +57,11 @@ int main()
         printf("continuing previously saved training...\n");
     }
 
+    LearningRateOptimizer batchOptimizer;
     const NvU32 nStepsPerCycle = 1024;
     for (NvU32 nCycles = 0; ; ++nCycles)
     {
-        network.trainAtomsNetwork(nStepsPerCycle);
+        network.trainAtomsNetwork(nStepsPerCycle, batchOptimizer);
 
         auto curTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> secondsInTraining = curTime - startTime;

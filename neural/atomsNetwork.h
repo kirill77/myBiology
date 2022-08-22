@@ -38,15 +38,15 @@ struct AtomsNetwork : public NeuralNetwork
     using InternalLayerType = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
 
     inline NvU32 getNAtoms() const { return (NvU32)m_constAtomData.size(); }
-    double trainAtomsNetwork(NvU32 nSteps)
+    double trainAtomsNetwork(NvU32 nSteps, LearningRateOptimizer &batchOptimizer)
     {
         if (getNCompletedTrainSteps() == 0)// % NATOMS_IN_TRAINING == 0)
         {
             initializeTrainingData();
-            initBatch(m_inputs, m_wantedOutputs);
+            initBatch(m_inputs, m_wantedOutputs, batchOptimizer);
         }
 
-        return train(nSteps);
+        return trainBatch(nSteps, batchOptimizer);
     }
     void init(const SimContext<T>& simContext)
     {

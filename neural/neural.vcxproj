@@ -95,6 +95,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="myCudaMath.h" />
+    <ClInclude Include="network.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="neural.cpp" />

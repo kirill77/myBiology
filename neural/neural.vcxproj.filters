@@ -13,6 +13,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="myCudaMath.h" />
+    <ClInclude Include="network.h">
+      <Filter>H</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="CPP">
@@ -20,6 +23,9 @@
     </Filter>
     <Filter Include="CU">
       <UniqueIdentifier>{127a1ceb-eb24-4cc0-8c5a-2666ae4d89bb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="H">
+      <UniqueIdentifier>{71095d9f-3086-4d3a-84ef-c9a84d4adc92}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

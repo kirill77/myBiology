@@ -158,7 +158,7 @@ struct NeuralNetwork
         nvAssert(NeuralTest::isTested());
     }
 
-    void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs)
+    void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs, LearningRateOptimizer& batchOptimizer)
     {
         m_inputs = inputs;
         m_wantedOutputs = wantedOutputs;
@@ -179,21 +179,21 @@ struct NeuralNetwork
         nvAssert(isfinite(m_fLastError));
         ++m_nCompletedTrainSteps;
         saveCurrentStateToBackup();
-        m_nStepsPerErrorCheck = m_lrOptimizer.init((NvU32)m_pLayers.size(), m_fLastError);
+        m_nStepsPerErrorCheck = batchOptimizer.init((NvU32)m_pLayers.size(), m_fLastError);
         m_nStepsWithoutErrorCheck = 0;
     }
-    double train(NvU32 nStepsToMake)
+    double trainBatch(NvU32 nStepsToMake, LearningRateOptimizer &batchOptimizer)
     {
         for (NvU32 uEndStep = m_nCompletedTrainSteps + nStepsToMake; m_nCompletedTrainSteps < uEndStep; ++m_nCompletedTrainSteps)
         {
-            backwardPass(m_inputs, m_wantedOutputs);
+            backwardPass(batchOptimizer);
             forwardPass(m_inputs);
 
             if (++m_nStepsWithoutErrorCheck >= m_nStepsPerErrorCheck)
             {
                 float fCurrentError = computeCurrentError(m_wantedOutputs);
                 bool bShouldRedo = true;
-                m_nStepsPerErrorCheck = m_lrOptimizer.notifyNewError(fCurrentError, bShouldRedo);
+                m_nStepsPerErrorCheck = batchOptimizer.notifyNewError(fCurrentError, bShouldRedo);
                 m_nStepsWithoutErrorCheck = 0;
                 if (bShouldRedo)
                 {
@@ -223,8 +223,6 @@ protected:
         s.serializeSimpleType("m_nStepsPerErrorCheck", m_nStepsPerErrorCheck);
         s.serializeSimpleType("m_nStepsWithoutErrorCheck", m_nStepsWithoutErrorCheck);
         
-        m_lrOptimizer.serialize(s);
-
         {
             std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
             s.serializeArraySize("m_pLayers", m_pLayers);
@@ -258,7 +256,6 @@ private:
     double m_fFilteredLearningRate = 0;
     float m_fLastError = -1;
     NvU32 m_nCompletedTrainSteps = 0, m_nStepsPerErrorCheck = 1, m_nStepsWithoutErrorCheck = 0;
-    LearningRateOptimizer m_lrOptimizer;
 
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
@@ -291,21 +288,21 @@ private:
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    void backwardPass(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs)
+    void backwardPass(LearningRateOptimizer& batchOptimizer)
     {
         NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
         while (uLayer < m_pLayers.size())
         {
-            std::vector<TensorRef>& _inputs = (uLayer == 0) ? inputs : m_pLayers[uLayer - 1]->m_outputs;
+            std::vector<TensorRef>& _inputs = (uLayer == 0) ? m_inputs : m_pLayers[uLayer - 1]->m_outputs;
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayers[uLayer - 1]->m_deltaOutputs;
-            float fBiasesLR = m_lrOptimizer.getLearningRate(uLayer);
-            float fWeightsLR = m_lrOptimizer.getLearningRate(uLayer);
+            float fBiasesLR = batchOptimizer.getLearningRate(uLayer);
+            float fWeightsLR = batchOptimizer.getLearningRate(uLayer);
             m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
             if (uLayer == m_pLayers.size() - 1)
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, wantedOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
+                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, m_wantedOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
             }
             else
             {
