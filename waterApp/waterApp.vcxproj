@@ -218,7 +218,7 @@
     <ProjectReference Include="..\MonteCarlo\MonteCarlo.vcxproj">
       <Project>{b21ff890-4353-4486-9091-4bf3e4348b34}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\neural\mycuda1.vcxproj">
+    <ProjectReference Include="..\neural\neural.vcxproj">
       <Project>{07a6f418-bac9-406e-8b50-893b50dbe471}</Project>
     </ProjectReference>
   </ItemGroup>

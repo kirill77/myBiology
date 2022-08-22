@@ -51,7 +51,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "monteCarlo", "..\MonteCarlo
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "basics", "..\basics\basics.vcxproj", "{80055C89-FBEB-4A0C-AD51-58B5F8F98A93}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "neural", "..\neural\mycuda1.vcxproj", "{07A6F418-BAC9-406E-8B50-893B50DBE471}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "neural", "..\neural\neural.vcxproj", "{07A6F418-BAC9-406E-8B50-893B50DBE471}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "offlineTrainer", "..\OfflineTrainer\OfflineTrainer.vcxproj", "{731AFC4C-02F6-421F-868C-5195D8678AD9}"
 EndProject
