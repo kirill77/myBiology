@@ -143,14 +143,6 @@ private:
     std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
 };
 
-template <class T>
-inline void copy(rtvector<float, 3>& dst, const rtvector<T, 3>& src)
-{
-    dst[0] = (float)src[0];
-    dst[1] = (float)src[1];
-    dst[2] = (float)src[2];
-}
-
 struct NeuralNetwork
 {
     NeuralNetwork()
