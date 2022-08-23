@@ -2,20 +2,13 @@
 
 #include <vector>
 #include <basics/mybasics.h>
+#include <basics/serializer.h>
 
 struct LearningRateOptimizer
 {
-    NvU32 init(NvU32 nRates, float fInitialError)
-    {
-        nvAssert(isfinite(fInitialError));
-        (*this) = LearningRateOptimizer();
+    NvU32 init(NvU32 nRates, struct NeuralNetwork& network);
+    void makeMinimalProgress(NeuralNetwork& network);
 
-        m_fPrevError = fInitialError;
-        m_isGlobal = true;
-        m_pRatesInfo.resize(nRates);
-
-        return m_nStepsToMake;
-    }
     NvU32 notifyNewError(float fError, bool& bShouldRedo)
     {
         bool bLocalIncreaseOnPrevStep = m_bLocalIncreaseOnPrevStep;
@@ -105,6 +98,14 @@ struct LearningRateOptimizer
     float getLearningRate(NvU32 uRate)
     {
         return m_pRatesInfo[uRate].m_fValue;
+    }
+    float getLastError() const
+    {
+        return m_fPrevError;
+    }
+    NvU32 getNStepsMade() const
+    {
+        return m_nStepsMade;
     }
     void serialize(ISerializer& s)
     {

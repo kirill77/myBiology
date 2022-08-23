@@ -16,6 +16,9 @@
     <ClInclude Include="network.h">
       <Filter>H</Filter>
     </ClInclude>
+    <ClInclude Include="learningRateOptimizer.h">
+      <Filter>H</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="CPP">
@@ -33,6 +36,9 @@
       <Filter>CPP</Filter>
     </ClCompile>
     <ClCompile Include="neuralTest.cpp">
+      <Filter>CPP</Filter>
+    </ClCompile>
+    <ClCompile Include="batchTrainer.cpp">
       <Filter>CPP</Filter>
     </ClCompile>
   </ItemGroup>

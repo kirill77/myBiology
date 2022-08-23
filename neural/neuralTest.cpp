@@ -47,8 +47,14 @@ void NeuralTest::test()
 #if 1
     LearningRateOptimizer batchOptimizer;
     network.initBatch(inputs, wantedOutputs, batchOptimizer);
-    double fError = network.trainBatch(10000, batchOptimizer);
-    m_bTested = m_bTested && fError < 2.6e-11;
+    for (; ; )
+    {
+        batchOptimizer.makeMinimalProgress(network);
+        if (batchOptimizer.getNStepsMade() >= 10000)
+            break;
+    }
+    float fError = batchOptimizer.getLastError();
+    m_bTested = m_bTested && fError < 2e-11;
     nvAssert(m_bTested);
 #endif
 }

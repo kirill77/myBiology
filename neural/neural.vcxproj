@@ -94,10 +94,12 @@
     <CudaCompile Include="l2Computer.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="learningRateOptimizer.h" />
     <ClInclude Include="myCudaMath.h" />
     <ClInclude Include="network.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="batchTrainer.cpp" />
     <ClCompile Include="neural.cpp" />
     <ClCompile Include="neuralTest.cpp" />
   </ItemGroup>

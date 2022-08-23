@@ -174,54 +174,23 @@ struct NeuralNetwork
             }
         }
 
-        forwardPass(inputs);
-        m_fLastError = computeCurrentError(wantedOutputs);
-        nvAssert(isfinite(m_fLastError));
-        ++m_nCompletedTrainSteps;
-        saveCurrentStateToBackup();
-        m_nStepsPerErrorCheck = batchOptimizer.init((NvU32)m_pLayers.size(), m_fLastError);
-        m_nStepsWithoutErrorCheck = 0;
+        batchOptimizer.init((NvU32)m_pLayers.size(), *this);
     }
-    double trainBatch(NvU32 nStepsToMake, LearningRateOptimizer &batchOptimizer)
+    virtual void makeSteps(NvU32 nStepsToMake, LearningRateOptimizer& batchOptimizer)
     {
-        for (NvU32 uEndStep = m_nCompletedTrainSteps + nStepsToMake; m_nCompletedTrainSteps < uEndStep; ++m_nCompletedTrainSteps)
+        for (NvU32 u = 0; u < nStepsToMake; ++u)
         {
             backwardPass(batchOptimizer);
-            forwardPass(m_inputs);
-
-            if (++m_nStepsWithoutErrorCheck >= m_nStepsPerErrorCheck)
-            {
-                float fCurrentError = computeCurrentError(m_wantedOutputs);
-                bool bShouldRedo = true;
-                m_nStepsPerErrorCheck = batchOptimizer.notifyNewError(fCurrentError, bShouldRedo);
-                m_nStepsWithoutErrorCheck = 0;
-                if (bShouldRedo)
-                {
-                    restoreStateFromBackup();
-                    forwardPass(m_inputs);
-                }
-                else
-                {
-                    m_fLastError = fCurrentError;
-                    saveCurrentStateToBackup();
-                }
-            }
+            forwardPass();
         }
-
-        return m_fLastError;
     }
-    double getLastError() const { return m_fLastError; }
-    NvU32 getNCompletedTrainSteps() const { return m_nCompletedTrainSteps; }
+
     double getFilteredLearningRate() const { return m_fFilteredLearningRate; }
 
 protected:
     virtual void serialize(ISerializer& s)
     {
         s.serializeSimpleType("m_fFilteredLearningRate", m_fFilteredLearningRate);
-        s.serializeSimpleType("m_fLastError", m_fLastError);
-        s.serializeSimpleType("m_nCompletedTrainSteps", m_nCompletedTrainSteps);
-        s.serializeSimpleType("m_nStepsPerErrorCheck", m_nStepsPerErrorCheck);
-        s.serializeSimpleType("m_nStepsWithoutErrorCheck", m_nStepsWithoutErrorCheck);
         
         {
             std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
@@ -254,21 +223,20 @@ protected:
 private:
     std::vector<TensorRef> m_inputs, m_wantedOutputs;
     double m_fFilteredLearningRate = 0;
-    float m_fLastError = -1;
-    NvU32 m_nCompletedTrainSteps = 0, m_nStepsPerErrorCheck = 1, m_nStepsWithoutErrorCheck = 0;
 
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
     L2Computer m_l2Computer;
 
-    float computeCurrentError(std::vector<TensorRef>& wantedOutputs)
+public:
+    float computeCurrentError()
     {
         const std::vector<TensorRef>& outputs = (*m_pLayers.rbegin())->m_outputs;
-        nvAssert(outputs.size() == wantedOutputs.size());
+        nvAssert(outputs.size() == m_wantedOutputs.size());
         for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
         {
             Tensor<float>& output = (*outputs[uTensor]);
-            Tensor<float>& wantedOutput = (*wantedOutputs[uTensor]);
+            Tensor<float>& wantedOutput = (*m_wantedOutputs[uTensor]);
             m_l2Computer.accumulateL2Error(output, wantedOutput, (uTensor == 0) ? L2_MODE_RESET : L2_MODE_ADD);
         }
         float fError = m_l2Computer.getAccumulatedError();
@@ -311,9 +279,9 @@ private:
             --uLayer;
         }
     }
-    void forwardPass(std::vector<TensorRef>& pInputs)
+    void forwardPass()
     {
-        m_pLayers[0]->forward(pInputs);
+        m_pLayers[0]->forward(m_inputs);
         for (NvU32 uLayer = 1; uLayer < m_pLayers.size(); ++uLayer)
         {
             m_pLayers[uLayer]->forward(m_pLayers[uLayer - 1]->m_outputs);

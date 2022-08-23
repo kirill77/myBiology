@@ -5,7 +5,9 @@
 int main()
 {
     NeuralTest::test();
+
     AtomsNetwork<float, 64> network;
+    LearningRateOptimizer batchTrainer;
 
     // load the latest trained network
     {
@@ -24,22 +26,20 @@ int main()
                 }
             }
         }
-        if (!path.empty())
+        if (path.empty())
         {
-            printf("loading %S\n", path.c_str());
-            network.loadFromFile(path);
+            path = L"c:\\atomNets\\networkFromWaterApp.bin";
         }
-        else
-        {
-            printf("loading %s\n", "networkFromWaterApp.bin");
-            network.loadFromFile(L"networkFromWaterApp.bin");
-        }
+        printf("loading %S\n", path.c_str());
+        MyReader reader(path);
+        network.serialize(reader);
+        batchTrainer.serialize(reader);
     }
 
     auto startTime = std::chrono::high_resolution_clock::now();
     auto lastSaveTime = startTime;
 
-    const NvU32 nLoadedTrainSteps = network.getNCompletedTrainSteps();
+    const NvU32 nLoadedTrainSteps = batchTrainer.getNStepsMade();
     if (nLoadedTrainSteps == 0)
     {
         // restart csv file from the beginning
@@ -57,15 +57,19 @@ int main()
         printf("continuing previously saved training...\n");
     }
 
-    LearningRateOptimizer batchOptimizer;
     const NvU32 nStepsPerCycle = 1024;
     for (NvU32 nCycles = 0; ; ++nCycles)
     {
-        network.trainAtomsNetwork(nStepsPerCycle, batchOptimizer);
+        for ( ; ; )
+        {
+            batchTrainer.makeMinimalProgress(network);
+            if (batchTrainer.getNStepsMade() >= (nCycles + 1) * nStepsPerCycle)
+                break;
+        }
 
         auto curTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> secondsInTraining = curTime - startTime;
-        NvU32 nTrainStepsMadeThisSession = network.getNCompletedTrainSteps() - nLoadedTrainSteps;
+        NvU32 nTrainStepsMadeThisSession = batchTrainer.getNStepsMade() - nLoadedTrainSteps;
         double fMSecsPerTrainingStep = (secondsInTraining.count() / nTrainStepsMadeThisSession) * 1000;
 
         {
@@ -73,7 +77,7 @@ int main()
             fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "a+");
             if (fp != nullptr)
             {
-                fprintf(fp, "%d,  %#.3g,  %#.3g, %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
+                fprintf(fp, "%d,  %#.3g,  %#.3g, %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
                 fclose(fp);
             }
         }
@@ -81,14 +85,18 @@ int main()
         std::chrono::duration<double> secondsSinceLastSave = curTime - lastSaveTime;
         if (secondsSinceLastSave.count() > 60)
         {
-            printf("saving nSteps=%d...\n", network.getNCompletedTrainSteps());
+            printf("saving nSteps=%d...\n", batchTrainer.getNStepsMade());
             wchar_t sBuffer[32];
-            swprintf_s(sBuffer, L"trained_%d.bin", network.getNCompletedTrainSteps());
-            network.saveToFile(sBuffer);
+            swprintf_s(sBuffer, L"c:\\atomNets\\trained_%d.bin", batchTrainer.getNStepsMade());
+            {
+            MyWriter writer(sBuffer);
+            network.serialize(writer);
+            batchTrainer.serialize(writer);
+            }
             lastSaveTime = curTime;
             printf("saving completed\n");
         }
 
-        printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n", network.getNCompletedTrainSteps(), network.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
+        printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
     }
 }

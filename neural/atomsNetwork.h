@@ -38,15 +38,15 @@ struct AtomsNetwork : public NeuralNetwork
     using InternalLayerType = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
 
     inline NvU32 getNAtoms() const { return (NvU32)m_constAtomData.size(); }
-    double trainAtomsNetwork(NvU32 nSteps, LearningRateOptimizer &batchOptimizer)
+    virtual void makeSteps(NvU32 nStepsToMake, LearningRateOptimizer& batchOptimizer) override
     {
-        if (getNCompletedTrainSteps() == 0)// % NATOMS_IN_TRAINING == 0)
+        if (m_inputs.size() == 0)// % NATOMS_IN_TRAINING == 0)
         {
             initializeTrainingData();
             initBatch(m_inputs, m_wantedOutputs, batchOptimizer);
         }
 
-        return trainBatch(nSteps, batchOptimizer);
+        return NeuralNetwork::makeSteps(nStepsToMake, batchOptimizer);
     }
     void init(const SimContext<T>& simContext)
     {
@@ -60,7 +60,8 @@ struct AtomsNetwork : public NeuralNetwork
             if (m_bNeedToSave)
             {
                 m_bNeedToSave = false;
-                saveToFile("networkFromWaterApp.bin");
+                MyWriter writer("c:\\atomNets\\networkFromWaterApp.bin");
+                serialize(writer);
             }
             return;
         }
@@ -87,16 +88,6 @@ struct AtomsNetwork : public NeuralNetwork
     }
     NvU32 getNStoredSimSteps() const { return (NvU32)m_pForceIndices.size(); }
     bool hasEnoughData() const { return !m_bSimStepStarted && getNStoredSimSteps() >= 1000; }
-    void loadFromFile(const std::filesystem::path& path)
-    {
-        MyReader s(path);
-        serialize(s);
-    }
-    void saveToFile(const std::filesystem::path& path)
-    {
-        MyWriter s(path);
-        serialize(s);
-    }
 
 private:
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers) override
@@ -383,6 +374,7 @@ private:
 
     bool m_bSimStepStarted = false, m_bNeedToSave = false;
 
+public:
     virtual void serialize(ISerializer &s) override
     {
         NeuralNetwork::serialize(s);
@@ -395,6 +387,7 @@ private:
         s.serializePreallocatedMem("m_boxWrapper", &m_boxWrapper, sizeof(m_boxWrapper));
     }
 
+private:
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
     std::vector<GPUBuffer<TransientAtomData>*> m_pTransientAtomData; // 1 in the beginning + 1 per simulation step
     std::vector<GPUBuffer<ForceValues<nAtomsPerCluster>>*> m_pForceValues; // 2 per simulation step

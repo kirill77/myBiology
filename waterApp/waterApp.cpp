@@ -235,11 +235,11 @@ private:
             }
             if (m_bExecuteTraining)
             {
-                LearningRateOptimizer& batchOptimizer = m_water.accessBatchOptimizer();
                 auto& network = m_water.accessNeuralNetwork();
                 if (network.hasEnoughData())
                 {
-                    network.trainAtomsNetwork(2, batchOptimizer);
+                    LearningRateOptimizer& batchOptimizer = m_water.accessBatchTrainer();
+                    batchOptimizer.makeMinimalProgress(network);
                 }
             }
         }
@@ -304,8 +304,9 @@ private:
 
         x = fLeftBoundary;
         y += 40;
+        LearningRateOptimizer& batchTrainer = m_water.accessBatchTrainer();
         sprintf_s(sBuffer, "NN StoredSimSteps: %d, TrainSteps: %d, error: %e", network.getNStoredSimSteps(),
-            network.getNCompletedTrainSteps(), network.getLastError());
+            batchTrainer.getNStepsMade(), batchTrainer.getLastError());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
