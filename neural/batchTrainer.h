@@ -1,12 +1,15 @@
 #pragma once
 
-#include <vector>
-#include <basics/mybasics.h>
-#include <basics/serializer.h>
+#include "tensor.h"
+
+struct LayerOutputs
+{
+    std::vector<TensorRef> m_deltaOutputs;
+};
 
 struct BatchTrainer
 {
-    NvU32 init(NvU32 nRates, struct NeuralNetwork& network);
+    void init(NvU32 nLayers, NvU32 nRates, struct NeuralNetwork& network);
     void makeMinimalProgress(NeuralNetwork& network);
 
     NvU32 notifyNewError(float fError, bool& bShouldRedo)
@@ -118,6 +121,8 @@ struct BatchTrainer
         s.serializeSimpleType("m_nStepsMade", m_nStepsMade);
         s.serializeSimpleType("m_uLastAttemptedRate", m_uLastAttemptedRate);
     }
+
+    std::vector<LayerOutputs> m_pLayerOutputs;
 
 private:
     struct RateInfo

@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <memory>
 #include "gpuBuffer.h"
 
 template <class T>
@@ -56,3 +57,6 @@ struct Tensor : public GPUBuffer<T>
 private:
     unsigned m_dims[4] = {0};
 };
+
+typedef std::shared_ptr<Tensor<float>> TensorRef;
+

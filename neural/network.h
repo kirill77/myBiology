@@ -1,8 +1,6 @@
 #pragma once
 
-#include <memory>
 #include <array>
-#include <vector>
 #include "basics/vectors.h"
 #include "basics/serializer.h"
 #include "tensor.h"
@@ -10,8 +8,6 @@
 #include "activations.h"
 #include "neuralTest.h"
 #include "batchTrainer.h"
-
-typedef std::shared_ptr<Tensor<float>> TensorRef;
 
 enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FCL_MIRRORED };
 
@@ -23,16 +19,18 @@ struct ILayer
     virtual void backward(std::vector<TensorRef>& inputs,
         OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
-    void allocateDeltaOutputs()
+    void allocateDeltaOutputs(BatchTrainer &batchTrainer, NvU32 layerIndex)
     {
-        m_deltaOutputs.resize(m_outputs.size());
-        for (NvU32 uOutput = 0; uOutput < m_deltaOutputs.size(); ++uOutput)
+        NvU32 nOutputs = (NvU32)m_outputs.size();
+        std::vector<TensorRef>& deltaOutputs = batchTrainer.m_pLayerOutputs[layerIndex].m_deltaOutputs;
+        deltaOutputs.resize(nOutputs);
+        for (NvU32 uOutput = 0; uOutput < nOutputs; ++uOutput)
         {
-            if (m_deltaOutputs[uOutput] == nullptr)
+            if (deltaOutputs[uOutput] == nullptr)
             {
-                m_deltaOutputs[uOutput] = std::make_shared<Tensor<float>>();
+                deltaOutputs[uOutput] = std::make_shared<Tensor<float>>();
             }
-            m_deltaOutputs[uOutput]->init(m_outputs[uOutput]->getDims());
+            deltaOutputs[uOutput]->init(m_outputs[uOutput]->getDims());
         }
     }
     void saveCurrentStateToBackup()
@@ -48,7 +46,7 @@ struct ILayer
         m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
     }
 
-    std::vector<TensorRef> m_outputs, m_deltaOutputs;
+    std::vector<TensorRef> m_outputs;
     Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup, m_beforeActivation;
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
 
@@ -63,7 +61,6 @@ struct ILayer
         m_beforeActivation.serialize("m_beforeActivation", s);
         
         s.serializeArrayOfSharedPtrs("m_outputs", m_outputs);
-        s.serializeArrayOfSharedPtrs("m_deltaOutputs", m_deltaOutputs);
     }
 
 protected:
@@ -158,15 +155,15 @@ struct NeuralNetwork
         if (m_pLayers.size() == 0)
         {
             createLayers_impl(m_pLayers);
-            nvAssert(m_pLayers.size() != 0);
-            // allocate delta outputs
-            for (NvU32 uLayer = 0; uLayer < m_pLayers.size() - 1; ++uLayer)
-            {
-                m_pLayers[uLayer]->allocateDeltaOutputs();
-            }
         }
 
-        batchTrainer.init((NvU32)m_pLayers.size(), *this);
+        batchTrainer.init((NvU32)m_pLayers.size(), (NvU32)m_pLayers.size(), *this);
+        nvAssert(m_pLayers.size() != 0);
+        // allocate delta outputs
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size() - 1; ++uLayer)
+        {
+            m_pLayers[uLayer]->allocateDeltaOutputs(batchTrainer, uLayer);
+        }
     }
     virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer)
     {
@@ -256,7 +253,7 @@ public:
             std::vector<TensorRef>& _inputs = (uLayer == 0) ? m_inputs : m_pLayers[uLayer - 1]->m_outputs;
 
             // we don't need to compute deltaInputs for the layer 0
-            std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayers[uLayer - 1]->m_deltaOutputs;
+            std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.m_pLayerOutputs[uLayer - 1].m_deltaOutputs;
             float fBiasesLR = batchTrainer.getLearningRate(uLayer);
             float fWeightsLR = batchTrainer.getLearningRate(uLayer);
             m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
@@ -266,7 +263,7 @@ public:
             }
             else
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS, m_pLayers[uLayer]->m_deltaOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
+                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS, batchTrainer.m_pLayerOutputs[uLayer].m_deltaOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
             }
             --uLayer;
         }

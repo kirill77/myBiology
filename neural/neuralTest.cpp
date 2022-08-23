@@ -54,7 +54,7 @@ void NeuralTest::test()
             break;
     }
     float fError = batchTrainer.getLastError();
-    m_bTested = m_bTested && fError < 2e-11;
+    m_bTested = m_bTested && fError > 0 && fError < 2e-11;
     nvAssert(m_bTested);
 #endif
 }

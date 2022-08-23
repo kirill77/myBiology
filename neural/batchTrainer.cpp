@@ -1,7 +1,7 @@
 #include "batchTrainer.h"
 #include "network.h"
 
-NvU32 BatchTrainer::init(NvU32 nRates, NeuralNetwork& network)
+void BatchTrainer::init(NvU32 nLayers, NvU32 nRates, NeuralNetwork& network)
 {
     (*this) = BatchTrainer();
 
@@ -13,7 +13,7 @@ NvU32 BatchTrainer::init(NvU32 nRates, NeuralNetwork& network)
     nvAssert(isfinite(m_fPrevError));
     network.saveCurrentStateToBackup();
 
-    return m_nStepsToMake;
+    m_pLayerOutputs.resize(nLayers);
 }
 void BatchTrainer::makeMinimalProgress(NeuralNetwork& network)
 {
