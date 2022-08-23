@@ -45,15 +45,15 @@ void NeuralTest::test()
     }
 
 #if 1
-    LearningRateOptimizer batchOptimizer;
-    network.initBatch(inputs, wantedOutputs, batchOptimizer);
+    BatchTrainer batchTrainer;
+    network.initBatch(inputs, wantedOutputs, batchTrainer);
     for (; ; )
     {
-        batchOptimizer.makeMinimalProgress(network);
-        if (batchOptimizer.getNStepsMade() >= 10000)
+        batchTrainer.makeMinimalProgress(network);
+        if (batchTrainer.getNStepsMade() >= 10000)
             break;
     }
-    float fError = batchOptimizer.getLastError();
+    float fError = batchTrainer.getLastError();
     m_bTested = m_bTested && fError < 2e-11;
     nvAssert(m_bTested);
 #endif

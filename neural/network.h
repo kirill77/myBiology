@@ -9,7 +9,7 @@
 #include "l2Computer.h"
 #include "activations.h"
 #include "neuralTest.h"
-#include "learningRateOptimizer.h"
+#include "batchTrainer.h"
 
 typedef std::shared_ptr<Tensor<float>> TensorRef;
 
@@ -150,7 +150,7 @@ struct NeuralNetwork
         nvAssert(NeuralTest::isTested());
     }
 
-    void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs, LearningRateOptimizer& batchOptimizer)
+    void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs, BatchTrainer& batchTrainer)
     {
         m_inputs = inputs;
         m_wantedOutputs = wantedOutputs;
@@ -166,13 +166,13 @@ struct NeuralNetwork
             }
         }
 
-        batchOptimizer.init((NvU32)m_pLayers.size(), *this);
+        batchTrainer.init((NvU32)m_pLayers.size(), *this);
     }
-    virtual void makeSteps(NvU32 nStepsToMake, LearningRateOptimizer& batchOptimizer)
+    virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer)
     {
         for (NvU32 u = 0; u < nStepsToMake; ++u)
         {
-            backwardPass(batchOptimizer);
+            backwardPass(batchTrainer);
             forwardPass();
         }
     }
@@ -248,7 +248,7 @@ public:
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    void backwardPass(LearningRateOptimizer& batchOptimizer)
+    void backwardPass(BatchTrainer& batchTrainer)
     {
         NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
         while (uLayer < m_pLayers.size())
@@ -257,8 +257,8 @@ public:
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayers[uLayer - 1]->m_deltaOutputs;
-            float fBiasesLR = batchOptimizer.getLearningRate(uLayer);
-            float fWeightsLR = batchOptimizer.getLearningRate(uLayer);
+            float fBiasesLR = batchTrainer.getLearningRate(uLayer);
+            float fWeightsLR = batchTrainer.getLearningRate(uLayer);
             m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
             if (uLayer == m_pLayers.size() - 1)
             {

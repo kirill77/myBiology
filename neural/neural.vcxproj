@@ -95,7 +95,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="atomsNetwork.h" />
-    <ClInclude Include="learningRateOptimizer.h" />
+    <ClInclude Include="batchTrainer.h" />
     <ClInclude Include="myCudaMath.h" />
     <ClInclude Include="network.h" />
   </ItemGroup>

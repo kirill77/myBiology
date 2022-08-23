@@ -7,7 +7,7 @@ int main()
     NeuralTest::test();
 
     AtomsNetwork<float, 64> network;
-    LearningRateOptimizer batchTrainer;
+    BatchTrainer batchTrainer;
 
     // load the latest trained network
     {

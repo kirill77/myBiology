@@ -16,10 +16,10 @@
     <ClInclude Include="network.h">
       <Filter>H</Filter>
     </ClInclude>
-    <ClInclude Include="learningRateOptimizer.h">
+    <ClInclude Include="atomsNetwork.h">
       <Filter>H</Filter>
     </ClInclude>
-    <ClInclude Include="atomsNetwork.h">
+    <ClInclude Include="batchTrainer.h">
       <Filter>H</Filter>
     </ClInclude>
   </ItemGroup>

@@ -238,8 +238,8 @@ private:
                 auto& network = m_water.accessNeuralNetwork();
                 if (network.hasEnoughData())
                 {
-                    LearningRateOptimizer& batchOptimizer = m_water.accessBatchTrainer();
-                    batchOptimizer.makeMinimalProgress(network);
+                    BatchTrainer& batchTrainer = m_water.accessBatchTrainer();
+                    batchTrainer.makeMinimalProgress(network);
                 }
             }
         }
@@ -304,7 +304,7 @@ private:
 
         x = fLeftBoundary;
         y += 40;
-        LearningRateOptimizer& batchTrainer = m_water.accessBatchTrainer();
+        BatchTrainer& batchTrainer = m_water.accessBatchTrainer();
         sprintf_s(sBuffer, "NN StoredSimSteps: %d, TrainSteps: %d, error: %e", network.getNStoredSimSteps(),
             batchTrainer.getNStepsMade(), batchTrainer.getLastError());
         texter_->draw(sBuffer,

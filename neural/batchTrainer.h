@@ -4,7 +4,7 @@
 #include <basics/mybasics.h>
 #include <basics/serializer.h>
 
-struct LearningRateOptimizer
+struct BatchTrainer
 {
     NvU32 init(NvU32 nRates, struct NeuralNetwork& network);
     void makeMinimalProgress(NeuralNetwork& network);

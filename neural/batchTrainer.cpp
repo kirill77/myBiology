@@ -1,9 +1,9 @@
-#include "learningRateOptimizer.h"
+#include "batchTrainer.h"
 #include "network.h"
 
-NvU32 LearningRateOptimizer::init(NvU32 nRates, NeuralNetwork& network)
+NvU32 BatchTrainer::init(NvU32 nRates, NeuralNetwork& network)
 {
-    (*this) = LearningRateOptimizer();
+    (*this) = BatchTrainer();
 
     m_isGlobal = true;
     m_pRatesInfo.resize(nRates);
@@ -15,7 +15,7 @@ NvU32 LearningRateOptimizer::init(NvU32 nRates, NeuralNetwork& network)
 
     return m_nStepsToMake;
 }
-void LearningRateOptimizer::makeMinimalProgress(NeuralNetwork& network)
+void BatchTrainer::makeMinimalProgress(NeuralNetwork& network)
 {
     network.makeSteps(m_nStepsToMake, *this);
     float fCurrentError = network.computeCurrentError();
