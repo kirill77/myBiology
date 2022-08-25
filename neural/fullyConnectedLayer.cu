@@ -55,12 +55,14 @@ __global__ void fclForwardKernel(FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> p)
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
-void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<TensorRef>& inputs)
+void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<TensorRef>& inputs,
+	BatchTrainer &batchTrainer)
 {
-    nvAssert(inputs.size() == 1 && m_outputs.size() == 1); // this layer has one input tensor and one output tensor
+    auto& outputs = batchTrainer.m_pLayerOutputs[m_layerId].m_outputs;
+    nvAssert(inputs.size() == 1 && outputs.size() == 1); // this layer has one input tensor and one output tensor
     Tensor<float>& input = *inputs[0];
     nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
-    Tensor<float>& output = *m_outputs[0];
+    Tensor<float>& output = *outputs[0];
     nvAssert(output.n() == m_outputDims[0] && output.h() == m_outputDims[1] && output.w() == m_outputDims[2] && output.c() == m_outputDims[3]);
 
     dim3 grid(m_outputDims[0], m_outputDims[3], 1);
@@ -174,8 +176,10 @@ __global__ void fclBackwardKernel(FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> bac
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<TensorRef>& inputs,
-    OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs)
+    OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR,
+    float fWeightsLR, BatchTrainer &batchTrainer, std::vector<TensorRef>* pDeltaInputs)
 {
+    auto& outputs = batchTrainer.m_pLayerOutputs[m_layerId].m_outputs;
     nvAssert(inputs.size() == 1);
     Tensor<float>& input = *inputs[0];
     nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
@@ -191,7 +195,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     Tensor<float> output;
     if (outputsDataType == WANTED_OUTPUTS)
     {
-       output = *m_outputs[0];
+       output = *outputs[0];
     }
     nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
     if (deltaInput.n())

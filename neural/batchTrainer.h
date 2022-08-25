@@ -4,12 +4,13 @@
 
 struct LayerOutputs
 {
-    std::vector<TensorRef> m_deltaOutputs;
+    std::vector<TensorRef> m_deltaOutputs; // delta for the outputs we want to get from the previous layer
+    std::vector<TensorRef> m_outputs; // output of this layer
 };
 
 struct BatchTrainer
 {
-    void init(NvU32 nLayers, NvU32 nRates, struct NeuralNetwork& network);
+    void init(std::vector<std::shared_ptr<struct ILayer>> &pLayers, NvU32 nRates, struct NeuralNetwork& network);
     void makeMinimalProgress(NeuralNetwork& network);
 
     NvU32 notifyNewError(float fError, bool& bShouldRedo)

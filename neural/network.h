@@ -13,25 +13,33 @@ enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FC
 
 struct ILayer
 {
-    virtual void forward(std::vector<TensorRef>& inputs) = 0;
+    virtual void forward(std::vector<TensorRef>& inputs, BatchTrainer& batchTrainer) = 0;
 
     enum OUTPUTS_DATA_TYPE { WANTED_OUTPUTS, DELTA_OUTPUTS };
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
+        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR,
+        float fWeightsLR, BatchTrainer& batchTrainer,
+        std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
-    void allocateDeltaOutputs(BatchTrainer &batchTrainer, NvU32 layerIndex)
+    void allocateBatchData(BatchTrainer &batchTrainer)
     {
-        NvU32 nOutputs = (NvU32)m_outputs.size();
-        std::vector<TensorRef>& deltaOutputs = batchTrainer.m_pLayerOutputs[layerIndex].m_deltaOutputs;
-        deltaOutputs.resize(nOutputs);
-        for (NvU32 uOutput = 0; uOutput < nOutputs; ++uOutput)
+        auto &batchData = batchTrainer.m_pLayerOutputs[m_layerId];
+
+        std::vector<TensorRef>& deltaOutputs = batchData.m_deltaOutputs;
+        deltaOutputs.resize(1);
+        if (deltaOutputs[0] == nullptr)
         {
-            if (deltaOutputs[uOutput] == nullptr)
-            {
-                deltaOutputs[uOutput] = std::make_shared<Tensor<float>>();
-            }
-            deltaOutputs[uOutput]->init(m_outputs[uOutput]->getDims());
+            deltaOutputs[0] = std::make_shared<Tensor<float>>();
         }
+        deltaOutputs[0]->init(m_outputDims);
+
+        std::vector<TensorRef>& outputs = batchData.m_outputs;
+        outputs.resize(1);
+        if (outputs[0] == nullptr)
+        {
+            outputs[0] = std::make_shared<Tensor<float>>();
+        }
+        outputs[0]->init(m_outputDims);
     }
     void saveCurrentStateToBackup()
     {
@@ -46,11 +54,10 @@ struct ILayer
         m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
     }
 
-    std::vector<TensorRef> m_outputs;
     Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup, m_beforeActivation;
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
 
-    static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType);
+    static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType, NvU32 layerId);
 
     virtual void serialize(ISerializer& s)
     {
@@ -59,14 +66,15 @@ struct ILayer
         m_weightsBackup.serialize("m_weightsBackup", s);
         m_biasesBackup.serialize("m_biasesBackup", s);
         m_beforeActivation.serialize("m_beforeActivation", s);
-        
-        s.serializeArrayOfSharedPtrs("m_outputs", m_outputs);
     }
 
+    const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
+
 protected:
-    ILayer(LAYER_TYPE type) : m_type(type)
+    ILayer(LAYER_TYPE type, NvU32 layerId) : m_type(type), m_layerId(layerId)
     {
     }
+    std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -85,9 +93,10 @@ struct FullyConnectedLayer : public ILayer
         nvAssert(false);
         return LAYER_TYPE_UNKNOWN;
     }
-    FullyConnectedLayer() : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2))
+    FullyConnectedLayer(NvU32 layerId) : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2),
+        layerId)
     { }
-    void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
+    void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims, BatchTrainer &batchTrainer)
     {
         // upper half of neurons uses different activation function 
         m_inputDims = inputDims;
@@ -111,9 +120,6 @@ struct FullyConnectedLayer : public ILayer
 
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
-        TensorRef output = std::make_shared<Tensor<float>>();
-        output->init(outputDims);
-        m_outputs.push_back(output);
 
         {
             std::array<unsigned, 4> dimsTmp = outputDims;
@@ -124,9 +130,11 @@ struct FullyConnectedLayer : public ILayer
             m_beforeActivation.init(dimsTmp);
         }
     }
-    virtual void forward(std::vector<TensorRef>& inputs) override;
+    virtual void forward(std::vector<TensorRef>& inputs, BatchTrainer &batchTrainer) override;
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR, float fWeightsLR, std::vector<TensorRef>* pDeltaInputs = nullptr) override;
+        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR,
+        float fWeightsLR, BatchTrainer &batchTrainer,
+        std::vector<TensorRef>* pDeltaInputs = nullptr) override;
 
     virtual void serialize(ISerializer& s) override
     {
@@ -135,9 +143,6 @@ struct FullyConnectedLayer : public ILayer
         s.serializeSimpleType("m_inputDims", m_inputDims);
         s.serializeSimpleType("m_outputDims", m_outputDims);
     }
-
-private:
-    std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
 };
 
 struct NeuralNetwork
@@ -154,23 +159,18 @@ struct NeuralNetwork
 
         if (m_pLayers.size() == 0)
         {
-            createLayers_impl(m_pLayers);
+            createLayers_impl(m_pLayers, batchTrainer);
         }
-
-        batchTrainer.init((NvU32)m_pLayers.size(), (NvU32)m_pLayers.size(), *this);
         nvAssert(m_pLayers.size() != 0);
-        // allocate delta outputs
-        for (NvU32 uLayer = 0; uLayer < m_pLayers.size() - 1; ++uLayer)
-        {
-            m_pLayers[uLayer]->allocateDeltaOutputs(batchTrainer, uLayer);
-        }
+
+        batchTrainer.init(m_pLayers, (NvU32)m_pLayers.size(), *this);
     }
     virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer)
     {
         for (NvU32 u = 0; u < nStepsToMake; ++u)
         {
             backwardPass(batchTrainer);
-            forwardPass();
+            forwardPass(batchTrainer);
         }
     }
 
@@ -199,7 +199,7 @@ protected:
                 }
                 if (m_pLayers[uLayer] == nullptr)
                 {
-                    m_pLayers[uLayer] = ILayer::createLayer(layerType);
+                    m_pLayers[uLayer] = ILayer::createLayer(layerType, uLayer);
                 }
                 char sBuffer[16];
                 sprintf_s(sBuffer, "[%d]", uLayer);
@@ -213,14 +213,15 @@ private:
     std::vector<TensorRef> m_inputs, m_wantedOutputs;
     double m_fFilteredLearningRate = 0;
 
-    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers) = 0;
+    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers,
+        BatchTrainer& batchTrainer) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
     L2Computer m_l2Computer;
 
 public:
-    float computeCurrentError()
+    float computeCurrentError(BatchTrainer &batchTrainer)
     {
-        const std::vector<TensorRef>& outputs = (*m_pLayers.rbegin())->m_outputs;
+        const std::vector<TensorRef>& outputs = batchTrainer.m_pLayerOutputs.rbegin()->m_outputs;
         nvAssert(outputs.size() == m_wantedOutputs.size());
         for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
         {
@@ -250,7 +251,8 @@ public:
         NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
         while (uLayer < m_pLayers.size())
         {
-            std::vector<TensorRef>& _inputs = (uLayer == 0) ? m_inputs : m_pLayers[uLayer - 1]->m_outputs;
+            std::vector<TensorRef>& _inputs = (uLayer == 0) ?
+                m_inputs : batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs;
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.m_pLayerOutputs[uLayer - 1].m_deltaOutputs;
@@ -259,21 +261,25 @@ public:
             m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
             if (uLayer == m_pLayers.size() - 1)
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, m_wantedOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
+                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, m_wantedOutputs,
+                    fBiasesLR, fWeightsLR, batchTrainer, pDeltaInputs);
             }
             else
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS, batchTrainer.m_pLayerOutputs[uLayer].m_deltaOutputs, fBiasesLR, fWeightsLR, pDeltaInputs);
+                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS,
+                    batchTrainer.m_pLayerOutputs[uLayer].m_deltaOutputs, fBiasesLR, fWeightsLR,
+                    batchTrainer, pDeltaInputs);
             }
             --uLayer;
         }
     }
-    void forwardPass()
+    void forwardPass(BatchTrainer &batchTrainer)
     {
-        m_pLayers[0]->forward(m_inputs);
+        m_pLayers[0]->forward(m_inputs, batchTrainer);
         for (NvU32 uLayer = 1; uLayer < m_pLayers.size(); ++uLayer)
         {
-            m_pLayers[uLayer]->forward(m_pLayers[uLayer - 1]->m_outputs);
+            m_pLayers[uLayer]->forward(batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs,
+                batchTrainer);
         }
     }
 };

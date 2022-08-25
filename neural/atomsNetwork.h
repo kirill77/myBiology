@@ -99,7 +99,7 @@ struct AtomsNetwork : public NeuralNetwork
     bool hasEnoughData() const { return !m_bSimStepStarted && getNStoredSimSteps() >= 1000; }
 
 private:
-    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers) override
+    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>>& pLayers, BatchTrainer &batchTrainer) override
     {
         nvAssert(pLayers.size() == 0);
 
@@ -112,15 +112,15 @@ private:
         std::array<unsigned, 4> prevOutputDims = m_inputs[0]->getDims();
         for (NvU32 u = 0; u < outputDims.size(); ++u )
         {
-            auto pLayer = std::make_shared<InternalLayerType>();
-            pLayer->init(prevOutputDims, outputDims[u]);
+            auto pLayer = std::make_shared<InternalLayerType>(u);
+            pLayer->init(prevOutputDims, outputDims[u], batchTrainer);
             pLayers.push_back(pLayer);
             prevOutputDims = outputDims[u];
         }
         using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        auto pLayer = std::make_shared<OutputLayerType>();
+        auto pLayer = std::make_shared<OutputLayerType>((NvU32)outputDims.size());
         std::array<unsigned, 4> wantedOutputDims = m_wantedOutputs[0]->getDims();
-        pLayer->init(prevOutputDims, wantedOutputDims);
+        pLayer->init(prevOutputDims, wantedOutputDims, batchTrainer);
         pLayers.push_back(pLayer);
         return true;
     }
