@@ -21,7 +21,7 @@ struct ILayer
         float fWeightsLR, BatchTrainer& batchTrainer,
         std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
-    void allocateBatchData(BatchTrainer &batchTrainer)
+    virtual void allocateBatchData(BatchTrainer& batchTrainer)
     {
         auto &batchData = batchTrainer.m_pLayerOutputs[m_layerId];
 
@@ -54,7 +54,7 @@ struct ILayer
         m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
     }
 
-    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup, m_beforeActivation;
+    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup;
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
 
     static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType, NvU32 layerId);
@@ -65,7 +65,6 @@ struct ILayer
         m_biases.serialize("m_biases", s);
         m_weightsBackup.serialize("m_weightsBackup", s);
         m_biasesBackup.serialize("m_biasesBackup", s);
-        m_beforeActivation.serialize("m_beforeActivation", s);
     }
 
     const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
@@ -96,6 +95,22 @@ struct FullyConnectedLayer : public ILayer
     FullyConnectedLayer(NvU32 layerId) : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2),
         layerId)
     { }
+    virtual void allocateBatchData(BatchTrainer& batchTrainer) override
+    {
+        std::array<unsigned, 4> dimsTmp = m_outputDims;
+        if (T_ACTIVATION1 != T_ACTIVATION2)
+        {
+            dimsTmp[1] /= 2;
+        }
+        std::vector<TensorRef>& ba = batchTrainer.m_pLayerOutputs[m_layerId].m_beforeActivation;
+        ba.resize(1);
+        if (ba[0] == nullptr)
+        {
+            ba[0] = std::make_shared<Tensor<float>>();
+        }
+        ba[0]->init(dimsTmp);
+        __super::allocateBatchData(batchTrainer);
+    }
     void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims, BatchTrainer &batchTrainer)
     {
         // upper half of neurons uses different activation function 
@@ -120,15 +135,6 @@ struct FullyConnectedLayer : public ILayer
 
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
-
-        {
-            std::array<unsigned, 4> dimsTmp = outputDims;
-            if (T_ACTIVATION1 != T_ACTIVATION2)
-            {
-                dimsTmp[1] /= 2;
-            }
-            m_beforeActivation.init(dimsTmp);
-        }
     }
     virtual void forward(std::vector<TensorRef>& inputs, BatchTrainer &batchTrainer) override;
     virtual void backward(std::vector<TensorRef>& inputs,
