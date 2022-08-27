@@ -160,16 +160,13 @@ struct NeuralNetwork
 
     void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs, BatchTrainer& batchTrainer)
     {
-        m_inputs = inputs;
-        m_wantedOutputs = wantedOutputs;
-
         if (m_pLayers.size() == 0)
         {
             createLayers_impl(m_pLayers, batchTrainer);
         }
         nvAssert(m_pLayers.size() != 0);
 
-        batchTrainer.init(m_pLayers, (NvU32)m_pLayers.size(), *this);
+        batchTrainer.init(m_pLayers, (NvU32)m_pLayers.size(), *this, inputs, wantedOutputs);
     }
     virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer)
     {
@@ -216,7 +213,6 @@ protected:
     }
 
 private:
-    std::vector<TensorRef> m_inputs, m_wantedOutputs;
     double m_fFilteredLearningRate = 0;
 
     virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers,
@@ -228,11 +224,11 @@ public:
     float computeCurrentError(BatchTrainer &batchTrainer)
     {
         const std::vector<TensorRef>& outputs = batchTrainer.m_pLayerOutputs.rbegin()->m_outputs;
-        nvAssert(outputs.size() == m_wantedOutputs.size());
+        nvAssert(outputs.size() == batchTrainer.m_wantedOutputs.size());
         for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
         {
             Tensor<float>& output = (*outputs[uTensor]);
-            Tensor<float>& wantedOutput = (*m_wantedOutputs[uTensor]);
+            Tensor<float>& wantedOutput = (*batchTrainer.m_wantedOutputs[uTensor]);
             m_l2Computer.accumulateL2Error(output, wantedOutput, (uTensor == 0) ? L2_MODE_RESET : L2_MODE_ADD);
         }
         float fError = m_l2Computer.getAccumulatedError();
@@ -258,7 +254,7 @@ public:
         while (uLayer < m_pLayers.size())
         {
             std::vector<TensorRef>& _inputs = (uLayer == 0) ?
-                m_inputs : batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs;
+                batchTrainer.m_inputs : batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs;
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.m_pLayerOutputs[uLayer - 1].m_deltaOutputs;
@@ -267,7 +263,7 @@ public:
             m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
             if (uLayer == m_pLayers.size() - 1)
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, m_wantedOutputs,
+                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, batchTrainer.m_wantedOutputs,
                     fBiasesLR, fWeightsLR, batchTrainer, pDeltaInputs);
             }
             else
@@ -281,7 +277,7 @@ public:
     }
     void forwardPass(BatchTrainer &batchTrainer)
     {
-        m_pLayers[0]->forward(m_inputs, batchTrainer);
+        m_pLayers[0]->forward(batchTrainer.m_inputs, batchTrainer);
         for (NvU32 uLayer = 1; uLayer < m_pLayers.size(); ++uLayer)
         {
             m_pLayers[uLayer]->forward(batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs,

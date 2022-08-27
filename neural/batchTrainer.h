@@ -11,7 +11,7 @@ struct LayerOutputs
 
 struct BatchTrainer
 {
-    void init(std::vector<std::shared_ptr<struct ILayer>> &pLayers, NvU32 nRates, struct NeuralNetwork& network);
+    void init(std::vector<std::shared_ptr<struct ILayer>> &pLayers, NvU32 nRates, struct NeuralNetwork& network, std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs);
     void makeMinimalProgress(NeuralNetwork& network);
 
     NvU32 notifyNewError(float fError, bool& bShouldRedo)
@@ -125,6 +125,7 @@ struct BatchTrainer
     }
 
     std::vector<LayerOutputs> m_pLayerOutputs;
+    std::vector<TensorRef> m_inputs, m_wantedOutputs;
 
 private:
     struct RateInfo

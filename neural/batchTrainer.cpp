@@ -1,9 +1,12 @@
 #include "batchTrainer.h"
 #include "network.h"
 
-void BatchTrainer::init(std::vector<std::shared_ptr<ILayer>> &pLayers, NvU32 nRates, NeuralNetwork& network)
+void BatchTrainer::init(std::vector<std::shared_ptr<ILayer>> &pLayers, NvU32 nRates, NeuralNetwork& network, std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs)
 {
     (*this) = BatchTrainer();
+
+    m_inputs = inputs;
+    m_wantedOutputs = wantedOutputs;
 
     m_pLayerOutputs.resize(pLayers.size());
     for (NvU32 u = 0; u < m_pLayerOutputs.size(); ++u)
