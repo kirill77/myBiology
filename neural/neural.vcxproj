@@ -98,6 +98,7 @@
     <ClInclude Include="batchTrainer.h" />
     <ClInclude Include="myCudaMath.h" />
     <ClInclude Include="network.h" />
+    <ClInclude Include="tensor.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="batchTrainer.cpp" />

@@ -22,6 +22,9 @@
     <ClInclude Include="batchTrainer.h">
       <Filter>H</Filter>
     </ClInclude>
+    <ClInclude Include="tensor.h">
+      <Filter>H</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="CPP">
