@@ -25,6 +25,9 @@
     <ClInclude Include="tensor.h">
       <Filter>H</Filter>
     </ClInclude>
+    <ClInclude Include="layer.h">
+      <Filter>H</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="CPP">

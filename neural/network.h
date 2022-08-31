@@ -17,16 +17,8 @@ struct NeuralNetwork
         nvAssert(NeuralTest::isTested());
     }
 
-    void initBatch(std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs, BatchTrainer& batchTrainer)
-    {
-        if (m_pLayers.size() == 0)
-        {
-            createLayers_impl(m_pLayers, batchTrainer);
-        }
-        nvAssert(m_pLayers.size() != 0);
-
-        batchTrainer.init(m_pLayers, (NvU32)m_pLayers.size(), *this, inputs, wantedOutputs);
-    }
+    virtual NvU32 getNBatches() = 0;
+    virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
     virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer)
     {
         for (NvU32 u = 0; u < nStepsToMake; ++u)
@@ -35,14 +27,21 @@ struct NeuralNetwork
             forwardPass(batchTrainer);
         }
     }
-
     double getFilteredLearningRate() const { return m_fFilteredLearningRate; }
+    NvU32 getNLayers() const
+    {
+        nvAssert(m_pLayers.size() > 0); // derived class must have created layers by that point
+        return (NvU32)m_pLayers.size();
+    }
+    ILayer& getLayer(NvU32 u)
+    {
+        return *m_pLayers[u];
+    }
 
 protected:
     virtual void serialize(ISerializer& s)
     {
         s.serializeSimpleType("m_fFilteredLearningRate", m_fFilteredLearningRate);
-        
         {
             std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
             s.serializeArraySize("m_pLayers", m_pLayers);
@@ -74,9 +73,10 @@ protected:
 private:
     double m_fFilteredLearningRate = 0;
 
-    virtual bool createLayers_impl(std::vector<std::shared_ptr<ILayer>> &pLayers,
-        BatchTrainer& batchTrainer) = 0;
+protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
+
+private:
     L2Computer m_l2Computer;
 
 public:

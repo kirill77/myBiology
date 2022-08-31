@@ -11,7 +11,7 @@ struct LayerOutputs
 
 struct BatchTrainer
 {
-    void init(std::vector<std::shared_ptr<struct ILayer>> &pLayers, NvU32 nRates, struct NeuralNetwork& network, std::vector<TensorRef>& inputs, std::vector<TensorRef>& wantedOutputs);
+    void init(struct NeuralNetwork& network, std::vector<TensorRef> inputs, std::vector<TensorRef> wantedOutputs);
     void makeMinimalProgress(NeuralNetwork& network);
 
     NvU32 notifyNewError(float fError, bool& bShouldRedo)
@@ -122,6 +122,11 @@ struct BatchTrainer
         s.serializeSimpleType("m_nStepsToMake", m_nStepsToMake);
         s.serializeSimpleType("m_nStepsMade", m_nStepsMade);
         s.serializeSimpleType("m_uLastAttemptedRate", m_uLastAttemptedRate);
+    }
+    NvU32 n() const
+    {
+        nvAssert(m_inputs[0]->n() > 0);
+        return m_inputs[0]->n();
     }
 
     std::vector<LayerOutputs> m_pLayerOutputs;

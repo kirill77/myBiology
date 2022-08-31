@@ -16,13 +16,16 @@ struct ILayer
     {
         auto &batchData = batchTrainer.m_pLayerOutputs[m_layerId];
 
+        std::array<unsigned, 4> outputDims = m_outputDims;
+        outputDims[0] = batchTrainer.n();
+
         std::vector<TensorRef>& deltaOutputs = batchData.m_deltaOutputs;
         deltaOutputs.resize(1);
         if (deltaOutputs[0] == nullptr)
         {
             deltaOutputs[0] = std::make_shared<Tensor<float>>();
         }
-        deltaOutputs[0]->init(m_outputDims);
+        deltaOutputs[0]->init(outputDims);
 
         std::vector<TensorRef>& outputs = batchData.m_outputs;
         outputs.resize(1);
@@ -30,7 +33,7 @@ struct ILayer
         {
             outputs[0] = std::make_shared<Tensor<float>>();
         }
-        outputs[0]->init(m_outputDims);
+        outputs[0]->init(outputDims);
     }
     void saveCurrentStateToBackup()
     {
@@ -89,6 +92,7 @@ struct FullyConnectedLayer : public ILayer
     virtual void allocateBatchData(BatchTrainer& batchTrainer) override
     {
         std::array<unsigned, 4> dimsTmp = m_outputDims;
+        dimsTmp[0] = batchTrainer.n();
         if (T_ACTIVATION1 != T_ACTIVATION2)
         {
             dimsTmp[1] /= 2;
@@ -102,7 +106,7 @@ struct FullyConnectedLayer : public ILayer
         ba[0]->init(dimsTmp);
         __super::allocateBatchData(batchTrainer);
     }
-    void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims, BatchTrainer &batchTrainer)
+    void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
     {
         // upper half of neurons uses different activation function 
         m_inputDims = inputDims;
@@ -119,10 +123,11 @@ struct FullyConnectedLayer : public ILayer
         }
 
         // fully connected means we have this many weights and biases:
+        RNGUniform rng;
         m_weights.init(1, nSummatorsPerOutputCluster, nValuesPerInputCluster, 1);
-        m_weights.clearWithRandomValues(-1, 1);
+        m_weights.clearWithRandomValues(-1, 1, rng);
         m_biases.init(1, nSummatorsPerOutputCluster, 1, 1);
-        m_biases.clearWithRandomValues(-1, 1);
+        m_biases.clearWithRandomValues(-1, 1, rng);
 
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);

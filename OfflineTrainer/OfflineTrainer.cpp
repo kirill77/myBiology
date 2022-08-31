@@ -36,10 +36,9 @@ int main()
         batchTrainer.serialize(reader);
     }
 
-    auto startTime = std::chrono::high_resolution_clock::now();
-    auto lastSaveTime = startTime;
-
+    network.initBatch(batchTrainer, 0);
     const NvU32 nLoadedTrainSteps = batchTrainer.getNStepsMade();
+
     if (nLoadedTrainSteps == 0)
     {
         // restart csv file from the beginning
@@ -56,6 +55,9 @@ int main()
     {
         printf("continuing previously saved training...\n");
     }
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastSaveTime = startTime;
 
     const NvU32 nStepsPerCycle = 1024;
     for (NvU32 nCycles = 0; ; ++nCycles)

@@ -96,6 +96,7 @@
   <ItemGroup>
     <ClInclude Include="atomsNetwork.h" />
     <ClInclude Include="batchTrainer.h" />
+    <ClInclude Include="layer.h" />
     <ClInclude Include="myCudaMath.h" />
     <ClInclude Include="network.h" />
     <ClInclude Include="tensor.h" />

@@ -58,15 +58,16 @@ template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<TensorRef>& inputs,
 	BatchTrainer &batchTrainer)
 {
+    NvU32 n = batchTrainer.n();
     LayerOutputs& batchData = batchTrainer.m_pLayerOutputs[m_layerId];
     nvAssert(inputs.size() == 1 && batchData.m_outputs.size() == 1); // this layer has one input tensor and one output tensor
     Tensor<float>& input = *inputs[0];
-    nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
+    nvAssert(input.n() == n && m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
     Tensor<float>& output = *batchData.m_outputs[0];
-    nvAssert(output.n() == m_outputDims[0] && output.h() == m_outputDims[1] && output.w() == m_outputDims[2] && output.c() == m_outputDims[3]);
+    nvAssert(output.n() == n && m_outputDims[0] == 1 && output.h() == m_outputDims[1] && output.w() == m_outputDims[2] && output.c() == m_outputDims[3]);
     Tensor<float>& beforeActivation = *batchData.m_beforeActivation[0];
 
-    dim3 grid(m_outputDims[0], m_outputDims[3], 1);
+    dim3 grid(n, m_outputDims[3], 1);
     dim3 block(m_outputDims[2], T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2, 1);
     FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> forward(input, output, m_weights, m_biases, beforeActivation);
 #if RUN_ON_GPU
@@ -180,16 +181,17 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR,
     float fWeightsLR, BatchTrainer &batchTrainer, std::vector<TensorRef>* pDeltaInputs)
 {
+    NvU32 n = batchTrainer.n();
     LayerOutputs& batchData = batchTrainer.m_pLayerOutputs[m_layerId];
     nvAssert(inputs.size() == 1);
     Tensor<float>& input = *inputs[0];
-    nvAssert(input.n() == m_inputDims[0] && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
+    nvAssert(input.n() == n && m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
     Tensor<float> deltaInput;
     if (pDeltaInputs)
     {
         nvAssert(pDeltaInputs->size() == 1);
         deltaInput = *(*pDeltaInputs)[0];
-        nvAssert(deltaInput.n() == m_inputDims[0] && deltaInput.h() == m_inputDims[1] && deltaInput.w() == m_inputDims[2] && deltaInput.c() == m_inputDims[3]);
+        nvAssert(deltaInput.n() == n && deltaInput.h() == m_inputDims[1] && deltaInput.w() == m_inputDims[2] && deltaInput.c() == m_inputDims[3]);
     }
     nvAssert(outputsData.size() == 1);
     Tensor<float> wantedOutput = *outputsData[0];
@@ -198,7 +200,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<Ten
     {
        output = *batchData.m_outputs[0];
     }
-    nvAssert(wantedOutput.n() == m_outputDims[0] && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
+    nvAssert(wantedOutput.n() == n && m_outputDims[0] == 1 && wantedOutput.h() == m_outputDims[1] && wantedOutput.w() == m_outputDims[2] && wantedOutput.c() == m_outputDims[3]);
     if (deltaInput.n())
     {
         deltaInput.clearSubregion(0, (NvU32)deltaInput.size(), EXECUTE_MODE_DEFAULT);

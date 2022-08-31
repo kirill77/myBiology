@@ -55,11 +55,10 @@ struct GPUBuffer
     {
         m_pOrig->resizeInternal(nElems);
     }
-    void clearWithRandomValues(float fMin, float fMax)
+    void clearWithRandomValues(float fMin, float fMax, RNGUniform &rng)
     {
         nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
         m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        RNGUniform rng;
         nvAssert(sizeof(T) == sizeof(float));
         for (NvU32 i = 0; i < size(); ++i)
         {
