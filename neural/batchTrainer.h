@@ -2,7 +2,7 @@
 
 #include "tensor.h"
 
-struct LayerOutputs
+struct LayerData
 {
     std::vector<TensorRef> m_deltaOutputs; // delta for the outputs we want to get from the previous layer
     std::vector<TensorRef> m_beforeActivation; // this is the m_outputs before activation function
@@ -12,8 +12,46 @@ struct LayerOutputs
 struct BatchTrainer
 {
     void init(struct NeuralNetwork& network, std::vector<TensorRef> inputs, std::vector<TensorRef> wantedOutputs);
-    void makeMinimalProgress(NeuralNetwork& network);
+    void makeMinimalProgress(NeuralNetwork& network, struct L2Computer& l2Computer);
 
+    float computeCurrentError(L2Computer& l2Computer);
+
+    float getLearningRate(NvU32 uRate)
+    {
+        return m_pRatesInfo[uRate].m_fValue;
+    }
+    float getLastError() const
+    {
+        return m_fPrevError;
+    }
+    NvU32 getNStepsMade() const
+    {
+        return m_nStepsMade;
+    }
+    void serialize(ISerializer& s)
+    {
+        s.serializeStdArray("m_pRatesInfo", m_pRatesInfo);
+        s.serializeSimpleType("m_isGlobal", m_isGlobal);
+        s.serializeSimpleType("m_bLocalIncreaseOnPrevStep", m_bLocalIncreaseOnPrevStep);
+        s.serializeSimpleType("m_fPrevError", m_fPrevError);
+        s.serializeSimpleType("m_fPrevErrorDecreaseRate", m_fPrevErrorDecreaseRate);
+        s.serializeSimpleType("m_nStepsToMake", m_nStepsToMake);
+        s.serializeSimpleType("m_nStepsMade", m_nStepsMade);
+        s.serializeSimpleType("m_uLastAttemptedRate", m_uLastAttemptedRate);
+    }
+    NvU32 n() const
+    {
+        nvAssert(m_inputs[0]->n() > 0);
+        return m_inputs[0]->n();
+    }
+    LayerData& accessLayerData(NvU32 uLayer)
+    {
+        return m_pLayerOutputs[uLayer];
+    }
+    std::vector<TensorRef> m_inputs, m_wantedOutputs;
+
+private:
+    std::vector<LayerData> m_pLayerOutputs;
     NvU32 notifyNewError(float fError, bool& bShouldRedo)
     {
         bool bLocalIncreaseOnPrevStep = m_bLocalIncreaseOnPrevStep;
@@ -21,7 +59,7 @@ struct BatchTrainer
         m_nStepsMade += m_nStepsToMake;
         bool bErrorHasImproved = (isfinite(fError) && fError < m_fPrevError);
         bShouldRedo = !bErrorHasImproved;
-        for ( ; ; ) // loop until the decision is made
+        for (; ; ) // loop until the decision is made
         {
             if (bErrorHasImproved)
             {
@@ -100,39 +138,6 @@ struct BatchTrainer
         }
         return m_nStepsToMake;
     }
-    float getLearningRate(NvU32 uRate)
-    {
-        return m_pRatesInfo[uRate].m_fValue;
-    }
-    float getLastError() const
-    {
-        return m_fPrevError;
-    }
-    NvU32 getNStepsMade() const
-    {
-        return m_nStepsMade;
-    }
-    void serialize(ISerializer& s)
-    {
-        s.serializeStdArray("m_pRatesInfo", m_pRatesInfo);
-        s.serializeSimpleType("m_isGlobal", m_isGlobal);
-        s.serializeSimpleType("m_bLocalIncreaseOnPrevStep", m_bLocalIncreaseOnPrevStep);
-        s.serializeSimpleType("m_fPrevError", m_fPrevError);
-        s.serializeSimpleType("m_fPrevErrorDecreaseRate", m_fPrevErrorDecreaseRate);
-        s.serializeSimpleType("m_nStepsToMake", m_nStepsToMake);
-        s.serializeSimpleType("m_nStepsMade", m_nStepsMade);
-        s.serializeSimpleType("m_uLastAttemptedRate", m_uLastAttemptedRate);
-    }
-    NvU32 n() const
-    {
-        nvAssert(m_inputs[0]->n() > 0);
-        return m_inputs[0]->n();
-    }
-
-    std::vector<LayerOutputs> m_pLayerOutputs;
-    std::vector<TensorRef> m_inputs, m_wantedOutputs;
-
-private:
     struct RateInfo
     {
         float m_fPrevValue = 1, m_fValue = 1;

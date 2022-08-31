@@ -76,23 +76,7 @@ private:
 protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
-private:
-    L2Computer m_l2Computer;
-
 public:
-    float computeCurrentError(BatchTrainer &batchTrainer)
-    {
-        const std::vector<TensorRef>& outputs = batchTrainer.m_pLayerOutputs.rbegin()->m_outputs;
-        nvAssert(outputs.size() == batchTrainer.m_wantedOutputs.size());
-        for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
-        {
-            Tensor<float>& output = (*outputs[uTensor]);
-            Tensor<float>& wantedOutput = (*batchTrainer.m_wantedOutputs[uTensor]);
-            m_l2Computer.accumulateL2Error(output, wantedOutput, (uTensor == 0) ? L2_MODE_RESET : L2_MODE_ADD);
-        }
-        float fError = m_l2Computer.getAccumulatedError();
-        return fError;
-    }
     void saveCurrentStateToBackup()
     {
         for (NvU32 u = 0; u < m_pLayers.size(); ++u)
@@ -113,10 +97,10 @@ public:
         while (uLayer < m_pLayers.size())
         {
             std::vector<TensorRef>& _inputs = (uLayer == 0) ?
-                batchTrainer.m_inputs : batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs;
+                batchTrainer.m_inputs : batchTrainer.accessLayerData(uLayer - 1).m_outputs;
 
             // we don't need to compute deltaInputs for the layer 0
-            std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.m_pLayerOutputs[uLayer - 1].m_deltaOutputs;
+            std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.accessLayerData(uLayer - 1).m_deltaOutputs;
             float fBiasesLR = batchTrainer.getLearningRate(uLayer);
             float fWeightsLR = batchTrainer.getLearningRate(uLayer);
             m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
@@ -128,7 +112,7 @@ public:
             else
             {
                 m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS,
-                    batchTrainer.m_pLayerOutputs[uLayer].m_deltaOutputs, fBiasesLR, fWeightsLR,
+                    batchTrainer.accessLayerData(uLayer).m_deltaOutputs, fBiasesLR, fWeightsLR,
                     batchTrainer, pDeltaInputs);
             }
             --uLayer;
@@ -139,7 +123,7 @@ public:
         m_pLayers[0]->forward(batchTrainer.m_inputs, batchTrainer);
         for (NvU32 uLayer = 1; uLayer < m_pLayers.size(); ++uLayer)
         {
-            m_pLayers[uLayer]->forward(batchTrainer.m_pLayerOutputs[uLayer - 1].m_outputs,
+            m_pLayers[uLayer]->forward(batchTrainer.accessLayerData(uLayer - 1).m_outputs,
                 batchTrainer);
         }
     }

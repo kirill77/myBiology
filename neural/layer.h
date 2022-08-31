@@ -14,7 +14,7 @@ struct ILayer
 
     virtual void allocateBatchData(BatchTrainer& batchTrainer)
     {
-        auto &batchData = batchTrainer.m_pLayerOutputs[m_layerId];
+        auto &batchData = batchTrainer.accessLayerData(m_layerId);
 
         std::array<unsigned, 4> outputDims = m_outputDims;
         outputDims[0] = batchTrainer.n();
@@ -97,7 +97,7 @@ struct FullyConnectedLayer : public ILayer
         {
             dimsTmp[1] /= 2;
         }
-        std::vector<TensorRef>& ba = batchTrainer.m_pLayerOutputs[m_layerId].m_beforeActivation;
+        std::vector<TensorRef>& ba = batchTrainer.accessLayerData(m_layerId).m_beforeActivation;
         ba.resize(1);
         if (ba[0] == nullptr)
         {

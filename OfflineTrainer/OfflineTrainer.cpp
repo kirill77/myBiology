@@ -8,6 +8,7 @@ int main()
 
     AtomsNetwork<float, 64> network;
     BatchTrainer batchTrainer;
+    L2Computer l2Computer;
 
     // load the latest trained network
     {
@@ -64,7 +65,7 @@ int main()
     {
         for ( ; ; )
         {
-            batchTrainer.makeMinimalProgress(network);
+            batchTrainer.makeMinimalProgress(network, l2Computer);
             if (batchTrainer.getNStepsMade() >= (nCycles + 1) * nStepsPerCycle)
                 break;
         }

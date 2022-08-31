@@ -57,13 +57,14 @@ void NeuralTest::test()
 {
     m_bTested = true;
     TestNetwork network;
+    L2Computer l2Computer;
 
 #if 1
     BatchTrainer batchTrainer;
     network.initBatch(batchTrainer, 0);
     for ( ; ; )
     {
-        batchTrainer.makeMinimalProgress(network);
+        batchTrainer.makeMinimalProgress(network, l2Computer);
         if (batchTrainer.getNStepsMade() >= 10000)
             break;
     }
