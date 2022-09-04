@@ -75,12 +75,14 @@ int main()
         NvU32 nTrainStepsMadeThisSession = batchTrainer.getNStepsMade() - nLoadedTrainSteps;
         double fMSecsPerTrainingStep = (secondsInTraining.count() / nTrainStepsMadeThisSession) * 1000;
 
+        double fAvgLRStats = network.computeAvgLRStats();
+        network.resetAvgLRStats();
         {
             FILE* fp = nullptr;
             fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "a+");
             if (fp != nullptr)
             {
-                fprintf(fp, "%d,  %#.3g,  %#.3g, %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
+                fprintf(fp, "%d,  %#.3g,  %#.3g, %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), fAvgLRStats, fMSecsPerTrainingStep);
                 fclose(fp);
             }
         }
@@ -100,6 +102,6 @@ int main()
             printf("saving completed\n");
         }
 
-        printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), network.getFilteredLearningRate(), fMSecsPerTrainingStep);
+        printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), fAvgLRStats, fMSecsPerTrainingStep);
     }
 }

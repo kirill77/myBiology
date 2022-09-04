@@ -27,7 +27,15 @@ struct NeuralNetwork
             forwardPass(batchTrainer);
         }
     }
-    double getFilteredLearningRate() const { return m_fFilteredLearningRate; }
+    double computeAvgLRStats() const
+    {
+        return (m_nLRSamples == 0) ? 0 : m_fLRSum / m_nLRSamples;
+    }
+    void resetAvgLRStats()
+    {
+        m_fLRSum = 0;
+        m_nLRSamples = 0;
+    }
     NvU32 getNLayers() const
     {
         nvAssert(m_pLayers.size() > 0); // derived class must have created layers by that point
@@ -41,37 +49,35 @@ struct NeuralNetwork
 protected:
     virtual void serialize(ISerializer& s)
     {
-        s.serializeSimpleType("m_fFilteredLearningRate", m_fFilteredLearningRate);
+        std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
+        s.serializeArraySize("m_pLayers", m_pLayers);
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
-            std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
-            s.serializeArraySize("m_pLayers", m_pLayers);
-            for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
+            LAYER_TYPE layerType = LAYER_TYPE_UNKNOWN;
+            if (m_pLayers[uLayer] != nullptr)
             {
-                LAYER_TYPE layerType = LAYER_TYPE_UNKNOWN;
-                if (m_pLayers[uLayer] != nullptr)
-                {
-                    layerType = m_pLayers[uLayer]->m_type;
-                }
-                s.serializeSimpleType("layerType", layerType);
-                if (layerType == LAYER_TYPE_UNKNOWN)
-                {
-                    nvAssert(m_pLayers[uLayer] == nullptr);
-                    continue;
-                }
-                if (m_pLayers[uLayer] == nullptr)
-                {
-                    m_pLayers[uLayer] = ILayer::createLayer(layerType, uLayer);
-                }
-                char sBuffer[16];
-                sprintf_s(sBuffer, "[%d]", uLayer);
-                std::shared_ptr<Indent> pIndent = s.pushIndent(sBuffer);
-                m_pLayers[uLayer]->serialize(s);
+                layerType = m_pLayers[uLayer]->m_type;
             }
+            s.serializeSimpleType("layerType", layerType);
+            if (layerType == LAYER_TYPE_UNKNOWN)
+            {
+                nvAssert(m_pLayers[uLayer] == nullptr);
+                continue;
+            }
+            if (m_pLayers[uLayer] == nullptr)
+            {
+                m_pLayers[uLayer] = ILayer::createLayer(layerType, uLayer);
+            }
+            char sBuffer[16];
+            sprintf_s(sBuffer, "[%d]", uLayer);
+            std::shared_ptr<Indent> pIndent = s.pushIndent(sBuffer);
+            m_pLayers[uLayer]->serialize(s);
         }
     }
 
 private:
-    double m_fFilteredLearningRate = 0;
+    double m_fLRSum = 0;
+    int m_nLRSamples = 0;
 
 protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
@@ -103,7 +109,8 @@ public:
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.accessLayerData(uLayer - 1).m_deltaOutputs;
             float fBiasesLR = batchTrainer.getLearningRate(uLayer);
             float fWeightsLR = batchTrainer.getLearningRate(uLayer);
-            m_fFilteredLearningRate = (fBiasesLR + fWeightsLR) * 0.01 + m_fFilteredLearningRate * 0.99;
+            m_fLRSum += fBiasesLR + fWeightsLR;
+            m_nLRSamples += 2;
             if (uLayer == m_pLayers.size() - 1)
             {
                 m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, batchTrainer.m_wantedOutputs,
