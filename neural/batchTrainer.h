@@ -2,7 +2,7 @@
 
 #include "tensor.h"
 
-struct LayerData
+struct LayerBatchData
 {
     std::vector<TensorRef> m_deltaOutputs; // delta for the outputs we want to get from the previous layer
     std::vector<TensorRef> m_beforeActivation; // this is the m_outputs before activation function
@@ -44,14 +44,19 @@ struct BatchTrainer
         nvAssert(m_inputs[0]->n() > 0);
         return m_inputs[0]->n();
     }
-    LayerData& accessLayerData(NvU32 uLayer)
+    LayerBatchData& accessLayerData(NvU32 uLayer)
     {
         return m_pLayerOutputs[uLayer];
     }
-    std::vector<TensorRef> m_inputs, m_wantedOutputs;
+    std::vector<TensorRef>& getInputs(NvU32 uLayer)
+    {
+        return (uLayer == 0) ? m_inputs : accessLayerData(uLayer - 1).m_outputs;
+    }
+    std::vector<TensorRef> m_wantedOutputs;
 
 private:
-    std::vector<LayerData> m_pLayerOutputs;
+    std::vector<TensorRef> m_inputs;
+    std::vector<LayerBatchData> m_pLayerOutputs;
     NvU32 notifyNewError(float fError, bool& bShouldRedo)
     {
         bool bLocalIncreaseOnPrevStep = m_bLocalIncreaseOnPrevStep;

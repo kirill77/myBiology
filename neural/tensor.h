@@ -10,6 +10,10 @@ template <class T>
 struct Tensor : public GPUBuffer<T>
 {
     Tensor() { }
+    Tensor(const std::array<unsigned, 4>& dims)
+    {
+        init(dims);
+    }
     void init(unsigned n, unsigned h, unsigned w, unsigned c)
     {
         m_dims[0] = n;

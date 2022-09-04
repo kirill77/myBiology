@@ -102,8 +102,7 @@ public:
         NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
         while (uLayer < m_pLayers.size())
         {
-            std::vector<TensorRef>& _inputs = (uLayer == 0) ?
-                batchTrainer.m_inputs : batchTrainer.accessLayerData(uLayer - 1).m_outputs;
+            std::vector<TensorRef>& inputs = batchTrainer.getInputs(uLayer);
 
             // we don't need to compute deltaInputs for the layer 0
             std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.accessLayerData(uLayer - 1).m_deltaOutputs;
@@ -113,12 +112,12 @@ public:
             m_nLRSamples += 2;
             if (uLayer == m_pLayers.size() - 1)
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::WANTED_OUTPUTS, batchTrainer.m_wantedOutputs,
+                m_pLayers[uLayer]->backward(inputs, ILayer::WANTED_OUTPUTS, batchTrainer.m_wantedOutputs,
                     fBiasesLR, fWeightsLR, batchTrainer, pDeltaInputs);
             }
             else
             {
-                m_pLayers[uLayer]->backward(_inputs, ILayer::DELTA_OUTPUTS,
+                m_pLayers[uLayer]->backward(inputs, ILayer::DELTA_OUTPUTS,
                     batchTrainer.accessLayerData(uLayer).m_deltaOutputs, fBiasesLR, fWeightsLR,
                     batchTrainer, pDeltaInputs);
             }
@@ -127,11 +126,9 @@ public:
     }
     void forwardPass(BatchTrainer &batchTrainer)
     {
-        m_pLayers[0]->forward(batchTrainer.m_inputs, batchTrainer);
-        for (NvU32 uLayer = 1; uLayer < m_pLayers.size(); ++uLayer)
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
-            m_pLayers[uLayer]->forward(batchTrainer.accessLayerData(uLayer - 1).m_outputs,
-                batchTrainer);
+            m_pLayers[uLayer]->forward(batchTrainer.getInputs(uLayer),batchTrainer);
         }
     }
 };
