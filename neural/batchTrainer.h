@@ -12,9 +12,9 @@ struct LayerBatchData
 struct BatchTrainer
 {
     void init(struct NeuralNetwork& network, std::vector<TensorRef> inputs, std::vector<TensorRef> wantedOutputs);
-    void makeMinimalProgress(NeuralNetwork& network, struct L2Computer& l2Computer);
+    void makeMinimalProgress(NeuralNetwork& network, struct LossComputer& lossComputer);
 
-    float computeCurrentError(L2Computer& l2Computer);
+    float computeCurrentError(LossComputer& lossComputer);
 
     float getLearningRate(NvU32 uRate)
     {
@@ -55,6 +55,7 @@ struct BatchTrainer
     std::vector<TensorRef> m_wantedOutputs;
 
 private:
+    Tensor<float> m_loss;
     std::vector<TensorRef> m_inputs;
     std::vector<LayerBatchData> m_pLayerOutputs;
     NvU32 notifyNewError(float fError, bool& bShouldRedo)

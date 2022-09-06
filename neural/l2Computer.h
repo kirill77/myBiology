@@ -1,24 +1,17 @@
 #pragma once
 
-#include "gpuBuffer.h"
+#include "tensor.h"
 
-enum L2_MODE { L2_MODE_RESET, L2_MODE_ADD };
-
-struct L2Computer
+struct LossComputer
 {
-    L2Computer() { }
-
-    void accumulateL2Error(GPUBuffer<float>& b1, GPUBuffer<float>& b2, L2_MODE);
-    float getAccumulatedError()
+    LossComputer()
     {
-        float fError = 0;
-        m_pErrors.syncToHost();
-        for (NvU32 u = 0; u < m_pErrors.size(); ++u)
-            fError += m_pErrors[u];
-        nvAssert(fError >= 0 || !isfinite(fError));
-        return fError;
+        // this limits maximam number of blocks we can have
+        m_lossPerBlock.resize(1024 * 2);
     }
 
+    void compute(Tensor<float> &outputs, Tensor<float> &wantedOutputs, Tensor<float> &outLoss, float *pAvgError = nullptr);
+
 private:
-    GPUBuffer<float> m_pErrors;
+    GPUBuffer<float> m_lossPerBlock;
 };

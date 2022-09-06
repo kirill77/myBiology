@@ -106,6 +106,13 @@ struct GPUBuffer
 public:
     void copyFrom(const GPUBuffer<T>& other)
     {
+        if (other.size() == 0)
+        {
+            // if the other tensor is empty - we can just make ourselves
+            // empty instead of storing a pointer to that other tensor
+            nullify();
+            return;
+        }
         m_pOrig = other.m_pOrig;
         ++m_pOrig->m_nRefs;
         m_pDevice = m_pOrig->m_pDevice;
@@ -135,6 +142,14 @@ public:
             m_pHost = p;
         }
         m_nHostElems = (NvU32)nElemsNew;
+    }
+    void nullify()
+    {
+        m_hostRev = 0, m_deviceRev = 0;
+        m_pHost = nullptr,  m_pDevice = nullptr;
+        m_nHostElems = 0, m_nDeviceElems = 0;
+        m_nRefs = 1;
+        m_pOrig = this;
     }
     NvU32 m_hostRev = 0, m_deviceRev = 0;
     T* m_pHost = nullptr, * m_pDevice = nullptr;

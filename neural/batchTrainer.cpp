@@ -7,6 +7,7 @@ void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, s
 
     m_inputs = inputs;
     m_wantedOutputs = wantedOutputs;
+    m_loss.init(m_wantedOutputs[0]->getDims());
 
     m_pLayerOutputs.resize(network.getNLayers());
     for (NvU32 u = 0; u < m_pLayerOutputs.size(); ++u)
@@ -17,15 +18,15 @@ void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, s
     m_isGlobal = true;
     m_pRatesInfo.resize(network.getNLayers());
 }
-void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, L2Computer &l2Computer)
+void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer)
 {
     network.forwardPass(*this);
-    m_fPrevError = computeCurrentError(l2Computer);
+    m_fPrevError = computeCurrentError(lossComputer);
     nvAssert(isfinite(m_fPrevError));
     network.saveCurrentStateToBackup();
 
     network.makeSteps(m_nStepsToMake, *this);
-    float fCurrentError = computeCurrentError(l2Computer);
+    float fCurrentError = computeCurrentError(lossComputer);
     bool bShouldRedo = true;
     notifyNewError(fCurrentError, bShouldRedo);
     if (bShouldRedo)
@@ -40,16 +41,13 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, L2Computer &l2Com
     }
 }
 
-float BatchTrainer::computeCurrentError(struct L2Computer& l2Computer)
+float BatchTrainer::computeCurrentError(LossComputer& lossComputer)
 {
     const std::vector<TensorRef>& outputs = m_pLayerOutputs.rbegin()->m_outputs;
-    nvAssert(outputs.size() == m_wantedOutputs.size());
-    for (NvU32 uTensor = 0; uTensor < outputs.size(); ++uTensor)
-    {
-        Tensor<float>& output = (*outputs[uTensor]);
-        Tensor<float>& wantedOutput = (*m_wantedOutputs[uTensor]);
-        l2Computer.accumulateL2Error(output, wantedOutput, (uTensor == 0) ? L2_MODE_RESET : L2_MODE_ADD);
-    }
-    float fError = l2Computer.getAccumulatedError();
+    nvAssert(outputs.size() == 1 && m_wantedOutputs.size() == 1);
+    Tensor<float>& output = (*outputs[0]);
+    Tensor<float>& wantedOutput = (*m_wantedOutputs[0]);
+    float fError = 0;
+    lossComputer.compute(output, wantedOutput, m_loss, &fError);
     return fError;
 }

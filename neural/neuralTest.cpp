@@ -57,19 +57,19 @@ void NeuralTest::test()
 {
     m_bTested = true;
     TestNetwork network;
-    L2Computer l2Computer;
+    LossComputer lossComputer;
 
 #if 1
     BatchTrainer batchTrainer;
     network.initBatch(batchTrainer, 0);
     for ( ; ; )
     {
-        batchTrainer.makeMinimalProgress(network, l2Computer);
+        batchTrainer.makeMinimalProgress(network, lossComputer);
         if (batchTrainer.getNStepsMade() >= 10000)
             break;
     }
     float fError = batchTrainer.getLastError();
-    m_bTested = m_bTested && fError > 0 && fError < 2.1e-11;
+    m_bTested = m_bTested && fError > 2e-6 && fError < 2.6e-6;
     nvAssert(m_bTested);
 #endif
 }
