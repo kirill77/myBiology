@@ -52,6 +52,17 @@ struct BatchTrainer
     {
         return (uLayer == 0) ? m_inputs : accessLayerData(uLayer - 1).m_outputs;
     }
+    void backwardPass(NeuralNetwork& network, LossComputer& lossComputer);
+    double computeAvgLRStats() const
+    {
+        return (m_nLRSamples == 0) ? 0 : m_fLRSum / m_nLRSamples;
+    }
+    void resetAvgLRStats()
+    {
+        m_fLRSum = 0;
+        m_nLRSamples = 0;
+    }
+
     std::vector<TensorRef> m_wantedOutputs;
     Tensor<float> m_loss;
 
@@ -69,4 +80,6 @@ private:
     bool m_isGlobal = true, m_bLocalIncreaseOnPrevStep = false;
     float m_fPrevError = std::numeric_limits<float>::max(), m_fPrevErrorDecreaseRate = 0;
     NvU32 m_nStepsToMake = 1, m_nStepsMade = 0, m_uLastAttemptedRate = 0;
+    double m_fLRSum = 0;
+    int m_nLRSamples = 0;
 };

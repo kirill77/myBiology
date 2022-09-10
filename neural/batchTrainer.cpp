@@ -27,7 +27,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
 
     for (NvU32 u = 0; u < m_nStepsToMake; ++u)
     {
-        network.backwardPass(*this, lossComputer);
+        backwardPass(network, lossComputer);
         network.forwardPass(*this);
     }
 
@@ -140,3 +140,33 @@ void BatchTrainer::computeLoss(LossComputer& lossComputer, float *pErrorPtr)
     Tensor<float>& wantedOutput = (*m_wantedOutputs[0]);
     lossComputer.compute(output, wantedOutput, m_loss, pErrorPtr);
 }
+void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComputer)
+{
+    NvU32 nLayers = network.getNLayers();
+    NvU32 uLayer = nLayers - 1;
+    while (uLayer < nLayers)
+    {
+        std::vector<TensorRef>& inputs = getInputs(uLayer);
+
+        // we don't need to compute deltaInputs for the layer 0
+        std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &accessLayerData(uLayer - 1).m_deltaOutputs;
+        float fBiasesLR = getLearningRate(uLayer);
+        float fWeightsLR = getLearningRate(uLayer);
+        m_fLRSum += fBiasesLR + fWeightsLR;
+        m_nLRSamples += 2;
+        if (uLayer == nLayers - 1)
+        {
+            computeLoss(lossComputer);
+            network.getLayer(uLayer).backward(inputs, m_loss,
+                fBiasesLR, fWeightsLR, *this, pDeltaInputs);
+        }
+        else
+        {
+            network.getLayer(uLayer).backward(inputs,
+                *accessLayerData(uLayer).m_deltaOutputs[0], fBiasesLR, fWeightsLR,
+                *this, pDeltaInputs);
+        }
+        --uLayer;
+    }
+}
+

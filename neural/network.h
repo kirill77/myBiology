@@ -19,15 +19,6 @@ struct NeuralNetwork
 
     virtual NvU32 getNBatches() = 0;
     virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
-    double computeAvgLRStats() const
-    {
-        return (m_nLRSamples == 0) ? 0 : m_fLRSum / m_nLRSamples;
-    }
-    void resetAvgLRStats()
-    {
-        m_fLRSum = 0;
-        m_nLRSamples = 0;
-    }
     NvU32 getNLayers() const
     {
         nvAssert(m_pLayers.size() > 0); // derived class must have created layers by that point
@@ -67,10 +58,6 @@ protected:
         }
     }
 
-private:
-    double m_fLRSum = 0;
-    int m_nLRSamples = 0;
-
 protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
@@ -87,34 +74,6 @@ public:
         for (NvU32 u = 0; u < m_pLayers.size(); ++u)
         {
             m_pLayers[u]->restoreStateFromBackup();
-        }
-    }
-    void backwardPass(BatchTrainer& batchTrainer, LossComputer &lossComputer)
-    {
-        NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
-        while (uLayer < m_pLayers.size())
-        {
-            std::vector<TensorRef>& inputs = batchTrainer.getInputs(uLayer);
-
-            // we don't need to compute deltaInputs for the layer 0
-            std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &batchTrainer.accessLayerData(uLayer - 1).m_deltaOutputs;
-            float fBiasesLR = batchTrainer.getLearningRate(uLayer);
-            float fWeightsLR = batchTrainer.getLearningRate(uLayer);
-            m_fLRSum += fBiasesLR + fWeightsLR;
-            m_nLRSamples += 2;
-            if (uLayer == m_pLayers.size() - 1)
-            {
-                batchTrainer.computeLoss(lossComputer);
-                m_pLayers[uLayer]->backward(inputs, batchTrainer.m_loss,
-                    fBiasesLR, fWeightsLR, batchTrainer, pDeltaInputs);
-            }
-            else
-            {
-                m_pLayers[uLayer]->backward(inputs,
-                    *batchTrainer.accessLayerData(uLayer).m_deltaOutputs[0], fBiasesLR, fWeightsLR,
-                    batchTrainer, pDeltaInputs);
-            }
-            --uLayer;
         }
     }
     void forwardPass(BatchTrainer &batchTrainer)
