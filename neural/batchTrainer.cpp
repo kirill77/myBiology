@@ -25,7 +25,12 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
     nvAssert(isfinite(m_fPrevError));
     network.saveCurrentStateToBackup();
 
-    network.makeSteps(m_nStepsToMake, *this, lossComputer);
+    for (NvU32 u = 0; u < m_nStepsToMake; ++u)
+    {
+        network.backwardPass(*this, lossComputer);
+        network.forwardPass(*this);
+    }
+
     float fCurrentError = 0;
     computeLoss(lossComputer, &fCurrentError);
     bool bShouldRedo = true;

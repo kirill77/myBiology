@@ -19,14 +19,6 @@ struct NeuralNetwork
 
     virtual NvU32 getNBatches() = 0;
     virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
-    virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer, LossComputer &lossComputer)
-    {
-        for (NvU32 u = 0; u < nStepsToMake; ++u)
-        {
-            backwardPass(batchTrainer, lossComputer);
-            forwardPass(batchTrainer);
-        }
-    }
     double computeAvgLRStats() const
     {
         return (m_nLRSamples == 0) ? 0 : m_fLRSum / m_nLRSamples;
