@@ -293,7 +293,7 @@ private:
         y += 40;
         BatchTrainer& batchTrainer = m_water.accessBatchTrainer();
         sprintf_s(sBuffer, "NN StoredSimSteps: %d, TrainSteps: %d, error: %e", network.getNStoredSimSteps(),
-            batchTrainer.getNStepsMade(), batchTrainer.getLastError());
+            batchTrainer.getLR().getNStepsMade(), batchTrainer.getLR().getLastError());
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);

@@ -65,10 +65,10 @@ void NeuralTest::test()
     for ( ; ; )
     {
         batchTrainer.makeMinimalProgress(network, lossComputer);
-        if (batchTrainer.getNStepsMade() >= 10000)
+        if (batchTrainer.getLR().getNStepsMade() >= 10000)
             break;
     }
-    float fError = batchTrainer.getLastError();
+    float fError = batchTrainer.getLR().getLastError();
     m_bTested = m_bTested && fError > 2e-6 && fError < 2.6e-6;
     nvAssert(m_bTested);
 #endif

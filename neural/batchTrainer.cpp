@@ -15,17 +15,17 @@ void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, s
         network.getLayer(u).allocateBatchData(m_pLayerOutputs[u], n());
     }
 
-    m_isGlobal = true;
-    m_pRatesInfo.resize(network.getNLayers());
+    m_lr.init(network.getNLayers());
 }
 void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer)
 {
     network.forwardPass(*this);
-    computeLoss(lossComputer, &m_fPrevError);
-    nvAssert(isfinite(m_fPrevError));
+    float fError = 0;
+    computeLoss(lossComputer, &fError);
+    m_lr.setInitialError(fError);
     network.saveCurrentStateToBackup();
 
-    for (NvU32 u = 0; u < m_nStepsToMake; ++u)
+    for (NvU32 u = 0; u < m_lr.getNStepsToMake(); ++u)
     {
         backwardPass(network, lossComputer);
         network.forwardPass(*this);
@@ -34,7 +34,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
     float fCurrentError = 0;
     computeLoss(lossComputer, &fCurrentError);
     bool bShouldRedo = true;
-    notifyNewError(fCurrentError, bShouldRedo);
+    m_lr.notifyNewError(fCurrentError, bShouldRedo);
     if (bShouldRedo)
     {
         network.restoreStateFromBackup();
@@ -42,11 +42,10 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
     }
     else
     {
-        m_fPrevError = fCurrentError;
         network.saveCurrentStateToBackup();
     }
 }
-NvU32 BatchTrainer::notifyNewError(float fError, bool& bShouldRedo)
+NvU32 LearningRates::notifyNewError(float fError, bool& bShouldRedo)
 {
     bool bLocalIncreaseOnPrevStep = m_bLocalIncreaseOnPrevStep;
     m_bLocalIncreaseOnPrevStep = false;
@@ -150,8 +149,8 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
 
         // we don't need to compute deltaInputs for the layer 0
         std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &accessLayerData(uLayer - 1).m_deltaOutputs;
-        float fBiasesLR = getLearningRate(uLayer);
-        float fWeightsLR = getLearningRate(uLayer);
+        float fBiasesLR = m_lr.getLearningRate(uLayer);
+        float fWeightsLR = m_lr.getLearningRate(uLayer);
         m_fLRSum += fBiasesLR + fWeightsLR;
         m_nLRSamples += 2;
         if (uLayer == nLayers - 1)

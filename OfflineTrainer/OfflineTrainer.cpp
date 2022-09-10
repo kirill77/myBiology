@@ -38,7 +38,7 @@ int main()
     }
 
     network.initBatch(batchTrainer, 0);
-    const NvU32 nLoadedTrainSteps = batchTrainer.getNStepsMade();
+    const NvU32 nLoadedTrainSteps = batchTrainer.getLR().getNStepsMade();
 
     if (nLoadedTrainSteps == 0)
     {
@@ -66,13 +66,13 @@ int main()
         for ( ; ; )
         {
             batchTrainer.makeMinimalProgress(network, lossComputer);
-            if (batchTrainer.getNStepsMade() >= (nCycles + 1) * nStepsPerCycle)
+            if (batchTrainer.getLR().getNStepsMade() >= (nCycles + 1) * nStepsPerCycle)
                 break;
         }
 
         auto curTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> secondsInTraining = curTime - startTime;
-        NvU32 nTrainStepsMadeThisSession = batchTrainer.getNStepsMade() - nLoadedTrainSteps;
+        NvU32 nTrainStepsMadeThisSession = batchTrainer.getLR().getNStepsMade() - nLoadedTrainSteps;
         double fMSecsPerTrainingStep = (secondsInTraining.count() / nTrainStepsMadeThisSession) * 1000;
 
         double fAvgLRStats = batchTrainer.computeAvgLRStats();
@@ -82,7 +82,9 @@ int main()
             fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "a+");
             if (fp != nullptr)
             {
-                fprintf(fp, "%d,  %#.3g,  %#.3g, %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), fAvgLRStats, fMSecsPerTrainingStep);
+                fprintf(fp, "%d,  %#.3g,  %#.3g, %.2f\n",
+                    batchTrainer.getLR().getNStepsMade(), batchTrainer.getLR().getLastError(),
+                    fAvgLRStats, fMSecsPerTrainingStep);
                 fclose(fp);
             }
         }
@@ -90,9 +92,10 @@ int main()
         std::chrono::duration<double> secondsSinceLastSave = curTime - lastSaveTime;
         if (secondsSinceLastSave.count() > 60)
         {
-            printf("saving nSteps=%d...\n", batchTrainer.getNStepsMade());
+            printf("saving nSteps=%d...\n", batchTrainer.getLR().getNStepsMade());
             wchar_t sBuffer[32];
-            swprintf_s(sBuffer, L"c:\\atomNets\\trained_%d.bin", batchTrainer.getNStepsMade());
+            swprintf_s(sBuffer, L"c:\\atomNets\\trained_%d.bin",
+                batchTrainer.getLR().getNStepsMade());
             {
             MyWriter writer(sBuffer);
             network.serialize(writer);
@@ -102,6 +105,7 @@ int main()
             printf("saving completed\n");
         }
 
-        printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n", batchTrainer.getNStepsMade(), batchTrainer.getLastError(), fAvgLRStats, fMSecsPerTrainingStep);
+        printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n",
+            batchTrainer.getLR().getNStepsMade(), batchTrainer.getLR().getLastError(), fAvgLRStats, fMSecsPerTrainingStep);
     }
 }
