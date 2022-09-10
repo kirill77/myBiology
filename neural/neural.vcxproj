@@ -97,12 +97,14 @@
     <ClInclude Include="atomsNetwork.h" />
     <ClInclude Include="batchTrainer.h" />
     <ClInclude Include="layer.h" />
+    <ClInclude Include="learningRates.h" />
     <ClInclude Include="myCudaMath.h" />
     <ClInclude Include="network.h" />
     <ClInclude Include="tensor.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="batchTrainer.cpp" />
+    <ClCompile Include="learningRates.cpp" />
     <ClCompile Include="neural.cpp" />
     <ClCompile Include="neuralTest.cpp" />
   </ItemGroup>
