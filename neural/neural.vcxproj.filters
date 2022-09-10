@@ -56,5 +56,8 @@
     <ClCompile Include="learningRates.cpp">
       <Filter>CPP</Filter>
     </ClCompile>
+    <ClCompile Include="layer.cpp">
+      <Filter>CPP</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

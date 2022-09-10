@@ -7,7 +7,6 @@
 #include "l2Computer.h"
 #include "activations.h"
 #include "neuralTest.h"
-#include "batchTrainer.h"
 #include "layer.h"
 
 struct NeuralNetwork
@@ -18,7 +17,8 @@ struct NeuralNetwork
     }
 
     virtual NvU32 getNBatches() = 0;
-    virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
+    virtual void initBatch(struct BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
+
     NvU32 getNLayers() const
     {
         nvAssert(m_pLayers.size() > 0); // derived class must have created layers by that point
@@ -27,6 +27,20 @@ struct NeuralNetwork
     ILayer& getLayer(NvU32 u)
     {
         return *m_pLayers[u];
+    }
+    void saveCurrentStateToBackup()
+    {
+        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
+        {
+            m_pLayers[u]->saveCurrentStateToBackup();
+        }
+    }
+    void restoreStateFromBackup()
+    {
+        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
+        {
+            m_pLayers[u]->restoreStateFromBackup();
+        }
     }
 
 protected:
@@ -58,22 +72,5 @@ protected:
         }
     }
 
-protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
-
-public:
-    void saveCurrentStateToBackup()
-    {
-        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
-        {
-            m_pLayers[u]->saveCurrentStateToBackup();
-        }
-    }
-    void restoreStateFromBackup()
-    {
-        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
-        {
-            m_pLayers[u]->restoreStateFromBackup();
-        }
-    }
 };

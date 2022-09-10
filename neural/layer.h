@@ -1,5 +1,8 @@
 #pragma once
 
+#include "activations.h"
+#include "batchTrainer.h"
+
 enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FCL_MIRRORED };
 
 struct ILayer
@@ -11,27 +14,7 @@ struct ILayer
         float fWeightsLR, LayerBatchData& data, NvU32 n,
         std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
-    virtual void allocateBatchData(LayerBatchData& batchData, NvU32 n)
-    {
-        std::array<unsigned, 4> outputDims = m_outputDims;
-        outputDims[0] = n;
-
-        std::vector<TensorRef>& deltaOutputs = batchData.m_deltaOutputs;
-        deltaOutputs.resize(1);
-        if (deltaOutputs[0] == nullptr)
-        {
-            deltaOutputs[0] = std::make_shared<Tensor<float>>();
-        }
-        deltaOutputs[0]->init(outputDims);
-
-        std::vector<TensorRef>& outputs = batchData.m_outputs;
-        outputs.resize(1);
-        if (outputs[0] == nullptr)
-        {
-            outputs[0] = std::make_shared<Tensor<float>>();
-        }
-        outputs[0]->init(outputDims);
-    }
+    virtual void allocateBatchData(LayerBatchData& batchData, NvU32 n);
     void saveCurrentStateToBackup()
     {
         m_weightsBackup.resize(m_weights.size());

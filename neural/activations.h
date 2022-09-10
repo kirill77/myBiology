@@ -1,5 +1,7 @@
 #pragma once
 
+#include "basics/mybasics.h"
+
 // MRELU = RELU mirrored around the origin
 enum ACTIVATION { ACTIVATION_RELU, ACTIVATION_MRELU, ACTIVATION_IDENTITY };
 

@@ -104,6 +104,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="batchTrainer.cpp" />
+    <ClCompile Include="layer.cpp" />
     <ClCompile Include="learningRates.cpp" />
     <ClCompile Include="neural.cpp" />
     <ClCompile Include="neuralTest.cpp" />
