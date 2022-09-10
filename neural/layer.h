@@ -1,7 +1,7 @@
 #pragma once
 
 #include "activations.h"
-#include "batchTrainer.h"
+#include "layerBatchData.h"
 
 enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FCL_MIRRORED };
 

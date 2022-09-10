@@ -1,5 +1,6 @@
 #include "batchTrainer.h"
 #include "network.h"
+#include "l2Computer.h"
 
 void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, std::vector<TensorRef> wantedOutputs)
 {

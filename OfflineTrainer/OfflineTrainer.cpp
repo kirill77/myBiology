@@ -1,6 +1,7 @@
 #include <neural/atomsNetwork.h>
 #include <chrono>
 #include <filesystem>
+#include "neural/l2Computer.h"
 
 int main()
 {

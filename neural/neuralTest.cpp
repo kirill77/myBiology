@@ -1,6 +1,8 @@
 #include"basics/mybasics.h"
 #include "neuralTest.h"
 #include "network.h"
+#include "l2Computer.h"
+#include "batchTrainer.h"
 
 bool NeuralTest::m_bTested = false;
 

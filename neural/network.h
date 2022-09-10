@@ -1,11 +1,7 @@
 #pragma once
 
 #include <array>
-#include "basics/vectors.h"
 #include "basics/serializer.h"
-#include "tensor.h"
-#include "l2Computer.h"
-#include "activations.h"
 #include "neuralTest.h"
 #include "layer.h"
 

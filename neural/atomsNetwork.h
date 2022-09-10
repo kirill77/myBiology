@@ -5,6 +5,7 @@
 #include "../basics/vectors.h"
 #include "../basics/simContext.h"
 #include "network.h"
+#include "batchTrainer.h"
 
 struct ConstantAtomData
 {
