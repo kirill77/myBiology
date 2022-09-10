@@ -56,10 +56,8 @@ __global__ void fclForwardKernel(FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> p)
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(std::vector<TensorRef>& inputs,
-	BatchTrainer &batchTrainer)
+    LayerBatchData &batchData, NvU32 n)
 {
-    NvU32 n = batchTrainer.n();
-    LayerBatchData& batchData = batchTrainer.accessLayerData(m_layerId);
     nvAssert(inputs.size() == 1 && batchData.m_outputs.size() == 1); // this layer has one input tensor and one output tensor
     Tensor<float>& input = *inputs[0];
     nvAssert(input.n() == n && m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
@@ -170,10 +168,8 @@ __global__ void fclBackwardKernel(FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> bac
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(std::vector<TensorRef>& inputs,
     Tensor<float>& loss, float fBiasesLR,
-    float fWeightsLR, BatchTrainer &batchTrainer, std::vector<TensorRef>* pDeltaInputs)
+    float fWeightsLR, LayerBatchData& batchData, NvU32 n, std::vector<TensorRef>* pDeltaInputs)
 {
-    NvU32 n = batchTrainer.n();
-    LayerBatchData& batchData = batchTrainer.accessLayerData(m_layerId);
     nvAssert(inputs.size() == 1);
     Tensor<float>& input = *inputs[0];
     nvAssert(input.n() == n && m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);

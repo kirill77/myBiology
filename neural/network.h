@@ -76,11 +76,4 @@ public:
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    void forwardPass(BatchTrainer &batchTrainer)
-    {
-        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
-        {
-            m_pLayers[uLayer]->forward(batchTrainer.getInputs(uLayer),batchTrainer);
-        }
-    }
 };
