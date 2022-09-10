@@ -12,7 +12,7 @@ void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, s
     m_pLayerOutputs.resize(network.getNLayers());
     for (NvU32 u = 0; u < m_pLayerOutputs.size(); ++u)
     {
-        network.getLayer(u).allocateBatchData(*this);
+        network.getLayer(u).allocateBatchData(m_pLayerOutputs[u], n());
     }
 
     m_isGlobal = true;

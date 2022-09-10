@@ -11,12 +11,10 @@ struct ILayer
         float fWeightsLR, BatchTrainer& batchTrainer,
         std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
-    virtual void allocateBatchData(BatchTrainer& batchTrainer)
+    virtual void allocateBatchData(LayerBatchData& batchData, NvU32 n)
     {
-        auto &batchData = batchTrainer.accessLayerData(m_layerId);
-
         std::array<unsigned, 4> outputDims = m_outputDims;
-        outputDims[0] = batchTrainer.n();
+        outputDims[0] = n;
 
         std::vector<TensorRef>& deltaOutputs = batchData.m_deltaOutputs;
         deltaOutputs.resize(1);
@@ -88,22 +86,22 @@ struct FullyConnectedLayer : public ILayer
     FullyConnectedLayer(NvU32 layerId) : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2),
         layerId)
     { }
-    virtual void allocateBatchData(BatchTrainer& batchTrainer) override
+    virtual void allocateBatchData(LayerBatchData& batchData, NvU32 n) override
     {
         std::array<unsigned, 4> dimsTmp = m_outputDims;
-        dimsTmp[0] = batchTrainer.n();
+        dimsTmp[0] = n;
         if (T_ACTIVATION1 != T_ACTIVATION2)
         {
             dimsTmp[1] /= 2;
         }
-        std::vector<TensorRef>& ba = batchTrainer.accessLayerData(m_layerId).m_beforeActivation;
+        std::vector<TensorRef>& ba = batchData.m_beforeActivation;
         ba.resize(1);
         if (ba[0] == nullptr)
         {
             ba[0] = std::make_shared<Tensor<float>>();
         }
         ba[0]->init(dimsTmp);
-        __super::allocateBatchData(batchTrainer);
+        __super::allocateBatchData(batchData, n);
     }
     void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
     {
