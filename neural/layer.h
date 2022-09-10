@@ -6,9 +6,8 @@ struct ILayer
 {
     virtual void forward(std::vector<TensorRef>& inputs, BatchTrainer& batchTrainer) = 0;
 
-    enum OUTPUTS_DATA_TYPE { WANTED_OUTPUTS, DELTA_OUTPUTS };
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR,
+        Tensor<float> &loss, float fBiasesLR,
         float fWeightsLR, BatchTrainer& batchTrainer,
         std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
@@ -134,7 +133,7 @@ struct FullyConnectedLayer : public ILayer
     }
     virtual void forward(std::vector<TensorRef>& inputs, BatchTrainer &batchTrainer) override;
     virtual void backward(std::vector<TensorRef>& inputs,
-        OUTPUTS_DATA_TYPE outputsDataType, std::vector<TensorRef>& outputsData, float fBiasesLR,
+        Tensor<float>& loss, float fBiasesLR,
         float fWeightsLR, BatchTrainer &batchTrainer,
         std::vector<TensorRef>* pDeltaInputs = nullptr) override;
 

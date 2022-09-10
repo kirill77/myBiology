@@ -19,11 +19,11 @@ struct NeuralNetwork
 
     virtual NvU32 getNBatches() = 0;
     virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
-    virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer)
+    virtual void makeSteps(NvU32 nStepsToMake, BatchTrainer& batchTrainer, LossComputer &lossComputer)
     {
         for (NvU32 u = 0; u < nStepsToMake; ++u)
         {
-            backwardPass(batchTrainer);
+            backwardPass(batchTrainer, lossComputer);
             forwardPass(batchTrainer);
         }
     }
@@ -97,7 +97,7 @@ public:
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    void backwardPass(BatchTrainer& batchTrainer)
+    void backwardPass(BatchTrainer& batchTrainer, LossComputer &lossComputer)
     {
         NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
         while (uLayer < m_pLayers.size())
@@ -112,13 +112,14 @@ public:
             m_nLRSamples += 2;
             if (uLayer == m_pLayers.size() - 1)
             {
-                m_pLayers[uLayer]->backward(inputs, ILayer::WANTED_OUTPUTS, batchTrainer.m_wantedOutputs,
+                batchTrainer.computeLoss(lossComputer);
+                m_pLayers[uLayer]->backward(inputs, batchTrainer.m_loss,
                     fBiasesLR, fWeightsLR, batchTrainer, pDeltaInputs);
             }
             else
             {
-                m_pLayers[uLayer]->backward(inputs, ILayer::DELTA_OUTPUTS,
-                    batchTrainer.accessLayerData(uLayer).m_deltaOutputs, fBiasesLR, fWeightsLR,
+                m_pLayers[uLayer]->backward(inputs,
+                    *batchTrainer.accessLayerData(uLayer).m_deltaOutputs[0], fBiasesLR, fWeightsLR,
                     batchTrainer, pDeltaInputs);
             }
             --uLayer;

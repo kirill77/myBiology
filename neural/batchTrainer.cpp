@@ -21,12 +21,13 @@ void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, s
 void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer)
 {
     network.forwardPass(*this);
-    m_fPrevError = computeCurrentError(lossComputer);
+    computeLoss(lossComputer, &m_fPrevError);
     nvAssert(isfinite(m_fPrevError));
     network.saveCurrentStateToBackup();
 
-    network.makeSteps(m_nStepsToMake, *this);
-    float fCurrentError = computeCurrentError(lossComputer);
+    network.makeSteps(m_nStepsToMake, *this, lossComputer);
+    float fCurrentError = 0;
+    computeLoss(lossComputer, &fCurrentError);
     bool bShouldRedo = true;
     notifyNewError(fCurrentError, bShouldRedo);
     if (bShouldRedo)
@@ -41,13 +42,11 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
     }
 }
 
-float BatchTrainer::computeCurrentError(LossComputer& lossComputer)
+void BatchTrainer::computeLoss(LossComputer& lossComputer, float *pErrorPtr)
 {
     const std::vector<TensorRef>& outputs = m_pLayerOutputs.rbegin()->m_outputs;
     nvAssert(outputs.size() == 1 && m_wantedOutputs.size() == 1);
     Tensor<float>& output = (*outputs[0]);
     Tensor<float>& wantedOutput = (*m_wantedOutputs[0]);
-    float fError = 0;
-    lossComputer.compute(output, wantedOutput, m_loss, &fError);
-    return fError;
+    lossComputer.compute(output, wantedOutput, m_loss, pErrorPtr);
 }
