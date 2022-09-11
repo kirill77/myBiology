@@ -76,13 +76,15 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
         if (uLayer == nLayers - 1)
         {
             updateLoss(lossComputer);
-            network.getLayer(uLayer).backward(pInput, m_loss,
+            network.getLayer(uLayer).backward(pInput,
+                m_loss,
                 fBiasesLR, fWeightsLR, m_pLayerOutputs[uLayer], n(), pDeltaInputs);
         }
         else
         {
             network.getLayer(uLayer).backward(pInput,
-                *m_pLayerOutputs[uLayer].m_deltaOutputs[0], fBiasesLR, fWeightsLR,
+                *m_pLayerOutputs[uLayer].m_deltaOutputs[0],
+                fBiasesLR, fWeightsLR,
                 m_pLayerOutputs[uLayer], n(), pDeltaInputs);
         }
         --uLayer;

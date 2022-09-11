@@ -39,7 +39,6 @@ struct NeuralNetwork
         }
     }
 
-protected:
     virtual void serialize(ISerializer& s)
     {
         std::shared_ptr<Indent> pIndent = s.pushIndent("ArrayOfNeuralLayers");
@@ -68,5 +67,6 @@ protected:
         }
     }
 
+protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 };

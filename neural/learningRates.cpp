@@ -1,6 +1,6 @@
 #include "learningRates.h"
 
-NvU32 LearningRates::notifyNewError(float fError, bool& bShouldRedo)
+void LearningRates::notifyNewError(float fError, bool& bShouldRedo)
 {
     bool bLocalIncreaseOnPrevStep = m_bLocalIncreaseOnPrevStep;
     m_bLocalIncreaseOnPrevStep = false;
@@ -84,5 +84,4 @@ NvU32 LearningRates::notifyNewError(float fError, bool& bShouldRedo)
     {
         m_fPrevError = fError;
     }
-    return m_nStepsToMake;
 }
