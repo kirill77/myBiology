@@ -15,6 +15,7 @@ struct ILayer
         std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
 
     virtual void allocateBatchData(LayerBatchData& batchData, NvU32 n);
+
     void saveCurrentStateToBackup()
     {
         m_weightsBackup.resize(m_weights.size());
@@ -28,8 +29,8 @@ struct ILayer
         m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
     }
 
-    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup;
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
+    const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
 
     static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType, NvU32 layerId);
 
@@ -41,13 +42,12 @@ struct ILayer
         m_biasesBackup.serialize("m_biasesBackup", s);
     }
 
-    const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
-
 protected:
     ILayer(LAYER_TYPE type, NvU32 layerId) : m_type(type), m_layerId(layerId)
     {
     }
     std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
+    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>

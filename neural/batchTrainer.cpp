@@ -22,7 +22,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
 {
     forwardPass(network);
     float fError = 0;
-    computeLoss(lossComputer, &fError);
+    updateLoss(lossComputer, &fError);
     m_lr.setInitialError(fError);
     network.saveCurrentStateToBackup();
 
@@ -33,7 +33,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
     }
 
     float fCurrentError = 0;
-    computeLoss(lossComputer, &fCurrentError);
+    updateLoss(lossComputer, &fCurrentError);
     bool bShouldRedo = true;
     m_lr.notifyNewError(fCurrentError, bShouldRedo);
     if (bShouldRedo)
@@ -46,7 +46,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
         network.saveCurrentStateToBackup();
     }
 }
-void BatchTrainer::computeLoss(LossComputer& lossComputer, float *pErrorPtr)
+void BatchTrainer::updateLoss(LossComputer& lossComputer, float *pErrorPtr)
 {
     const std::vector<TensorRef>& outputs = m_pLayerOutputs.rbegin()->m_outputs;
     nvAssert(outputs.size() == 1 && m_wantedOutputs.size() == 1);
@@ -77,7 +77,7 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
         m_nLRSamples += 2;
         if (uLayer == nLayers - 1)
         {
-            computeLoss(lossComputer);
+            updateLoss(lossComputer);
             network.getLayer(uLayer).backward(inputs, m_loss,
                 fBiasesLR, fWeightsLR, m_pLayerOutputs[uLayer], n(), pDeltaInputs);
         }
