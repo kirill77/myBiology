@@ -13,11 +13,6 @@ void ILayer::allocateBatchData(LayerBatchData& batchData, NvU32 n)
     }
     deltaOutputs[0]->init(outputDims);
 
-    std::vector<TensorRef>& outputs = batchData.m_outputs;
-    outputs.resize(1);
-    if (outputs[0] == nullptr)
-    {
-        outputs[0] = std::make_shared<Tensor<float>>();
-    }
-    outputs[0]->init(outputDims);
+    batchData.m_pOutput = std::make_shared<Tensor<float>>();
+    batchData.m_pOutput->init(outputDims);
 }

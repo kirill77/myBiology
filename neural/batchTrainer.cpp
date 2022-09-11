@@ -2,13 +2,13 @@
 #include "network.h"
 #include "l2Computer.h"
 
-void BatchTrainer::init(NeuralNetwork &network, std::vector<TensorRef> inputs, std::vector<TensorRef> wantedOutputs)
+void BatchTrainer::init(NeuralNetwork &network, TensorRef pInput, TensorRef pWantedOutput)
 {
     (*this) = BatchTrainer();
 
-    m_inputs = inputs;
-    m_wantedOutputs = wantedOutputs;
-    m_loss.init(m_wantedOutputs[0]->getDims());
+    m_pInput = pInput;
+    m_pWantedOutput = pWantedOutput;
+    m_loss.init(m_pWantedOutput->getDims());
 
     m_pLayerOutputs.resize(network.getNLayers());
     for (NvU32 u = 0; u < m_pLayerOutputs.size(); ++u)
@@ -48,10 +48,8 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
 }
 void BatchTrainer::updateLoss(LossComputer& lossComputer, float *pErrorPtr)
 {
-    const std::vector<TensorRef>& outputs = m_pLayerOutputs.rbegin()->m_outputs;
-    nvAssert(outputs.size() == 1 && m_wantedOutputs.size() == 1);
-    Tensor<float>& output = (*outputs[0]);
-    Tensor<float>& wantedOutput = (*m_wantedOutputs[0]);
+    Tensor<float>& output = (*m_pLayerOutputs.rbegin()->m_pOutput);
+    Tensor<float>& wantedOutput = (*m_pWantedOutput);
     lossComputer.compute(output, wantedOutput, m_loss, pErrorPtr);
 }
 void BatchTrainer::forwardPass(NeuralNetwork& network)
@@ -67,7 +65,7 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
     NvU32 uLayer = nLayers - 1;
     while (uLayer < nLayers)
     {
-        std::vector<TensorRef>& inputs = getInputs(uLayer);
+        TensorRef pInput = getInputs(uLayer);
 
         // we don't need to compute deltaInputs for the layer 0
         std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayerOutputs[uLayer - 1].m_deltaOutputs;
@@ -78,12 +76,12 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
         if (uLayer == nLayers - 1)
         {
             updateLoss(lossComputer);
-            network.getLayer(uLayer).backward(inputs, m_loss,
+            network.getLayer(uLayer).backward(pInput, m_loss,
                 fBiasesLR, fWeightsLR, m_pLayerOutputs[uLayer], n(), pDeltaInputs);
         }
         else
         {
-            network.getLayer(uLayer).backward(inputs,
+            network.getLayer(uLayer).backward(pInput,
                 *m_pLayerOutputs[uLayer].m_deltaOutputs[0], fBiasesLR, fWeightsLR,
                 m_pLayerOutputs[uLayer], n(), pDeltaInputs);
         }

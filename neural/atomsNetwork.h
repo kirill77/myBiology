@@ -124,15 +124,15 @@ struct AtomsNetwork : public NeuralNetwork
             if (!bRepetitionsFound) break;
         }
 
-        std::vector<TensorRef> inputs, wantedOutputs;
+        TensorRef pInput, pWantedOutput;
         // initialize inputs and outputs to zero (force CPU because we have to fill those buffers on CPU)
         std::array<unsigned, 4> inputDims = { (NvU32)clusterIndices.size(), s_nInputValuesPerCluster, 1, 1 };
-        inputs.push_back(std::make_shared<Tensor<float>>(inputDims));
-        Tensor<float>& input = *inputs[0];
+        pInput = std::make_shared<Tensor<float>>(inputDims);
+        Tensor<float>& input = *pInput;
         input.clearSubregion(0, (NvU32)input.size(), EXECUTE_MODE_FORCE_CPU);
         std::array<unsigned, 4> outputDims = { (NvU32)clusterIndices.size(), s_nOutputValuesPerCluster, 1, 1 };
-        wantedOutputs.push_back(std::make_shared<Tensor<float>>(outputDims));
-        Tensor<float>& wantedOutput = *wantedOutputs[0];
+        pWantedOutput = std::make_shared<Tensor<float>>(outputDims);
+        Tensor<float>& wantedOutput = *pWantedOutput;
         wantedOutput.init(outputDims);
         wantedOutput.clearSubregion(0, (NvU32)wantedOutput.size(), EXECUTE_MODE_FORCE_CPU);
 
@@ -142,7 +142,7 @@ struct AtomsNetwork : public NeuralNetwork
             copyClusterToInputTensor(input, u, clusterIndices[u]);
             copyClusterToOutputTensor(wantedOutput, u, clusterIndices[u]);
         }
-        batchTrainer.init(*this, inputs, wantedOutputs);
+        batchTrainer.init(*this, pInput, pWantedOutput);
     }
 private:
     // **** offsets we use to create input tensor

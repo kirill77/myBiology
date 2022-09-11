@@ -7,9 +7,9 @@ enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FC
 
 struct ILayer
 {
-    virtual void forward(std::vector<TensorRef>& inputs, LayerBatchData& data, NvU32 n) = 0;
+    virtual void forward(TensorRef pInput, LayerBatchData& data, NvU32 n) = 0;
 
-    virtual void backward(std::vector<TensorRef>& inputs,
+    virtual void backward(TensorRef pInput,
         Tensor<float> &loss, float fBiasesLR,
         float fWeightsLR, LayerBatchData& data, NvU32 n,
         std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
@@ -112,8 +112,8 @@ struct FullyConnectedLayer : public ILayer
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
     }
-    virtual void forward(std::vector<TensorRef>& inputs, LayerBatchData &data, NvU32 n) override;
-    virtual void backward(std::vector<TensorRef>& inputs,
+    virtual void forward(TensorRef pInput, LayerBatchData &data, NvU32 n) override;
+    virtual void backward(TensorRef pInput,
         Tensor<float>& loss, float fBiasesLR,
         float fWeightsLR, LayerBatchData &data, NvU32 n,
         std::vector<TensorRef>* pDeltaInputs = nullptr) override;
