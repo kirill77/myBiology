@@ -27,7 +27,7 @@ struct TestNetwork : public NeuralNetwork
         TensorRef pWantedOutput = std::make_shared<Tensor<float>>();
         pWantedOutput->init(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3]);
         pWantedOutput->clearWithRandomValues(0, 1, rng);
-        batchTrainer.init(*this, pInput, pWantedOutput);
+        batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
     }
 private:
     std::array<unsigned, 4> s_inputDims = { 1, 4, 4, 1 };

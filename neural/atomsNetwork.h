@@ -142,7 +142,7 @@ struct AtomsNetwork : public NeuralNetwork
             copyClusterToInputTensor(input, u, clusterIndices[u]);
             copyClusterToOutputTensor(wantedOutput, u, clusterIndices[u]);
         }
-        batchTrainer.init(*this, pInput, pWantedOutput);
+        batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
     }
 private:
     // **** offsets we use to create input tensor
