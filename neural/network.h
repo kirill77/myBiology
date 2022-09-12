@@ -24,6 +24,13 @@ struct NeuralNetwork
     {
         return *m_pLayers[u];
     }
+    void forwardPass(NvU32 uBatch, TensorRef pInput)
+    {
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
+        {
+            pInput = m_pLayers[uLayer]->forward(uBatch, pInput);
+        }
+    }
     void saveCurrentStateToBackup()
     {
         for (NvU32 u = 0; u < m_pLayers.size(); ++u)

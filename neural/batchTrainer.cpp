@@ -50,10 +50,7 @@ void BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer
 }
 void BatchTrainer::forwardPass(NeuralNetwork& network)
 {
-    for (NvU32 uLayer = 0; uLayer < network.getNLayers(); ++uLayer)
-    {
-        network.getLayer(uLayer).forward(getInputs(network, uLayer), get(network, uLayer), n());
-    }
+    network.forwardPass(m_uBatch, m_pInput);
 }
 void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComputer)
 {

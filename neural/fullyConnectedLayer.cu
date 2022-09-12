@@ -55,11 +55,12 @@ __global__ void fclForwardKernel(FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> p)
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
-void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(TensorRef pInput,
-    LayerBatchData &batchData, NvU32 n)
+TensorRef FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(NvU32 uBatch, TensorRef pInput)
 {
+    auto& batchData = m_batches[uBatch];
     Tensor<float>& input = *pInput;
-    nvAssert(input.n() == n && m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
+    NvU32 n = input.n();
+    nvAssert(m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
     Tensor<float>& output = *batchData.m_pOutput;
     nvAssert(output.n() == n && m_outputDims[0] == 1 && output.h() == m_outputDims[1] && output.w() == m_outputDims[2] && output.c() == m_outputDims[3]);
     Tensor<float>& beforeActivation = *batchData.m_beforeActivation[0];
@@ -84,6 +85,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(TensorRef pInput
         }
     }
 #endif
+    return batchData.m_pOutput;
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
