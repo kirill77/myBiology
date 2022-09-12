@@ -1,6 +1,5 @@
 #include "batchTrainer.h"
 #include "network.h"
-#include "l2Computer.h"
 
 void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput)
 {
@@ -47,11 +46,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
 }
 void BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
 {
-    auto& bd = get(network, network.getNLayers() - 1);
-    Tensor<float>& output = (*bd.m_pOutput);
-    Tensor<float>& wantedOutput = (*m_pWantedOutput);
-    Tensor<float>& loss = (*bd.m_pLoss);
-    lossComputer.compute(output, wantedOutput, loss, pErrorPtr);
+    network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, pErrorPtr);
 }
 void BatchTrainer::forwardPass(NeuralNetwork& network)
 {

@@ -29,6 +29,8 @@ struct ILayer
         m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
     }
 
+    void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, struct LossComputer& lossComputer, float* pErrorPtr);
+
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
     const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
 

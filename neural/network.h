@@ -38,6 +38,10 @@ struct NeuralNetwork
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
+    void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer& lossComputer, float* pErrorPtr)
+    {
+        (*m_pLayers.rbegin())->updateLoss(uBatch, wantedOutput, lossComputer, pErrorPtr);
+    }
 
     virtual void serialize(ISerializer& s)
     {

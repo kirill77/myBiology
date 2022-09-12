@@ -1,4 +1,5 @@
 #include "layer.h"
+#include "l2Computer.h"
 
 void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n)
 {
@@ -14,4 +15,11 @@ void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n)
 
     batchData.m_pOutput = std::make_shared<Tensor<float>>();
     batchData.m_pOutput->init(outputDims);
+}
+void ILayer::updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer& lossComputer, float* pErrorPtr)
+{
+    auto& bd = m_batches[uBatch];
+    Tensor<float>& output = (*bd.m_pOutput);
+    Tensor<float>& loss = (*bd.m_pLoss);
+    lossComputer.compute(output, wantedOutput, loss, pErrorPtr);
 }
