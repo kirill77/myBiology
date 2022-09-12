@@ -76,8 +76,8 @@ int main()
         NvU32 nTrainStepsMadeThisSession = batchTrainer.getLR().getNStepsMade() - nLoadedTrainSteps;
         double fMSecsPerTrainingStep = (secondsInTraining.count() / nTrainStepsMadeThisSession) * 1000;
 
-        double fAvgLRStats = batchTrainer.computeAvgLRStats();
-        batchTrainer.resetAvgLRStats();
+        double fAvgLRStats = network.computeAvgLRStats();
+        network.resetAvgLRStats();
         {
             FILE* fp = nullptr;
             fopen_s(&fp, "C:\\atomNets\\offlineTrainer.csv", "a+");

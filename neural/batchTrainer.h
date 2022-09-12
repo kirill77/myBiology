@@ -18,15 +18,6 @@ struct BatchTrainer
     void forwardPass(NeuralNetwork& network);
     void backwardPass(NeuralNetwork& network, LossComputer& lossComputer);
 
-    double computeAvgLRStats() const
-    {
-        return (m_nLRSamples == 0) ? 0 : m_fLRSum / m_nLRSamples;
-    }
-    void resetAvgLRStats()
-    {
-        m_fLRSum = 0;
-        m_nLRSamples = 0;
-    }
     const LearningRates& getLR() const
     {
         return m_lr;
@@ -50,7 +41,4 @@ private:
     TensorRef m_pInput, m_pWantedOutput, m_pLoss;
 
     LearningRates m_lr;
-
-    double m_fLRSum = 0;
-    int m_nLRSamples = 0;
 };

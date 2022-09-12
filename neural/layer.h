@@ -9,10 +9,9 @@ struct ILayer
 {
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) = 0;
 
-    virtual void backward(TensorRef pInput,
-        Tensor<float> &loss, float fBiasesLR,
-        float fWeightsLR, LayerBatchData& data, NvU32 n,
-        Tensor<float> *pPrevLoss = nullptr) = 0;
+    // returns computed loss for the previous layer
+    virtual Tensor<float> *backward(NvU32 uBatch, Tensor<float> &loss,
+        float fBiasesLR, float fWeightsLR) = 0;
 
     virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer);
 
@@ -120,10 +119,9 @@ struct FullyConnectedLayer : public ILayer
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
     }
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) override;
-    virtual void backward(TensorRef pInput,
-        Tensor<float>& loss, float fBiasesLR,
-        float fWeightsLR, LayerBatchData &data, NvU32 n,
-        Tensor<float> *pPrevLoss = nullptr) override;
+    // returns computed loss for the previous layer
+    virtual Tensor<float> *backward(NvU32 uBatch, Tensor<float>& loss,
+        float fBiasesLR, float fWeightsLR) override;
 
     virtual void serialize(ISerializer& s) override
     {

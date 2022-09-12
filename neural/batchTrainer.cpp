@@ -57,25 +57,8 @@ void BatchTrainer::forwardPass(NeuralNetwork& network)
 }
 void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComputer)
 {
-    NvU32 nLayers = network.getNLayers();
-    NvU32 uLayer = nLayers - 1;
     TensorRef pLoss = updateLoss(network, lossComputer);
-    while (uLayer < nLayers)
-    {
-        TensorRef pInput = getInputs(network, uLayer);
-
-        TensorRef pPrevLoss = get(network, uLayer).m_pPrevLoss;
-        float fBiasesLR = m_lr.getLearningRate(uLayer);
-        float fWeightsLR = m_lr.getLearningRate(uLayer);
-        m_fLRSum += fBiasesLR + fWeightsLR;
-        m_nLRSamples += 2;
-        network.getLayer(uLayer).backward(pInput,
-            *pLoss,
-            fBiasesLR, fWeightsLR,
-            get(network, uLayer), n(), pPrevLoss.get());
-        pLoss = pPrevLoss;
-        --uLayer;
-    }
+    network.backwardPass(m_uBatch, pLoss.get(), m_lr);
 }
 LayerBatchData& BatchTrainer::get(NeuralNetwork& network, NvU32 uLayer)
 {

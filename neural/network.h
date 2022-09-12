@@ -31,6 +31,7 @@ struct NeuralNetwork
             pInput = m_pLayers[uLayer]->forward(uBatch, pInput);
         }
     }
+    void backwardPass(NvU32 uBatch, Tensor<float>* pLoss, struct LearningRates& lr);
     void saveCurrentStateToBackup()
     {
         for (NvU32 u = 0; u < m_pLayers.size(); ++u)
@@ -78,7 +79,21 @@ struct NeuralNetwork
             m_pLayers[uLayer]->serialize(s);
         }
     }
+    double computeAvgLRStats() const
+    {
+        return (m_nLRSamples == 0) ? 0 : m_fLRSum / m_nLRSamples;
+    }
+    void resetAvgLRStats()
+    {
+        m_fLRSum = 0;
+        m_nLRSamples = 0;
+    }
+
 
 protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
+
+private:
+    double m_fLRSum = 0;
+    int m_nLRSamples = 0;
 };
