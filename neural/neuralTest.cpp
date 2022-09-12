@@ -37,12 +37,12 @@ private:
     bool createTestLayers(std::vector<std::shared_ptr<ILayer>>& pLayers)
     {
         using Layer0Type = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
-        std::shared_ptr<Layer0Type> pLayer0 = std::make_shared<Layer0Type>(0);
+        std::shared_ptr<Layer0Type> pLayer0 = std::make_shared<Layer0Type>();
         pLayer0->init(s_inputDims, s_layer0OutputDims);
         pLayers.push_back(pLayer0);
 
         using Layer1Type = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        std::shared_ptr<Layer1Type> pLayer1 = std::make_shared<Layer1Type>(1);
+        std::shared_ptr<Layer1Type> pLayer1 = std::make_shared<Layer1Type>();
         pLayer1->init(s_layer0OutputDims, s_layer1OutputDims);
         pLayers.push_back(pLayer1);
         return true;

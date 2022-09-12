@@ -71,7 +71,7 @@ struct NeuralNetwork
             }
             if (m_pLayers[uLayer] == nullptr)
             {
-                m_pLayers[uLayer] = ILayer::createLayer(layerType, uLayer);
+                m_pLayers[uLayer] = ILayer::createLayer(layerType);
             }
             char sBuffer[16];
             sprintf_s(sBuffer, "[%d]", uLayer);

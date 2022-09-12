@@ -7,8 +7,8 @@ enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FC
 
 struct ILayer
 {
+    // returns input for the next layer
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) = 0;
-
     // returns computed loss for the previous layer
     virtual Tensor<float> *backward(NvU32 uBatch, Tensor<float> &loss,
         float fBiasesLR, float fWeightsLR) = 0;
@@ -32,9 +32,8 @@ struct ILayer
         struct LossComputer& lossComputer, Tensor<float> &outLoss, float* pErrorPtr);
 
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
-    const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
 
-    static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType, NvU32 layerId);
+    static std::shared_ptr<ILayer> createLayer(LAYER_TYPE layerType);
 
     virtual void serialize(ISerializer& s)
     {
@@ -46,7 +45,7 @@ struct ILayer
 
 protected:
     std::vector<LayerBatchData> m_batches;
-    ILayer(LAYER_TYPE type, NvU32 layerId) : m_type(type), m_layerId(layerId)
+    ILayer(LAYER_TYPE type) : m_type(type)
     {
     }
     std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
@@ -69,8 +68,7 @@ struct FullyConnectedLayer : public ILayer
         nvAssert(false);
         return LAYER_TYPE_UNKNOWN;
     }
-    FullyConnectedLayer(NvU32 layerId) : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2),
-        layerId)
+    FullyConnectedLayer() : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2))
     { }
     virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer) override
     {
@@ -117,6 +115,8 @@ struct FullyConnectedLayer : public ILayer
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
     }
+
+    // returns input for the next layer
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) override;
     // returns computed loss for the previous layer
     virtual Tensor<float> *backward(NvU32 uBatch, Tensor<float>& loss,

@@ -189,13 +189,13 @@ private:
         std::array<unsigned, 4> prevOutputDims = { 1, s_nInputValuesPerCluster, 1, 1 };
         for (NvU32 u = 0; u < outputDims.size(); ++u)
         {
-            auto pLayer = std::make_shared<InternalLayerType>(u);
+            auto pLayer = std::make_shared<InternalLayerType>();
             pLayer->init(prevOutputDims, outputDims[u]);
             pLayers.push_back(pLayer);
             prevOutputDims = outputDims[u];
         }
         using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
-        auto pLayer = std::make_shared<OutputLayerType>((NvU32)outputDims.size());
+        auto pLayer = std::make_shared<OutputLayerType>();
         std::array<unsigned, 4> wantedOutputDims = { 1, s_nOutputValuesPerCluster, 1, 1 };
         pLayer->init(prevOutputDims, wantedOutputDims);
         pLayers.push_back(pLayer);
