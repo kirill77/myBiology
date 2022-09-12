@@ -14,7 +14,7 @@ struct ILayer
         float fWeightsLR, LayerBatchData& data, NvU32 n,
         Tensor<float> *pPrevLoss = nullptr) = 0;
 
-    virtual void allocateBatchData(NvU32 uBatch, NvU32 n);
+    virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer);
 
     void saveCurrentStateToBackup()
     {
@@ -29,7 +29,8 @@ struct ILayer
         m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
     }
 
-    void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, struct LossComputer& lossComputer, float* pErrorPtr);
+    void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
+        struct LossComputer& lossComputer, Tensor<float> &outLoss, float* pErrorPtr);
 
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
     const NvU32 m_layerId = 0; // layer index unique for inside the same neural network
@@ -73,9 +74,9 @@ struct FullyConnectedLayer : public ILayer
     FullyConnectedLayer(NvU32 layerId) : ILayer(computeFCLType(T_ACTIVATION1, T_ACTIVATION2),
         layerId)
     { }
-    virtual void allocateBatchData(NvU32 uBatch, NvU32 n) override
+    virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer) override
     {
-        __super::allocateBatchData(uBatch, n);
+        __super::allocateBatchData(uBatch, n, isFirstLayer);
         auto& batchData = m_batches[uBatch];
 
         std::array<unsigned, 4> dimsTmp = m_outputDims;

@@ -178,7 +178,7 @@ void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(TensorRef pInpu
     {
         prevLoss = *pPrevLoss;
         nvAssert(prevLoss.n() == n && prevLoss.h() == m_inputDims[1] &&
-	 prevLoss.w() == m_inputDims[2] && prevLoss.c() == m_inputDims[3]);
+            prevLoss.w() == m_inputDims[2] && prevLoss.c() == m_inputDims[3]);
     }
     nvAssert(loss.n() == n && m_outputDims[0] == 1 && loss.h() == m_outputDims[1] && loss.w() == m_outputDims[2] && loss.c() == m_outputDims[3]);
     if (prevLoss.n())

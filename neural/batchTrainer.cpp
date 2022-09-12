@@ -8,10 +8,12 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
 
     m_pInput = pInput;
     m_pWantedOutput = pWantedOutput;
+    m_pLoss = std::make_shared<Tensor<float>>();
+    m_pLoss->init(m_pWantedOutput->getDims());
 
     for (NvU32 uLayer = 0; uLayer < network.getNLayers(); ++uLayer)
     {
-        network.getLayer(uLayer).allocateBatchData(uBatch, n());
+        network.getLayer(uLayer).allocateBatchData(uBatch, n(), uLayer == 0);
     }
 
     m_lr.init(network.getNLayers());
@@ -44,9 +46,10 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
         network.saveCurrentStateToBackup();
     }
 }
-void BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
+TensorRef BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
 {
-    network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, pErrorPtr);
+    network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, *m_pLoss, pErrorPtr);
+    return m_pLoss;
 }
 void BatchTrainer::forwardPass(NeuralNetwork& network)
 {
@@ -56,20 +59,21 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
 {
     NvU32 nLayers = network.getNLayers();
     NvU32 uLayer = nLayers - 1;
-    updateLoss(network, lossComputer);
+    TensorRef pLoss = updateLoss(network, lossComputer);
     while (uLayer < nLayers)
     {
         TensorRef pInput = getInputs(network, uLayer);
 
-        Tensor<float> *pPrevLoss = (uLayer == 0) ? nullptr : get(network, uLayer - 1).m_pLoss.get();
+        TensorRef pPrevLoss = get(network, uLayer).m_pPrevLoss;
         float fBiasesLR = m_lr.getLearningRate(uLayer);
         float fWeightsLR = m_lr.getLearningRate(uLayer);
         m_fLRSum += fBiasesLR + fWeightsLR;
         m_nLRSamples += 2;
         network.getLayer(uLayer).backward(pInput,
-            *get(network, uLayer).m_pLoss,
+            *pLoss,
             fBiasesLR, fWeightsLR,
-            get(network, uLayer), n(), pPrevLoss);
+            get(network, uLayer), n(), pPrevLoss.get());
+        pLoss = pPrevLoss;
         --uLayer;
     }
 }

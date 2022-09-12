@@ -45,9 +45,9 @@ private:
     {
         return (uLayer == 0) ? m_pInput : get(network, uLayer - 1).m_pOutput;
     }
-    void updateLoss(NeuralNetwork& network, LossComputer& lossComputer, float* pError = nullptr);
+    TensorRef updateLoss(NeuralNetwork& network, LossComputer& lossComputer, float* pError = nullptr);
 
-    TensorRef m_pInput, m_pWantedOutput;
+    TensorRef m_pInput, m_pWantedOutput, m_pLoss;
 
     LearningRates m_lr;
 
