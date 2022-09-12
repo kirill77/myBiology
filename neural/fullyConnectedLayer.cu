@@ -57,7 +57,8 @@ __global__ void fclForwardKernel(FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> p)
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 TensorRef FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(NvU32 uBatch, TensorRef pInput)
 {
-    auto& batchData = m_batches[uBatch];
+    LayerBatchData& batchData = m_batches[uBatch];
+    batchData.m_pPrevInput = pInput;
     Tensor<float>& input = *pInput;
     NvU32 n = input.n();
     nvAssert(m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);

@@ -43,7 +43,7 @@ private:
     }
     TensorRef getInputs(NeuralNetwork &network, NvU32 uLayer)
     {
-        return (uLayer == 0) ? m_pInput : get(network, uLayer - 1).m_pOutput;
+        return get(network, uLayer).m_pPrevInput;
     }
     TensorRef updateLoss(NeuralNetwork& network, LossComputer& lossComputer, float* pError = nullptr);
 
