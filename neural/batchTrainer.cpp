@@ -12,10 +12,7 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
 
     for (NvU32 uLayer = 0; uLayer < network.getNLayers(); ++uLayer)
     {
-        auto& batches = network.getLayer(uLayer).m_batches;
-        if (m_uBatch >= batches.size())
-            batches.resize(m_uBatch + 1);
-        network.getLayer(uLayer).allocateBatchData(get(network, uLayer), n());
+        network.getLayer(uLayer).allocateBatchData(uBatch, n());
     }
 
     m_lr.init(network.getNLayers());

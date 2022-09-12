@@ -1,7 +1,11 @@
 #include "layer.h"
 
-void ILayer::allocateBatchData(LayerBatchData& batchData, NvU32 n)
+void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n)
 {
+    if (uBatch >= m_batches.size())
+        m_batches.resize(uBatch + 1);
+    auto& batchData = m_batches[uBatch];
+
     std::array<unsigned, 4> outputDims = m_outputDims;
     outputDims[0] = n;
 
