@@ -13,7 +13,7 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
 
     for (NvU32 uLayer = 0; uLayer < network.getNLayers(); ++uLayer)
     {
-        network.getLayer(uLayer).allocateBatchData(uBatch, n(), uLayer == 0);
+        network.getLayer(uLayer).allocateBatchData(uBatch, m_pInput->n(), uLayer == 0);
     }
 
     m_lr.init(network.getNLayers());
@@ -59,8 +59,4 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
 {
     TensorRef pLoss = updateLoss(network, lossComputer);
     network.backwardPass(m_uBatch, pLoss.get(), m_lr);
-}
-LayerBatchData& BatchTrainer::get(NeuralNetwork& network, NvU32 uLayer)
-{
-    return network.getLayer(uLayer).m_batches[m_uBatch];
 }

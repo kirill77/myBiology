@@ -44,9 +44,8 @@ struct ILayer
         m_biasesBackup.serialize("m_biasesBackup", s);
     }
 
-    std::vector<LayerBatchData> m_batches;
-
 protected:
+    std::vector<LayerBatchData> m_batches;
     ILayer(LAYER_TYPE type, NvU32 layerId) : m_type(type), m_layerId(layerId)
     {
     }
