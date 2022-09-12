@@ -45,7 +45,6 @@ private:
     void updateLoss(LossComputer& lossComputer, float* pError = nullptr);
 
     TensorRef m_pInput, m_pWantedOutput;
-    Tensor<float> m_loss;
     std::vector<LayerBatchData> m_pLayerOutputs;
 
     LearningRates m_lr;

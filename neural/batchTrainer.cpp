@@ -8,7 +8,6 @@ void BatchTrainer::init(NeuralNetwork &network, TensorRef pInput, TensorRef pWan
 
     m_pInput = pInput;
     m_pWantedOutput = pWantedOutput;
-    m_loss.init(m_pWantedOutput->getDims());
 
     m_pLayerOutputs.resize(network.getNLayers());
     for (NvU32 u = 0; u < m_pLayerOutputs.size(); ++u)
@@ -50,7 +49,8 @@ void BatchTrainer::updateLoss(LossComputer& lossComputer, float *pErrorPtr)
 {
     Tensor<float>& output = (*m_pLayerOutputs.rbegin()->m_pOutput);
     Tensor<float>& wantedOutput = (*m_pWantedOutput);
-    lossComputer.compute(output, wantedOutput, m_loss, pErrorPtr);
+    Tensor<float>& loss = (*m_pLayerOutputs.rbegin()->m_pLoss);
+    lossComputer.compute(output, wantedOutput, loss, pErrorPtr);
 }
 void BatchTrainer::forwardPass(NeuralNetwork& network)
 {
@@ -63,30 +63,20 @@ void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComput
 {
     NvU32 nLayers = network.getNLayers();
     NvU32 uLayer = nLayers - 1;
+    updateLoss(lossComputer);
     while (uLayer < nLayers)
     {
         TensorRef pInput = getInputs(uLayer);
 
-        // we don't need to compute deltaInputs for the layer 0
-        std::vector<TensorRef>* pDeltaInputs = (uLayer == 0) ? nullptr : &m_pLayerOutputs[uLayer - 1].m_deltaOutputs;
+        Tensor<float> *pPrevLoss = (uLayer == 0) ? nullptr : m_pLayerOutputs[uLayer - 1].m_pLoss.get();
         float fBiasesLR = m_lr.getLearningRate(uLayer);
         float fWeightsLR = m_lr.getLearningRate(uLayer);
         m_fLRSum += fBiasesLR + fWeightsLR;
         m_nLRSamples += 2;
-        if (uLayer == nLayers - 1)
-        {
-            updateLoss(lossComputer);
-            network.getLayer(uLayer).backward(pInput,
-                m_loss,
-                fBiasesLR, fWeightsLR, m_pLayerOutputs[uLayer], n(), pDeltaInputs);
-        }
-        else
-        {
-            network.getLayer(uLayer).backward(pInput,
-                *m_pLayerOutputs[uLayer].m_deltaOutputs[0],
-                fBiasesLR, fWeightsLR,
-                m_pLayerOutputs[uLayer], n(), pDeltaInputs);
-        }
+        network.getLayer(uLayer).backward(pInput,
+            *m_pLayerOutputs[uLayer].m_pLoss,
+            fBiasesLR, fWeightsLR,
+            m_pLayerOutputs[uLayer], n(), pPrevLoss);
         --uLayer;
     }
 }

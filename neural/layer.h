@@ -12,7 +12,7 @@ struct ILayer
     virtual void backward(TensorRef pInput,
         Tensor<float> &loss, float fBiasesLR,
         float fWeightsLR, LayerBatchData& data, NvU32 n,
-        std::vector<TensorRef>* pDeltaInputs = nullptr) = 0;
+        Tensor<float> *pPrevLoss = nullptr) = 0;
 
     virtual void allocateBatchData(LayerBatchData& batchData, NvU32 n);
 
@@ -116,7 +116,7 @@ struct FullyConnectedLayer : public ILayer
     virtual void backward(TensorRef pInput,
         Tensor<float>& loss, float fBiasesLR,
         float fWeightsLR, LayerBatchData &data, NvU32 n,
-        std::vector<TensorRef>* pDeltaInputs = nullptr) override;
+        Tensor<float> *pPrevLoss = nullptr) override;
 
     virtual void serialize(ISerializer& s) override
     {

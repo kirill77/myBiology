@@ -90,16 +90,16 @@ template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FCL_Backward
 {
     FCL_Backward(float fBiasesLR, float fWeightsLR, Tensor<float>& input, Tensor<float>& weights, Tensor<float>& biases,
-    Tensor<float> &deltaInput, Tensor<float> &loss, Tensor<float> &beforeActivation) :
+    Tensor<float> &prevLoss, Tensor<float> &loss, Tensor<float> &beforeActivation) :
         m_fBiasesLR(fBiasesLR), m_fWeightsLR(fWeightsLR),
         m_input(input), m_weights(weights), m_biases(biases),
-        m_deltaInput(deltaInput), m_loss(loss), m_beforeActivation(beforeActivation)
+        m_prevLoss(prevLoss), m_loss(loss), m_beforeActivation(beforeActivation)
     {
 #if RUN_ON_GPU
         m_input.notifyDeviceBind(false);
         m_weights.notifyDeviceBind(true);
         m_biases.notifyDeviceBind(true);
-        m_deltaInput.notifyDeviceBind(true);
+        m_prevLoss.notifyDeviceBind(true);
         m_loss.notifyDeviceBind(false);
         m_beforeActivation.notifyDeviceBind(false);
 #endif
@@ -141,9 +141,9 @@ struct FCL_Backward
                 // modify the weight corresponding to this summator
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
                 fDeltaWeight += fMult * fInput;
-                if (m_deltaInput.n()) // have we been asked to compute deltaInput?
+                if (m_prevLoss.n()) // have we been asked to compute deltaInput?
                 {
-                    float& fDeltaInput = m_deltaInput.access(inOutNi, inHi, inWi, inOutCi);
+                    float& fDeltaInput = m_prevLoss.access(inOutNi, inHi, inWi, inOutCi);
                     myAtomicAdd(&fDeltaInput, fMult * fW);
                 }
             }
@@ -154,7 +154,7 @@ struct FCL_Backward
         m_weights[iWeight] += fDeltaWeight * m_fWeightsLR;
     }
 
-    Tensor<float> m_input, m_weights, m_biases, m_deltaInput, m_loss, m_beforeActivation;
+    Tensor<float> m_input, m_weights, m_biases, m_prevLoss, m_loss, m_beforeActivation;
     float m_fBiasesLR = 0, m_fWeightsLR = 0;
 };
 
@@ -167,24 +167,25 @@ __global__ void fclBackwardKernel(FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> bac
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 void FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(TensorRef pInput,
     Tensor<float>& loss, float fBiasesLR,
-    float fWeightsLR, LayerBatchData& batchData, NvU32 n, std::vector<TensorRef>* pDeltaInputs)
+    float fWeightsLR, LayerBatchData& batchData, NvU32 n, Tensor<float> *pPrevLoss)
 {
     Tensor<float>& input = *pInput;
     nvAssert(input.n() == n && m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
-    Tensor<float> deltaInput;
-    if (pDeltaInputs)
+    Tensor<float> prevLoss;
+    if (pPrevLoss)
     {
-        nvAssert(pDeltaInputs->size() == 1);
-        deltaInput = *(*pDeltaInputs)[0];
-        nvAssert(deltaInput.n() == n && deltaInput.h() == m_inputDims[1] && deltaInput.w() == m_inputDims[2] && deltaInput.c() == m_inputDims[3]);
+        prevLoss = *pPrevLoss;
+        nvAssert(prevLoss.n() == n && prevLoss.h() == m_inputDims[1] &&
+	 prevLoss.w() == m_inputDims[2] && prevLoss.c() == m_inputDims[3]);
     }
     nvAssert(loss.n() == n && m_outputDims[0] == 1 && loss.h() == m_outputDims[1] && loss.w() == m_outputDims[2] && loss.c() == m_outputDims[3]);
-    if (deltaInput.n())
+    if (prevLoss.n())
     {
-        deltaInput.clearSubregion(0, (NvU32)deltaInput.size(), EXECUTE_MODE_DEFAULT);
+        prevLoss.clearSubregion(0, (NvU32)prevLoss.size(), EXECUTE_MODE_DEFAULT);
     }
     Tensor<float>& beforeActivation = *batchData.m_beforeActivation[0];
-    FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fBiasesLR, fWeightsLR, input, m_weights, m_biases, deltaInput, loss, beforeActivation);
+    FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fBiasesLR, fWeightsLR,
+        input, m_weights, m_biases, prevLoss, loss, beforeActivation);
     nvAssert(T_ACTIVATION1 == T_ACTIVATION2 || loss.h() % 2 == 0);
     unsigned outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? loss.h() : loss.h() / 2);
     dim3 grid(input.w(), input.h(), 1);
