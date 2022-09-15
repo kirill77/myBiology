@@ -11,10 +11,7 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
     m_pLoss = std::make_shared<Tensor<float>>();
     m_pLoss->init(m_pWantedOutput->getDims());
 
-    for (NvU32 uLayer = 0; uLayer < network.getNLayers(); ++uLayer)
-    {
-        network.getLayer(uLayer).allocateBatchData(uBatch, m_pInput->n(), uLayer == 0);
-    }
+    network.notifyBatchInited(uBatch, m_pInput->n());
 
     m_lr.init(network.getNLayers());
 }

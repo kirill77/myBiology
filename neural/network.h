@@ -20,10 +20,14 @@ struct NeuralNetwork
         nvAssert(m_pLayers.size() > 0); // derived class must have created layers by that point
         return (NvU32)m_pLayers.size();
     }
-    ILayer& getLayer(NvU32 u)
+    void notifyBatchInited(NvU32 uBatch, NvU32 n)
     {
-        return *m_pLayers[u];
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
+        {
+            m_pLayers[uLayer]->allocateBatchData(uBatch, n, uLayer == 0);
+        }
     }
+
     void forwardPass(NvU32 uBatch, TensorRef pInput)
     {
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
