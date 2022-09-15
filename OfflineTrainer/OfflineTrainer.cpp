@@ -2,14 +2,14 @@
 #include <chrono>
 #include <filesystem>
 #include "neural/l2Computer.h"
+#include "neural/epoch.h"
+#include "neural/learningRates.h"
 
 int main()
 {
     NeuralTest::test();
 
     AtomsNetwork<float, 64> network;
-    BatchTrainer batchTrainer;
-    LossComputer lossComputer;
 
     // load the latest trained network
     {
@@ -35,8 +35,33 @@ int main()
         printf("loading %S\n", path.c_str());
         MyReader reader(path);
         network.serialize(reader);
-        batchTrainer.serialize(reader);
     }
+
+    Epoch epoch;
+    epoch.init(network);
+
+    LossComputer lossComputer;
+    
+    LearningRates lr;
+    lr.init(network.getNLearningRatesNeeded());
+    
+    printf("training starts...\n");
+    auto startTime = std::chrono::high_resolution_clock::now();
+    for ( ; ; )
+    {
+        epoch.makeStep(network, lossComputer, lr);
+
+        auto curTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> secondsSinceStart = curTime - startTime;
+        double fMSecsPerTrainingStep = (secondsSinceStart.count() / lr.getNStepsMade()) * 1000;
+
+        printf("nSteps: %d, avgError: %#.3g, avgLRate: %#.3g, MSecsPerStep: %.2f\n",
+            lr.getNStepsMade(), epoch.getAvgError(), network.computeAvgLRStats(), fMSecsPerTrainingStep);
+    }
+
+#if 0
+    BatchTrainer batchTrainer;
+
 
     network.initBatch(batchTrainer, 0);
     const NvU32 nLoadedTrainSteps = batchTrainer.getLR().getNStepsMade();
@@ -109,4 +134,5 @@ int main()
         printf("nSteps: %d, fError: %#.3g, fLRate: %#.3g, MSecsPerStep: %.2f\n",
             batchTrainer.getLR().getNStepsMade(), batchTrainer.getLR().getLastError(), fAvgLRStats, fMSecsPerTrainingStep);
     }
+#endif
 }

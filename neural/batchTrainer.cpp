@@ -1,5 +1,6 @@
 #include "batchTrainer.h"
 #include "network.h"
+#include "learningRates.h"
 
 void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput)
 {
@@ -12,27 +13,25 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
     m_pLoss->init(m_pWantedOutput->getDims());
 
     network.notifyBatchInited(uBatch, m_pInput->n());
-
-    m_lr.init(network.getNLayers());
 }
-void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer)
+void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer, LearningRates &lr)
 {
     forwardPass(network);
     float fError = 0;
     updateLoss(network, lossComputer, &fError);
-    m_lr.setInitialError(fError);
+    lr.setInitialError(fError);
     network.saveCurrentStateToBackup();
 
-    for (NvU32 u = 0; u < m_lr.getNStepsToMake(); ++u)
+    for (NvU32 u = 0; u < lr.getNStepsToMake(); ++u)
     {
-        backwardPass(network, lossComputer);
+        backwardPass(network, lossComputer, lr);
         forwardPass(network);
     }
 
     float fCurrentError = 0;
     updateLoss(network, lossComputer, &fCurrentError);
     bool bShouldRedo = true;
-    m_lr.notifyNewError(fCurrentError, bShouldRedo);
+    lr.notifyNewError(fCurrentError, bShouldRedo);
     if (bShouldRedo)
     {
         network.restoreStateFromBackup();
@@ -52,8 +51,8 @@ void BatchTrainer::forwardPass(NeuralNetwork& network)
 {
     network.forwardPass(m_uBatch, m_pInput);
 }
-void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComputer)
+void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComputer, LearningRates &lr)
 {
     TensorRef pLoss = updateLoss(network, lossComputer);
-    network.backwardPass(m_uBatch, pLoss.get(), m_lr);
+    network.backwardPass(m_uBatch, pLoss.get(), lr);
 }

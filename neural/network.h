@@ -14,13 +14,12 @@ struct NeuralNetwork
 
     virtual NvU32 getNBatches() = 0;
     virtual void initBatch(struct BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
-
-    NvU32 getNLayers() const
+    virtual NvU32 getNLearningRatesNeeded() const
     {
-        nvAssert(m_pLayers.size() > 0); // derived class must have created layers by that point
         return (NvU32)m_pLayers.size();
     }
-    void notifyBatchInited(NvU32 uBatch, NvU32 n)
+
+    virtual void notifyBatchInited(NvU32 uBatch, NvU32 n)
     {
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {

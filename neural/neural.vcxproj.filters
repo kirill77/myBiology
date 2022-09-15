@@ -59,5 +59,8 @@
     <ClCompile Include="layer.cpp">
       <Filter>CPP</Filter>
     </ClCompile>
+    <ClCompile Include="epoch.cpp">
+      <Filter>CPP</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

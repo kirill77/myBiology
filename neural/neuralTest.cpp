@@ -3,6 +3,7 @@
 #include "network.h"
 #include "l2Computer.h"
 #include "batchTrainer.h"
+#include "learningRates.h"
 
 bool NeuralTest::m_bTested = false;
 
@@ -29,6 +30,7 @@ struct TestNetwork : public NeuralNetwork
         pWantedOutput->clearWithRandomValues(0, 1, rng);
         batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
     }
+
 private:
     std::array<unsigned, 4> s_inputDims = { 1, 4, 4, 1 };
     std::array<unsigned, 4> s_layer0OutputDims = { 1, 4, 3, 1 };
@@ -121,15 +123,19 @@ void NeuralTest::test()
 
     {
         TestNetwork network;
+        
+        LearningRates lr;
+        lr.init(network.getNLearningRatesNeeded());
+        
         BatchTrainer batchTrainer;
         network.initBatch(batchTrainer, 0);
         for (; ; )
         {
-            batchTrainer.makeMinimalProgress(network, lossComputer);
-            if (batchTrainer.getLR().getNStepsMade() >= 10000)
+            batchTrainer.makeMinimalProgress(network, lossComputer, lr);
+            if (lr.getNStepsMade() >= 10000)
                 break;
         }
-        float fError = batchTrainer.getLR().getLastError();
+        float fError = lr.getLastError();
         m_bTested = m_bTested && fError > 2e-6 && fError < 2.6e-6;
         nvAssert(m_bTested);
     }
