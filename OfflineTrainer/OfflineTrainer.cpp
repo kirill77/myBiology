@@ -55,8 +55,13 @@ int main()
         std::chrono::duration<double> secondsSinceStart = curTime - startTime;
         double fMSecsPerTrainingStep = (secondsSinceStart.count() / lr.getNStepsMade()) * 1000;
 
-        printf("nSteps: %d, avgError: %#.3g, avgLRate: %#.3g, MSecsPerStep: %.2f\n",
-            lr.getNStepsMade(), epoch.getAvgError(), network.computeAvgLRStats(), fMSecsPerTrainingStep);
+        printf(
+            "nSteps: %d, avgPreError: %#.3g, avgPostError: %#.3g, avgLRate: %#.3g, "
+            "MSecPerStep: %.2f\n",
+            lr.getNStepsMade(), epoch.getAvgPreError(), epoch.getAvgPostError(),
+            network.computeAvgLRStats(), fMSecsPerTrainingStep);
+
+        network.resetAvgLRStats();
     }
 
 #if 0

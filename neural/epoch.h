@@ -9,9 +9,10 @@ struct Epoch
 
    void makeStep(NeuralNetwork &network, struct LossComputer& lossComputer, struct LearningRates &lr);
 
-   float getAvgError() const { return m_fAvgError; }
+   float getAvgPreError() const { return m_fAvgPreError; }
+   float getAvgPostError() const { return m_fAvgPostError; }
 
 private:
    std::vector<BatchTrainer> m_batches;
-   float m_fAvgError = 0;
+   float m_fAvgPreError = 0, m_fAvgPostError = 0;
 };

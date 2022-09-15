@@ -19,12 +19,12 @@ void Epoch::makeStep(NeuralNetwork &network, LossComputer &lossComputer, Learnin
     printf("0%%\r");
     NvU32 uPrevPercent = 0;
 
-    double fErrorsSum = 0;
+    double fPreErrorsSum = 0, fPostErrorsSum = 0;
 
     for (NvU32 u = 0; u < m_batches.size(); ++u)
     {
-        m_batches[u].makeMinimalProgress(network, lossComputer, lr);
-        fErrorsSum += lr.getLastError();
+        fPreErrorsSum += m_batches[u].makeMinimalProgress(network, lossComputer, lr);
+        fPostErrorsSum += lr.getLastError();
 
         NvU32 uNextPercent = u * 100 / (NvU32)m_batches.size();
         if (uNextPercent > uPrevPercent + 5)
@@ -33,5 +33,6 @@ void Epoch::makeStep(NeuralNetwork &network, LossComputer &lossComputer, Learnin
             uPrevPercent = uNextPercent;
         }
     }
-    m_fAvgError = (float)(fErrorsSum / m_batches.size());
+    m_fAvgPreError = (float)(fPreErrorsSum / m_batches.size());
+    m_fAvgPostError = (float)(fPostErrorsSum / m_batches.size());
 }

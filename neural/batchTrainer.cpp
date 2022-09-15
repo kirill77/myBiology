@@ -14,12 +14,13 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
 
     network.notifyBatchInited(uBatch, m_pInput->n());
 }
-void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer, LearningRates &lr)
+float BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
+    LearningRates &lr)
 {
     forwardPass(network);
-    float fError = 0;
-    updateLoss(network, lossComputer, &fError);
-    lr.setInitialError(fError);
+    float fPreError = 0;
+    updateLoss(network, lossComputer, &fPreError);
+    lr.setInitialError(fPreError);
     network.saveCurrentStateToBackup();
 
     for (NvU32 u = 0; u < lr.getNStepsToMake(); ++u)
@@ -41,6 +42,7 @@ void BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &los
     {
         network.saveCurrentStateToBackup();
     }
+    return fPreError;
 }
 TensorRef BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
 {

@@ -6,7 +6,9 @@ struct BatchTrainer
 {
     void init(struct NeuralNetwork& network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput);
 
-    void makeMinimalProgress(NeuralNetwork& network, struct LossComputer& lossComputer, struct LearningRates& lr);
+    // returns the initial error (before progress was made)
+    float makeMinimalProgress(NeuralNetwork& network, struct LossComputer& lossComputer,
+        struct LearningRates& lr);
 
     void forwardPass(NeuralNetwork& network);
     void backwardPass(NeuralNetwork& network, LossComputer& lossComputer, LearningRates &lr);
