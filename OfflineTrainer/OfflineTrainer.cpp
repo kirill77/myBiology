@@ -47,6 +47,7 @@ int main()
     
     printf("training starts...\n");
     auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastSaveTime = startTime;
     for ( ; ; )
     {
         epoch.makeStep(network, lossComputer, lr);
@@ -60,6 +61,35 @@ int main()
             "MSecPerStep: %.2f\n",
             lr.getNStepsMade(), epoch.getAvgPreError(), epoch.getAvgPostError(),
             network.computeAvgLRStats(), fMSecsPerTrainingStep);
+
+        {
+            FILE* fp = nullptr;
+            fopen_s(&fp, "c:\\atomNets\\log.txt", "a+");
+            if (fp)
+            {
+                fprintf(fp,
+                    "nSteps: %d, avgPreError: %#.3g, avgPostError: %#.3g, avgLRate: %#.3g, "
+                    "MSecPerStep: %.2f\n",
+                    lr.getNStepsMade(), epoch.getAvgPreError(), epoch.getAvgPostError(),
+                    network.computeAvgLRStats(), fMSecsPerTrainingStep);
+                fclose(fp);
+            }
+        }
+
+        std::chrono::duration<double> secondsSinceLastSave = curTime - lastSaveTime;
+        if (secondsSinceLastSave.count() > 60)
+        {
+            printf("saving nSteps=%d...\n", lr.getNStepsMade());
+            wchar_t sBuffer[32];
+            swprintf_s(sBuffer, L"c:\\atomNets\\trained_%d.bin",
+                lr.getNStepsMade());
+            {
+                MyWriter writer(sBuffer);
+                network.serialize(writer);
+            }
+            lastSaveTime = curTime;
+            printf("saving completed\n");
+        }
 
         network.resetAvgLRStats();
     }
