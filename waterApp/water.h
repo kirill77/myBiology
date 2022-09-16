@@ -453,6 +453,11 @@ struct Water : public Propagator<_T>
 
     Water() : m_ocTree(*this)
     {
+#if 1
+        MyReader reader("C:\\atomNets\\prev5\\trained_4016401.bin");
+        m_isNetworkTrained = true;
+        m_neuralNetwork.serialize(reader);
+#endif
     }
 
     void init()
@@ -513,17 +518,24 @@ struct Water : public Propagator<_T>
     {
         updateListOfForces();
 
-        m_neuralNetwork.notifyStepBeginning(this->m_c);
+        if (m_isNetworkTrained)
+        {
+            nvAssert(false);
+        }
+        else
+        {
+            m_neuralNetwork.notifyStepBeginning(this->m_c);
 
-        this->propagate();
+            this->propagate();
 
-        MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
-        m_averageKinFilter.addValue(fInstantaneousAverageKin);
-        MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
+            MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
+            m_averageKinFilter.addValue(fInstantaneousAverageKin);
+            MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
 
-        m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
+            m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
 
-        m_neuralNetwork.notifyStepDone(this->m_c);
+            m_neuralNetwork.notifyStepDone(this->m_c);
+        }
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -614,4 +626,5 @@ private:
 #endif
 
     AtomsNetwork<T, 64> m_neuralNetwork;
+    bool m_isNetworkTrained = false;
 };

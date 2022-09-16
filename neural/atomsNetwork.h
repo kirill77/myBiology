@@ -96,54 +96,65 @@ struct AtomsNetwork : public NeuralNetwork
 
     virtual NvU32 getNBatches()
     {
-        return getNStoredSimSteps() * getNAtoms() / NATOMS_IN_TRAINING;
+        return getNStoredSimSteps() * getNAtoms() / NATOMS_PER_BATCH;
     }
 
-    void initBatch(BatchTrainer &batchTrainer, NvU32 uBatch)
+    TensorRef createInputTensor(const std::vector<NvU32>& atomIndices, NvU32 uFirstAtom,
+        NvU32 nAtoms) const
     {
-        NvU32 nSimulationSteps = getNStoredSimSteps();
-        NvU32 nTotalClusters = nSimulationSteps * getNAtoms();
-        // out of all clusters, randomly select some number of clusters we'll train on
-        std::array<NvU32, NATOMS_IN_TRAINING> clusterIndices;
-        for (NvU32 u = 0; u < clusterIndices.size(); ++u)
-        {
-            clusterIndices[u] = m_rng.generateUnsigned(0, nTotalClusters);
-        }
-        for (NvU32 nPasses = 0; nPasses < 10; ++nPasses) // we have this many tries to get the array without repetitions
-        {
-            bool bRepetitionsFound = false;
-            std::sort(clusterIndices.begin(), clusterIndices.end());
-            for (NvU32 u = 1; u < clusterIndices.size(); ++u)
-            {
-                while (clusterIndices[u] == clusterIndices[u - 1])
-                {
-                    clusterIndices[u] = m_rng.generateUnsigned(0, nTotalClusters);
-                    bRepetitionsFound = true;
-                }
-            }
-            if (!bRepetitionsFound) break;
-        }
-
-        TensorRef pInput, pWantedOutput;
         // initialize inputs and outputs to zero (force CPU because we have to fill those buffers on CPU)
-        std::array<unsigned, 4> inputDims = { (NvU32)clusterIndices.size(), s_nInputValuesPerCluster, 1, 1 };
-        pInput = std::make_shared<Tensor<float>>(inputDims);
+        std::array<unsigned, 4> inputDims = { nAtoms, s_nInputValuesPerCluster, 1, 1 };
+        TensorRef pInput = std::make_shared<Tensor<float>>(inputDims);
         Tensor<float>& input = *pInput;
         input.clearSubregion(0, (NvU32)input.size(), EXECUTE_MODE_FORCE_CPU);
-        std::array<unsigned, 4> outputDims = { (NvU32)clusterIndices.size(), s_nOutputValuesPerCluster, 1, 1 };
-        pWantedOutput = std::make_shared<Tensor<float>>(outputDims);
-        Tensor<float>& wantedOutput = *pWantedOutput;
-        wantedOutput.init(outputDims);
-        wantedOutput.clearSubregion(0, (NvU32)wantedOutput.size(), EXECUTE_MODE_FORCE_CPU);
 
         // copy all data to input and output tensors
-        for (NvU32 u = 0; u < clusterIndices.size(); ++u)
+        for (NvU32 u = 0; u < nAtoms; ++u)
         {
-            copyClusterToInputTensor(input, u, clusterIndices[u]);
-            copyClusterToOutputTensor(wantedOutput, u, clusterIndices[u]);
+            copyClusterToInputTensor(input, u, atomIndices[uFirstAtom + u]);
+        }
+
+        return pInput;
+    }
+    TensorRef allocateOutputTensor(NvU32 nAtoms) const
+    {
+        std::array<unsigned, 4> outputDims = { nAtoms, s_nOutputValuesPerCluster, 1, 1 };
+        TensorRef pOutput = std::make_shared<Tensor<float>>(outputDims);
+        pOutput->init(outputDims);
+        pOutput->clearSubregion(0, (NvU32)pOutput->size(), EXECUTE_MODE_FORCE_CPU);
+        return pOutput;
+    }
+
+    virtual void initBatch(BatchTrainer &batchTrainer, NvU32 uBatch) override
+    {
+        if (m_batchAtomIndices.size() == 0)
+        {
+            NvU32 nTotalClusters = getNBatches() * NATOMS_PER_BATCH;
+            createBatchAtomIndices(nTotalClusters);
+        }
+        TensorRef pInput = createInputTensor(m_batchAtomIndices, uBatch * NATOMS_PER_BATCH, NATOMS_PER_BATCH);
+
+        TensorRef pWantedOutput = allocateOutputTensor(NATOMS_PER_BATCH);
+        Tensor<float>& wantedOutput = *pWantedOutput;
+        // copy data to output tensors
+        for (NvU32 u = 0; u < NATOMS_PER_BATCH; ++u)
+        {
+            copyClusterToOutputTensor(wantedOutput, u,
+                m_batchAtomIndices[uBatch * NATOMS_PER_BATCH + u]);
         }
         batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
     }
+
+    virtual void serialize(ISerializer& s) override
+    {
+        NeuralNetwork::serialize(s);
+        m_constAtomData.serialize("m_constAtomDataTensor", s);
+        s.serializeArrayOfPointers("m_pTransientAtomDataArray", m_pTransientAtomData);
+        s.serializeArrayOfPointers("m_pForceValuesArray", m_pForceValues);
+        s.serializeArrayOfPointers("m_pForceIndicesArray", m_pForceIndices);
+        s.serializePreallocatedMem("m_boxWrapper", &m_boxWrapper, sizeof(m_boxWrapper));
+    }
+
 private:
     // **** offsets we use to create input tensor
     static constexpr NvU32 computeInputAtomOffset(NvU32 uAtom)
@@ -201,9 +212,10 @@ private:
         pLayers.push_back(pLayer);
         return true;
     }
-    static const NvU32 NATOMS_IN_TRAINING = 256; // number of atoms we train on simultaneously
+    static const NvU32 NATOMS_PER_BATCH = 256; // number of atoms we train on simultaneously
 
-    void copyClusterToInputTensor(Tensor<float> &input, NvU32 uDstCluster, NvU32 uSrcCluster)
+    void copyClusterToInputTensor(Tensor<float> &input, NvU32 uDstCluster,
+        NvU32 uSrcCluster) const
     {
         NvU32 uSimStep = uSrcCluster / getNAtoms();
         NvU32 uCentralAtom = uSrcCluster % getNAtoms();
@@ -219,7 +231,9 @@ private:
             input.access(uDstCluster, computeInputForceOffset(u), 0, 0) = fv.m_nCovalentBonds[u]; // copy the force information
         }
     }
-    void copyAtomToInputTensor(Tensor<float>& input, NvU32 uDstCluster, NvU32 uDstSlot, NvU32 uCentralAtom, NvU32 uSrcAtom, const GPUBuffer<TransientAtomData> &transientData)
+    void copyAtomToInputTensor(Tensor<float>& input, NvU32 uDstCluster, NvU32 uDstSlot,
+        NvU32 uCentralAtom, NvU32 uSrcAtom,
+        const GPUBuffer<TransientAtomData> &transientData) const
     {
         NvU32 hi = computeInputAtomOffset(uDstSlot);
         const ConstantAtomData& constData = m_constAtomData[uSrcAtom];
@@ -379,23 +393,28 @@ private:
 
     bool m_bSimStepStarted = false, m_bNeedToSave = false;
 
-public:
-    virtual void serialize(ISerializer &s) override
-    {
-        NeuralNetwork::serialize(s);
-        m_constAtomData.serialize("m_constAtomDataTensor", s);
-        s.serializeArrayOfPointers("m_pTransientAtomDataArray", m_pTransientAtomData);
-        s.serializeArrayOfPointers("m_pForceValuesArray", m_pForceValues);
-        s.serializeArrayOfPointers("m_pForceIndicesArray", m_pForceIndices);
-        s.serializePreallocatedMem("m_boxWrapper", &m_boxWrapper, sizeof(m_boxWrapper));
-    }
-
-private:
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
     std::vector<GPUBuffer<TransientAtomData>*> m_pTransientAtomData; // 1 in the beginning + 1 per simulation step
     std::vector<GPUBuffer<ForceValues<nAtomsPerCluster>>*> m_pForceValues; // 2 per simulation step
     std::vector<GPUBuffer<ForceIndices<nAtomsPerCluster>>*> m_pForceIndices; // 1 per simulation step
     BoxWrapper<T> m_boxWrapper;
+
+    std::vector<NvU32> m_batchAtomIndices;
+    void createBatchAtomIndices(NvU32 nIndices)
+    {
+        m_batchAtomIndices.resize(nIndices);
+        for (NvU32 u = 0; u < nIndices; ++u)
+        {
+            m_batchAtomIndices[u] = u;
+        }
+        RNGUniform rng;
+        // scramble the array
+        for (NvU32 u = 0; u < m_batchAtomIndices.size(); ++u)
+        {
+            NvU32 u1 = rng.generateUnsigned(0, (NvU32)m_batchAtomIndices.size());
+            nvSwap(m_batchAtomIndices[u1], m_batchAtomIndices[u]);
+        }
+    }
 
     RNGUniform m_rng;
 };
