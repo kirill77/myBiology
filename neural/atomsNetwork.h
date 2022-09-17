@@ -58,6 +58,37 @@ struct AtomsNetwork : public NeuralNetwork
         copyConstAtomsDataFromTheModel(simContext.m_atoms);
         m_boxWrapper = simContext.m_bBox;
     }
+
+    void propagate(SimContext<T>& simContext)
+    {
+        m_pTransientAtomData.resize(0);
+        copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        m_pForceIndices.resize(0);
+        copyForceIndicesFromTheModel(simContext);
+        m_pForceValues.resize(0);
+        copyBondsFromTheModel(simContext.m_forces);
+
+        NvU32 nAtoms = (NvU32)simContext.m_atoms.size();
+        if (m_batchAtomIndices.size() != nAtoms)
+        {
+            m_batchAtomIndices.resize(simContext.m_atoms.size());
+            for (NvU32 u = 0; u < m_batchAtomIndices.size(); ++u)
+            {
+                m_batchAtomIndices[u] = u;
+            }
+        }
+
+        TensorRef pInput = createInputTensor(m_batchAtomIndices, 0, (NvU32)m_batchAtomIndices.size());
+        TensorRef pOutput = this->forwardPass(0, pInput);
+        pOutput->syncToHost();
+
+        Tensor<float>& output = *pOutput;
+        for (NvU32 u = 0; u < nAtoms; ++u)
+        {
+            propagateAtom(output, u, simContext);
+        }
+    }
+
     void notifyStepBeginning(const SimContext<T> &simContext)
     {
         if (hasEnoughData())
@@ -266,20 +297,55 @@ private:
         const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[uSimStep * 2 + 1])[uCentralAtom];
 
         // copy the central atom
-        NvU32 hi = 0;
         rtvector<float, 3> vPos = m_boxWrapper.computeDir(centAtomOut.vPos, centAtomIn.vPos);
-        wantedOutput.access(uDstCluster, hi++, 0, 0) = vPos[0];
-        wantedOutput.access(uDstCluster, hi++, 0, 0) = vPos[1];
-        wantedOutput.access(uDstCluster, hi++, 0, 0) = vPos[2];
+        wantedOutput.access(uDstCluster, 0, 0, 0) = vPos[0];
+        wantedOutput.access(uDstCluster, 1, 0, 0) = vPos[1];
+        wantedOutput.access(uDstCluster, 2, 0, 0) = vPos[2];
         rtvector<float, 3> vSpeed = centAtomOut.vSpeed - centAtomIn.vSpeed;
-        wantedOutput.access(uDstCluster, hi++, 0, 0) = vSpeed[0];
-        wantedOutput.access(uDstCluster, hi++, 0, 0) = vSpeed[1];
-        wantedOutput.access(uDstCluster, hi++, 0, 0) = vSpeed[2];
+        wantedOutput.access(uDstCluster, 3, 0, 0) = vSpeed[0];
+        wantedOutput.access(uDstCluster, 4, 0, 0) = vSpeed[1];
+        wantedOutput.access(uDstCluster, 5, 0, 0) = vSpeed[2];
 
         // copy the force information
         for (NvU32 u = 0; u < fi.nIndices; ++u)
         {
-            wantedOutput.access(uDstCluster, computeOutputForceOffset(u), 0, 0) = fv.m_nCovalentBonds[u];
+            nvAssert(computeOutputForceOffset(u) == 6 + u);
+            wantedOutput.access(uDstCluster, 6 + u, 0, 0) = fv.m_nCovalentBonds[u];
+        }
+    }
+
+    void propagateAtom(Tensor<float>& output, NvU32 uAtom, SimContext<T>& simContext)
+    {
+        Atom<T>& atom = simContext.m_atoms[uAtom];
+        rtvector<float, 3> vDir;
+        vDir[0] = output.access(uAtom, 0, 0, 0);
+        vDir[1] = output.access(uAtom, 1, 0, 0);
+        vDir[2] = output.access(uAtom, 2, 0, 0);
+        atom.m_vPos = m_boxWrapper.wrapThePos(atom.m_vPos + vDir);
+        rtvector<float, 3> vSpeed;
+        vSpeed[0] = output.access(uAtom, 3, 0, 0);
+        vSpeed[1] = output.access(uAtom, 4, 0, 0);
+        vSpeed[2] = output.access(uAtom, 5, 0, 0);
+        atom.m_vSpeed += vSpeed;
+
+        const ForceIndices<nAtomsPerCluster>& fi = (*m_pForceIndices[0])[uAtom];
+        const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[0])[uAtom];
+        // copy the force information
+        bool bDeferredCovalentBonds = false;
+        for (NvU32 u = 0; u < fi.nIndices; ++u)
+        {
+            nvAssert(computeOutputForceOffset(u) == 6 + u);
+            float nCovalentBonds = round(output.access(uAtom, 6 + u, 0, 0));
+            if (nCovalentBonds > fv.m_nCovalentBonds[u]) // new covalent bonds have appeared
+            {
+                NvU32 uAtom1 = fi.atomIndices[u];
+                NvU32 uForce = simContext.m_forces.findExistingForce(uAtom, uAtom1);
+                Force<T>& force = simContext.m_forces.accessForceByIndex(uForce);
+                Atom<T>& atom1 = simContext.m_atoms[uAtom1];
+                auto vDir = m_boxWrapper.computeDir(atom.m_vPos, atom1.m_vPos);
+                T fDistSqr = lengthSquared(vDir);
+                force.createCovalentBondIfNeeded(atom, atom1, fDistSqr);
+            }
         }
     }
     void copyConstAtomsDataFromTheModel(const std::vector<Atom<T>>& atoms)

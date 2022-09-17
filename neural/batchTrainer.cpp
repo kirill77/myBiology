@@ -12,7 +12,7 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
     m_pLoss = std::make_shared<Tensor<float>>();
     m_pLoss->init(m_pWantedOutput->getDims());
 
-    network.notifyBatchInited(uBatch, m_pInput->n());
+    network.allocateBatchData(uBatch, m_pInput->n());
 }
 float BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
     LearningRates &lr)

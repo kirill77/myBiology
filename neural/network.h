@@ -19,7 +19,7 @@ struct NeuralNetwork
         return (NvU32)m_pLayers.size();
     }
 
-    virtual void notifyBatchInited(NvU32 uBatch, NvU32 n)
+    virtual void allocateBatchData(NvU32 uBatch, NvU32 n)
     {
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
@@ -27,12 +27,14 @@ struct NeuralNetwork
         }
     }
 
-    void forwardPass(NvU32 uBatch, TensorRef pInput)
+    // returns network output tensor
+    TensorRef forwardPass(NvU32 uBatch, TensorRef pInput)
     {
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
             pInput = m_pLayers[uLayer]->forward(uBatch, pInput);
         }
+        return pInput;
     }
     void backwardPass(NvU32 uBatch, Tensor<float>* pLoss, struct LearningRates& lr);
     void saveCurrentStateToBackup()

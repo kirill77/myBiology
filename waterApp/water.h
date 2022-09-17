@@ -226,13 +226,6 @@ struct SimLayer
     {
         nvAssert(m_uLevel < 20);
     }
-    void init(PrContext<T> &c)
-    {
-        if (m_uLevel == GROUND_LAYER)
-        {
-            c.m_globalState.resetKinComputation();
-        }
-    }
 
     void addDetailForceIfNeeded(PrContext<T>& c, NvU32 uForce)
     {
@@ -283,7 +276,6 @@ struct SimLayer
             prAtom.verletStep1(atom, fTimeStep, c.m_bBox);
         }
 
-        m_pNextSimLayer->init(c);
         c.m_atomLayers.createLayer(m_uLevel + 1);
         updateForces<1>(fEndTime, c);
 
@@ -398,7 +390,6 @@ struct Propagator
         }
         m_c.m_prAtoms.resize(m_c.m_atoms.size());
         m_c.m_prForces.resize(m_c.m_forces.size());
-        m_topSimLayer.init(m_c);
         m_topSimLayer.prepareForPropagation<false>(m_c, MyUnits<T>(), m_fTimeStep);
         m_topSimLayer.propagate(MyUnits<T>(), m_fTimeStep, m_c);
         // on the next step we may have different invalid forces - so move all current invalid forces back to GROUND_LAYER
@@ -453,11 +444,6 @@ struct Water : public Propagator<_T>
 
     Water() : m_ocTree(*this)
     {
-#if 1
-        MyReader reader("C:\\atomNets\\prev5\\trained_4016401.bin");
-        m_isNetworkTrained = true;
-        m_neuralNetwork.serialize(reader);
-#endif
     }
 
     void init()
@@ -504,6 +490,14 @@ struct Water : public Propagator<_T>
 
         this->m_c.m_forces.init((NvU32)this->m_c.m_atoms.size());
 
+#if 0
+        {
+            MyReader reader("C:\\atomNets\\prev5\\trained_4016401.bin");
+            m_isNetworkTrained = true;
+            m_neuralNetwork.serialize(reader);
+            m_neuralNetwork.allocateBatchData(0, (NvU32)this->m_c.m_atoms.size());
+        }
+#endif
         m_neuralNetwork.init(this->m_c);
     }
 
@@ -518,22 +512,31 @@ struct Water : public Propagator<_T>
     {
         updateListOfForces();
 
+        this->m_c.m_globalState.resetKinComputation();
+
         if (m_isNetworkTrained)
         {
-            nvAssert(false);
+            m_neuralNetwork.propagate(this->m_c);
+            auto& atoms = this->m_c.m_atoms;
+            for (NvU32 u = 0; u < atoms.size(); ++u)
+            {
+                this->m_c.m_globalState.notifyAtomSpeed(atoms[u].getMass(), atoms[u].m_vSpeed, this->getCurTimeStep());
+            }
         }
         else
         {
             m_neuralNetwork.notifyStepBeginning(this->m_c);
-
             this->propagate();
+        }
 
-            MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
-            m_averageKinFilter.addValue(fInstantaneousAverageKin);
-            MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
+        MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
+        m_averageKinFilter.addValue(fInstantaneousAverageKin);
+        MyUnits<T> fFilteredAverageKin = getFilteredAverageKin();
 
-            m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
+        m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
 
+        if (!m_isNetworkTrained)
+        {
             m_neuralNetwork.notifyStepDone(this->m_c);
         }
     }
