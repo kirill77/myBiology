@@ -139,6 +139,6 @@ template NvU32 GPUBuffer<float>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<fl
 template struct GPUBuffer<float>;
 template struct GPUBuffer<ConstantAtomData>;
 template struct GPUBuffer<TransientAtomData>;
-template struct GPUBuffer<ForceIndices<64>>;
-template struct GPUBuffer<ForceValues<64>>;
+template struct GPUBuffer<ForceIndices>;
+template struct GPUBuffer<ForceValues>;
 

@@ -506,7 +506,7 @@ struct Water : public Propagator<_T>
         return MyUnits<T>(m_averageKinFilter.getAverage());
     }
 
-    AtomsNetwork<T, 64>& accessNeuralNetwork() { return m_neuralNetwork; }
+    AtomsNetwork<T>& accessNeuralNetwork() { return m_neuralNetwork; }
 
     void makeTimeStep()
     {
@@ -628,6 +628,6 @@ private:
     NvU64 m_dbgNContributions = 0;
 #endif
 
-    AtomsNetwork<T, 64> m_neuralNetwork;
+    AtomsNetwork<T> m_neuralNetwork;
     bool m_isNetworkTrained = false;
 };

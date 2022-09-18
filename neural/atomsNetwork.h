@@ -19,18 +19,19 @@ struct TransientAtomData
     kirill::float3 vSpeed = {};
     float fCharge = 0;
 };
+
+constexpr NvU32 ATOMS_PER_CLUSTER = 64;
+
 // ForceValues and ForceIndices are split to different structs because ForceIndices at the beginning and
 // at the end of each step are the same, while ForceValues change
-template <NvU32 nAtomsPerCluster>
 struct ForceValues
 {
-    std::array<float, nAtomsPerCluster - 1> m_nCovalentBonds = {};
+    std::array<float, ATOMS_PER_CLUSTER - 1> m_nCovalentBonds = {};
 };
-template <NvU32 nAtomsPerCluster>
 struct ForceIndices
 {
     NvU32 nIndices = 0;
-    std::array<NvU32, nAtomsPerCluster - 1> atomIndices = {};
+    std::array<NvU32, ATOMS_PER_CLUSTER - 1> atomIndices = {};
 };
 
 
@@ -42,7 +43,7 @@ inline void copy(rtvector<float, 3>& dst, const rtvector<T, 3>& src)
     dst[2] = (float)src[2];
 }
 
-template <class T, NvU32 nAtomsPerCluster>
+template <class T>
 struct AtomsNetwork : public NeuralNetwork
 {
     AtomsNetwork()
@@ -199,10 +200,10 @@ private:
         // each force is a single float (stores only the number of covalent bonds)
         // we'll put central atom at the end, and that atom doesn't need transient data (because it's all zero)
         nvAssert(sizeof(TransientAtomData) % sizeof(float) == 0);
-        return computeInputAtomOffset(nAtomsPerCluster) + uForce - sizeof(TransientAtomData) / sizeof(float);
+        return computeInputAtomOffset(ATOMS_PER_CLUSTER) + uForce - sizeof(TransientAtomData) / sizeof(float);
     }
     // this is essentially an offset to the force one after the last
-    static const NvU32 s_nInputValuesPerCluster = computeInputForceOffset(nAtomsPerCluster);
+    static const NvU32 s_nInputValuesPerCluster = computeInputForceOffset(ATOMS_PER_CLUSTER);
 
     // **** output offsets computation
     static constexpr NvU32 computeOutputAtomOffset(NvU32 uAtom)
@@ -216,7 +217,7 @@ private:
         return computeOutputAtomOffset(1) + uForce;
     }
     // this is essentially an offset to the force one after the last
-    static const NvU32 s_nOutputValuesPerCluster = computeOutputForceOffset(nAtomsPerCluster);
+    static const NvU32 s_nOutputValuesPerCluster = computeOutputForceOffset(ATOMS_PER_CLUSTER);
 
     bool createaAtomLayers(std::vector<std::shared_ptr<ILayer>>& pLayers)
     {
@@ -252,10 +253,10 @@ private:
         NvU32 uCentralAtom = uSrcCluster % getNAtoms();
 
         const GPUBuffer<TransientAtomData>& transientData = *m_pTransientAtomData[uSimStep];
-        const ForceIndices<nAtomsPerCluster>& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
-        const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[uSimStep * 2])[uCentralAtom];
+        const ForceIndices& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
+        const ForceValues& fv = (*m_pForceValues[uSimStep * 2])[uCentralAtom];
 
-        copyAtomToInputTensor(input, uDstCluster, nAtomsPerCluster - 1, uCentralAtom, uCentralAtom, transientData); // copy the central atom
+        copyAtomToInputTensor(input, uDstCluster, ATOMS_PER_CLUSTER - 1, uCentralAtom, uCentralAtom, transientData); // copy the central atom
         for (NvU32 u = 0; u < fi.nIndices; ++u)
         {
             copyAtomToInputTensor(input, uDstCluster, u, uCentralAtom, fi.atomIndices[u], transientData); // copy auxiliary atoms
@@ -293,8 +294,8 @@ private:
         const GPUBuffer<TransientAtomData>& transientDataNext = *m_pTransientAtomData[uSimStep + 1];
         const TransientAtomData& centAtomIn = transientDataPrev[uCentralAtom];
         const TransientAtomData& centAtomOut = transientDataNext[uCentralAtom];
-        const ForceIndices<nAtomsPerCluster>& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
-        const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[uSimStep * 2 + 1])[uCentralAtom];
+        const ForceIndices& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
+        const ForceValues& fv = (*m_pForceValues[uSimStep * 2 + 1])[uCentralAtom];
 
         // copy the central atom
         rtvector<float, 3> vPos = m_boxWrapper.computeDir(centAtomOut.vPos, centAtomIn.vPos);
@@ -328,8 +329,8 @@ private:
         vSpeed[2] = output.access(uAtom, 5, 0, 0);
         atom.m_vSpeed += vSpeed;
 
-        const ForceIndices<nAtomsPerCluster>& fi = (*m_pForceIndices[0])[uAtom];
-        const ForceValues<nAtomsPerCluster>& fv = (*m_pForceValues[0])[uAtom];
+        const ForceIndices& fi = (*m_pForceIndices[0])[uAtom];
+        const ForceValues& fv = (*m_pForceValues[0])[uAtom];
         // copy the force information
         bool bDeferredCovalentBonds = false;
         for (NvU32 u = 0; u < fi.nIndices; ++u)
@@ -377,7 +378,7 @@ private:
             dstAtom.fCharge = 0;
         }
     }
-    NvU32 findTheFarthestAtom(NvU32 uAtom, const ForceIndices<nAtomsPerCluster>& indices, const SimContext<T> &simContext)
+    NvU32 findTheFarthestAtom(NvU32 uAtom, const ForceIndices& indices, const SimContext<T> &simContext)
     {
         const std::vector<Atom<T>>& atoms = simContext.m_atoms;
         const BoxWrapper<T>& boxWrapper = simContext.m_bBox;
@@ -401,8 +402,8 @@ private:
     {
         const ForceMap<T>& forceMap = simContext.m_forces;
 
-        m_pForceIndices.push_back(new GPUBuffer<ForceIndices<nAtomsPerCluster>>);
-        GPUBuffer<ForceIndices<nAtomsPerCluster>>& pIndices = **m_pForceIndices.rbegin();
+        m_pForceIndices.push_back(new GPUBuffer<ForceIndices>);
+        GPUBuffer<ForceIndices>& pIndices = **m_pForceIndices.rbegin();
         pIndices.resize(getNAtoms());
 
         for (NvU32 uForce = 0; uForce < forceMap.size(); ++uForce)
@@ -411,7 +412,7 @@ private:
                 continue;
             const Force<T>& force = forceMap.accessForceByIndex(uForce);
             {
-                ForceIndices<nAtomsPerCluster>& fi1 = pIndices[force.getAtom1Index()];
+                ForceIndices& fi1 = pIndices[force.getAtom1Index()];
                 if (fi1.nIndices >= fi1.atomIndices.size())
                 {
                     --fi1.nIndices;
@@ -422,7 +423,7 @@ private:
                 fi1.atomIndices[fi1.nIndices++] = force.getAtom2Index();
             }
             {
-                ForceIndices<nAtomsPerCluster>& fi2 = pIndices[force.getAtom2Index()];
+                ForceIndices& fi2 = pIndices[force.getAtom2Index()];
                 if (fi2.nIndices >= fi2.atomIndices.size())
                 {
                     --fi2.nIndices;
@@ -436,14 +437,14 @@ private:
     }
     void copyBondsFromTheModel(const ForceMap<T>& forceMap)
     {
-        m_pForceValues.push_back(new GPUBuffer<ForceValues<nAtomsPerCluster>>);
-        GPUBuffer<ForceValues<nAtomsPerCluster>>& pValues = **m_pForceValues.rbegin();
+        m_pForceValues.push_back(new GPUBuffer<ForceValues>);
+        GPUBuffer<ForceValues>& pValues = **m_pForceValues.rbegin();
         pValues.resize(getNAtoms());
 
-        const GPUBuffer<ForceIndices<nAtomsPerCluster>>& pIndices = **m_pForceIndices.rbegin();
+        const GPUBuffer<ForceIndices>& pIndices = **m_pForceIndices.rbegin();
         for (NvU32 uAtom1 = 0; uAtom1 < getNAtoms(); ++uAtom1)
         {
-            const ForceIndices<nAtomsPerCluster>& indices = pIndices[uAtom1];
+            const ForceIndices& indices = pIndices[uAtom1];
             for (NvU32 u = 0; u < indices.nIndices; ++u)
             {
                 NvU32 uAtom2 = indices.atomIndices[u];
@@ -461,8 +462,8 @@ private:
 
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
     std::vector<GPUBuffer<TransientAtomData>*> m_pTransientAtomData; // 1 in the beginning + 1 per simulation step
-    std::vector<GPUBuffer<ForceValues<nAtomsPerCluster>>*> m_pForceValues; // 2 per simulation step
-    std::vector<GPUBuffer<ForceIndices<nAtomsPerCluster>>*> m_pForceIndices; // 1 per simulation step
+    std::vector<GPUBuffer<ForceValues>*> m_pForceValues; // 2 per simulation step
+    std::vector<GPUBuffer<ForceIndices>*> m_pForceIndices; // 1 per simulation step
     BoxWrapper<T> m_boxWrapper;
 
     std::vector<NvU32> m_batchAtomIndices;
