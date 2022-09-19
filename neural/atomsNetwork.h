@@ -62,13 +62,8 @@ struct AtomsNetwork : public NeuralNetwork
 
     void propagate(SimContext<T>& simContext)
     {
-        m_pTransientAtomData.resize(0);
-        copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        m_pForceIndices.resize(0);
-        copyForceIndicesFromTheModel(simContext);
-        m_pForceValues.resize(0);
-        copyBondsFromTheModel(simContext.m_forces);
-
+        nvAssert(false);
+#if 0
         NvU32 nAtoms = (NvU32)simContext.m_atoms.size();
         if (m_batchAtomIndices.size() != nAtoms)
         {
@@ -88,43 +83,49 @@ struct AtomsNetwork : public NeuralNetwork
         {
             propagateAtom(output, u, simContext);
         }
+        // the last simulation step is useless in future because it was made using neural network - so remove it
+        nvAssert(false);
+#endif
     }
 
-    void notifyStepBeginning(const SimContext<T> &simContext)
+    void notifyStepBeginning(const SimContext<T> &simContext, NvU32 uStep)
     {
-        if (hasEnoughData())
+        if (m_simSteps.size() >= 1000)
         {
-            if (m_bNeedToSave)
+            if (!m_bAlreadySaved)
             {
-                m_bNeedToSave = false;
                 MyWriter writer("c:\\atomNets\\networkFromWaterApp.bin");
                 serialize(writer);
+                m_bAlreadySaved = true;
             }
             return;
         }
-        m_bSimStepStarted = true;
-        m_bNeedToSave = true;
 
-        if (m_pTransientAtomData.size() == 0)
-        {
-            copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        }
-        copyForceIndicesFromTheModel(simContext);
-        copyBondsFromTheModel(simContext.m_forces);
+        Step newStep;
+        newStep.m_index = uStep;
+        // can we save storage and get prev atoms state from the previous step?
+        if (m_simSteps.size() > 0 && m_simSteps.rbegin()->m_index + 1 == uStep)
+            newStep.m_pAtomsPrev = m_simSteps.rbegin()->m_pAtomsNext;
+        else
+            newStep.m_pAtomsPrev = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        newStep.m_pForceIndices = copyForceIndicesFromTheModel(simContext);
+        newStep.m_pForcesPrev = copyBondsFromTheModel(simContext.m_forces, *newStep.m_pForceIndices);
+        m_simSteps.push_back(newStep);
     }
 
     void notifyStepDone(const SimContext<T> &simContext)
     {
-        if (!m_bSimStepStarted)
+        // do we have the first part of the step stored?
+        if (m_simSteps.size() == 0)
+            return;
+        Step& simStep = *m_simSteps.rbegin();
+        if (simStep.m_pAtomsNext != nullptr || simStep.m_pForcesNext != nullptr)
             return;
 
-        copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        copyBondsFromTheModel(simContext.m_forces);
-
-        m_bSimStepStarted = false;
+        simStep.m_pAtomsNext = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        simStep.m_pForcesNext = copyBondsFromTheModel(simContext.m_forces, *simStep.m_pForceIndices);
     }
-    NvU32 getNStoredSimSteps() const { return (NvU32)m_pForceIndices.size(); }
-    bool hasEnoughData() const { return !m_bSimStepStarted && getNStoredSimSteps() >= 1000; }
+    NvU32 getNStoredSimSteps() const { return (NvU32)m_simSteps.size(); }
 
     virtual NvU32 getNBatches()
     {
@@ -181,9 +182,15 @@ struct AtomsNetwork : public NeuralNetwork
     {
         NeuralNetwork::serialize(s);
         m_constAtomData.serialize("m_constAtomDataTensor", s);
-        s.serializeArrayOfPointers("m_pTransientAtomDataArray", m_pTransientAtomData);
-        s.serializeArrayOfPointers("m_pForceValuesArray", m_pForceValues);
-        s.serializeArrayOfPointers("m_pForceIndicesArray", m_pForceIndices);
+        s.serializeArraySize("m_simSteps", m_simSteps);
+        if (m_simSteps.size() > 0)
+        {
+            m_simSteps[0].serialize(s);
+        }
+        for (NvU32 u = 1; u < m_simSteps.size(); ++u)
+        {
+            m_simSteps[u].serialize(s, &m_simSteps[u - 1]);
+        }
         s.serializePreallocatedMem("m_boxWrapper", &m_boxWrapper, sizeof(m_boxWrapper));
     }
 
@@ -252,9 +259,10 @@ private:
         NvU32 uSimStep = uSrcCluster / getNAtoms();
         NvU32 uCentralAtom = uSrcCluster % getNAtoms();
 
-        const GPUBuffer<TransientAtomData>& transientData = *m_pTransientAtomData[uSimStep];
-        const ForceIndices& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
-        const ForceValues& fv = (*m_pForceValues[uSimStep * 2])[uCentralAtom];
+        const Step& simStep = m_simSteps[uSimStep];
+        const GPUBuffer<TransientAtomData>& transientData = *simStep.m_pAtomsPrev;
+        const ForceIndices& fi = (*simStep.m_pForceIndices)[uCentralAtom];
+        const ForceValues& fv = (*simStep.m_pForcesPrev)[uCentralAtom];
 
         copyAtomToInputTensor(input, uDstCluster, ATOMS_PER_CLUSTER - 1, uCentralAtom, uCentralAtom, transientData); // copy the central atom
         for (NvU32 u = 0; u < fi.nIndices; ++u)
@@ -285,17 +293,19 @@ private:
         input.access(uDstCluster, hi++, 0, 0) = vSpeed[1];
         input.access(uDstCluster, hi++, 0, 0) = vSpeed[2];
     }
-    void copyClusterToOutputTensor(Tensor<float> &wantedOutput, NvU32 uDstCluster, NvU32 uSrcCluster)
+    void copyClusterToOutputTensor(Tensor<float> &wantedOutput, NvU32 uDstCluster,
+        NvU32 uSrcCluster) const
     {
         NvU32 uSimStep = uSrcCluster / getNAtoms();
         NvU32 uCentralAtom = uSrcCluster % getNAtoms();
 
-        const GPUBuffer<TransientAtomData>& transientDataPrev = *m_pTransientAtomData[uSimStep];
-        const GPUBuffer<TransientAtomData>& transientDataNext = *m_pTransientAtomData[uSimStep + 1];
+        const Step& simStep = m_simSteps[uSimStep];
+        const GPUBuffer<TransientAtomData>& transientDataPrev = *simStep.m_pAtomsPrev;
+        const GPUBuffer<TransientAtomData>& transientDataNext = *simStep.m_pAtomsNext;
         const TransientAtomData& centAtomIn = transientDataPrev[uCentralAtom];
         const TransientAtomData& centAtomOut = transientDataNext[uCentralAtom];
-        const ForceIndices& fi = (*m_pForceIndices[uSimStep])[uCentralAtom];
-        const ForceValues& fv = (*m_pForceValues[uSimStep * 2 + 1])[uCentralAtom];
+        const ForceIndices& fi = (*simStep.m_pForceIndices)[uCentralAtom];
+        const ForceValues& fv = (*simStep.m_pForcesNext)[uCentralAtom];
 
         // copy the central atom
         rtvector<float, 3> vPos = m_boxWrapper.computeDir(centAtomOut.vPos, centAtomIn.vPos);
@@ -315,7 +325,7 @@ private:
         }
     }
 
-    void propagateAtom(Tensor<float>& output, NvU32 uAtom, SimContext<T>& simContext)
+    void propagateAtom(Tensor<float>& output, NvU32 uAtom, SimContext<T>& simContext) const
     {
         Atom<T>& atom = simContext.m_atoms[uAtom];
         rtvector<float, 3> vDir;
@@ -329,8 +339,9 @@ private:
         vSpeed[2] = output.access(uAtom, 5, 0, 0);
         atom.m_vSpeed += vSpeed;
 
-        const ForceIndices& fi = (*m_pForceIndices[0])[uAtom];
-        const ForceValues& fv = (*m_pForceValues[0])[uAtom];
+        const Step &simStep = *m_simSteps.rbegin();
+        const ForceIndices& fi = simStep.m_pForceIndices[uAtom];
+        const ForceValues& fv = simStep.m_pForcesPrev[uAtom];
         // copy the force information
         bool bDeferredCovalentBonds = false;
         for (NvU32 u = 0; u < fi.nIndices; ++u)
@@ -363,10 +374,12 @@ private:
             dstAtom.fElectroNegativity = 1;
         }
     }
-    void copyTransientAtomsDataFromTheModel(const std::vector<Atom<T>>& atoms)
+    std::shared_ptr<GPUBuffer<TransientAtomData>> copyTransientAtomsDataFromTheModel(
+        const std::vector<Atom<T>>& atoms) const
     {
-        m_pTransientAtomData.push_back(new GPUBuffer<TransientAtomData>);
-        GPUBuffer<TransientAtomData>& dst = **m_pTransientAtomData.rbegin();
+        std::shared_ptr<GPUBuffer<TransientAtomData>> pDst =
+            std::make_shared<GPUBuffer<TransientAtomData>>();
+        GPUBuffer<TransientAtomData>& dst = *pDst;
         dst.resize(atoms.size());
 
         for (NvU32 uAtom = 0; uAtom < atoms.size(); ++uAtom)
@@ -377,8 +390,11 @@ private:
             copy(dstAtom.vSpeed, srcAtom.m_vSpeed);
             dstAtom.fCharge = 0;
         }
+
+        return pDst;
     }
-    NvU32 findTheFarthestAtom(NvU32 uAtom, const ForceIndices& indices, const SimContext<T> &simContext)
+    NvU32 findTheFarthestAtom(NvU32 uAtom, const ForceIndices& indices,
+        const SimContext<T> &simContext) const
     {
         const std::vector<Atom<T>>& atoms = simContext.m_atoms;
         const BoxWrapper<T>& boxWrapper = simContext.m_bBox;
@@ -398,12 +414,14 @@ private:
         }
         return uFarthestIndex;
     }
-    void copyForceIndicesFromTheModel(const SimContext<T>& simContext)
+    std::shared_ptr<GPUBuffer<ForceIndices>> copyForceIndicesFromTheModel(
+        const SimContext<T>& simContext) const
     {
         const ForceMap<T>& forceMap = simContext.m_forces;
 
-        m_pForceIndices.push_back(new GPUBuffer<ForceIndices>);
-        GPUBuffer<ForceIndices>& pIndices = **m_pForceIndices.rbegin();
+        std::shared_ptr<GPUBuffer<ForceIndices>> pDst =
+            std::make_shared< GPUBuffer<ForceIndices>>();
+        GPUBuffer<ForceIndices>& pIndices = *pDst;
         pIndices.resize(getNAtoms());
 
         for (NvU32 uForce = 0; uForce < forceMap.size(); ++uForce)
@@ -434,14 +452,16 @@ private:
                 fi2.atomIndices[fi2.nIndices++] = force.getAtom1Index();
             }
         }
+
+        return pDst;
     }
-    void copyBondsFromTheModel(const ForceMap<T>& forceMap)
+    std::shared_ptr<GPUBuffer<ForceValues>> copyBondsFromTheModel(const ForceMap<T>& forceMap,
+        const GPUBuffer<ForceIndices>& pIndices) const
     {
-        m_pForceValues.push_back(new GPUBuffer<ForceValues>);
-        GPUBuffer<ForceValues>& pValues = **m_pForceValues.rbegin();
+        std::shared_ptr<GPUBuffer<ForceValues>> pDst = std::make_shared<GPUBuffer<ForceValues>>();
+        GPUBuffer<ForceValues>& pValues = *pDst;
         pValues.resize(getNAtoms());
 
-        const GPUBuffer<ForceIndices>& pIndices = **m_pForceIndices.rbegin();
         for (NvU32 uAtom1 = 0; uAtom1 < getNAtoms(); ++uAtom1)
         {
             const ForceIndices& indices = pIndices[uAtom1];
@@ -456,14 +476,38 @@ private:
                 }
             }
         }
+
+        return pDst;
     }
 
-    bool m_bSimStepStarted = false, m_bNeedToSave = false;
+    bool m_bAlreadySaved = false;
 
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
-    std::vector<GPUBuffer<TransientAtomData>*> m_pTransientAtomData; // 1 in the beginning + 1 per simulation step
-    std::vector<GPUBuffer<ForceValues>*> m_pForceValues; // 2 per simulation step
-    std::vector<GPUBuffer<ForceIndices>*> m_pForceIndices; // 1 per simulation step
+    struct Step
+    {
+        void serialize(ISerializer& s, Step *pPrevStep = nullptr)
+        {
+            s.serializeSimpleType("m_index", m_index);
+            // can we save storage and get atoms state from the prev step
+            if (pPrevStep && pPrevStep->m_index + 1 == m_index)
+            {
+                m_pAtomsPrev = pPrevStep->m_pAtomsNext;
+            }
+            else
+            {
+                s.serializeSharedPtr("m_pAtomsPrev", m_pAtomsPrev);
+            }
+            s.serializeSharedPtr("m_pAtomsNext", m_pAtomsNext);
+            s.serializeSharedPtr("m_pForcesPrev", m_pForcesPrev);
+            s.serializeSharedPtr("m_pForcesNext", m_pForcesNext);
+            s.serializeSharedPtr("m_pForceIndices", m_pForceIndices);
+        }
+        NvU32 m_index = 0;
+        std::shared_ptr<GPUBuffer<TransientAtomData>> m_pAtomsPrev, m_pAtomsNext;
+        std::shared_ptr<GPUBuffer<ForceValues>> m_pForcesPrev, m_pForcesNext;
+        std::shared_ptr<GPUBuffer<ForceIndices>> m_pForceIndices;
+    };
+    std::vector<Step> m_simSteps;
     BoxWrapper<T> m_boxWrapper;
 
     std::vector<NvU32> m_batchAtomIndices;

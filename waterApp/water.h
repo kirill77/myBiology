@@ -513,6 +513,7 @@ struct Water : public Propagator<_T>
         updateListOfForces();
 
         this->m_c.m_globalState.resetKinComputation();
+        m_neuralNetwork.notifyStepBeginning(this->m_c, m_nSimStepsMade);
 
         if (m_isNetworkTrained)
         {
@@ -525,7 +526,6 @@ struct Water : public Propagator<_T>
         }
         else
         {
-            m_neuralNetwork.notifyStepBeginning(this->m_c);
             this->propagate();
         }
 
@@ -535,10 +535,9 @@ struct Water : public Propagator<_T>
 
         m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
 
-        if (!m_isNetworkTrained)
-        {
-            m_neuralNetwork.notifyStepDone(this->m_c);
-        }
+        m_neuralNetwork.notifyStepDone(this->m_c);
+
+        ++m_nSimStepsMade;
     }
 
     NvU32 getNNodes() const { return (NvU32)m_ocTree.m_nodes.size(); }
@@ -630,4 +629,5 @@ private:
 
     AtomsNetwork<T> m_neuralNetwork;
     bool m_isNetworkTrained = false;
+    NvU32 m_nSimStepsMade = 0;
 };
