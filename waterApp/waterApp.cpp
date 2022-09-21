@@ -93,6 +93,7 @@ struct MyViewer : public Viewer
         {
             m_bSimulationPaused = !m_bSimulationPaused;
         }
+        m_water.notifyKeyPress(key, modifiers);
         return false;
     }
     virtual bool mouse_press_event(int x, int y, int button, int modifiers)
@@ -295,6 +296,9 @@ private:
         texter_->draw(sBuffer,
             x * dpi_scaling(), y * dpi_scaling(), font_size, TextRenderer::Align(alignment_), 1, vec3(0, 0, 0),
             line_spacing_, upper_left_);
+        y += 40;
+
+        y = m_water.drawText(texter_, fLeftBoundary, y, dpi_scaling(), font_size);
 
         if (m_pickedAtomIndex != -1)
         {

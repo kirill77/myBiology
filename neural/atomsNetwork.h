@@ -7,6 +7,38 @@
 #include "network.h"
 #include "batchTrainer.h"
 
+// classes used to create scrambled arrays of atom indices for training
+struct NullScrambler
+{
+    NullScrambler(NvU32 uStart, NvU32 uSize) : m_uStart(uStart), m_uSize(uSize)
+    {
+    }
+    NvU32 operator[](NvU32 u) const
+    {
+        nvAssert(u < m_uSize);
+        return m_uStart + u;
+    }
+    NvU32 size() const { return m_uSize; }
+private:
+    NvU32 m_uStart = 0, m_uSize;
+};
+struct ArrayScrambler
+{
+    ArrayScrambler(const std::vector<NvU32>& p, NvU32 uStart, NvU32 uSize) : m_p (&p[uStart]), m_uSize(uSize)
+    {
+        nvAssert(p.size() <= uStart + uSize);
+    }
+    NvU32 operator[](NvU32 u) const
+    {
+        nvAssert(u < m_uSize);
+        return m_p[u];
+    }
+    NvU32 size() const { return m_uSize; }
+private:
+    const NvU32* m_p = nullptr;
+    NvU32 m_uSize = 0;
+};
+
 struct ConstantAtomData
 {
     float fMass = 0;
@@ -62,19 +94,14 @@ struct AtomsNetwork : public NeuralNetwork
 
     void propagate(SimContext<T>& simContext)
     {
-        nvAssert(false);
-#if 0
-        NvU32 nAtoms = (NvU32)simContext.m_atoms.size();
-        if (m_batchAtomIndices.size() != nAtoms)
-        {
-            m_batchAtomIndices.resize(simContext.m_atoms.size());
-            for (NvU32 u = 0; u < m_batchAtomIndices.size(); ++u)
-            {
-                m_batchAtomIndices[u] = u;
-            }
-        }
+        NvU32 nAtoms = getNAtoms();
+        NullScrambler scrambler(0, nAtoms);
 
-        TensorRef pInput = createInputTensor(m_batchAtomIndices, 0, (NvU32)m_batchAtomIndices.size());
+        // the scrambler points to the first sim step - so put our last step there temporarily
+        nvSwap(m_lastSimStep, m_simSteps[0]);
+        TensorRef pInput = createInputTensor(scrambler);
+        nvSwap(m_lastSimStep, m_simSteps[0]);
+
         TensorRef pOutput = this->forwardPass(0, pInput);
         pOutput->syncToHost();
 
@@ -83,47 +110,39 @@ struct AtomsNetwork : public NeuralNetwork
         {
             propagateAtom(output, u, simContext);
         }
-        // the last simulation step is useless in future because it was made using neural network - so remove it
-        nvAssert(false);
-#endif
     }
 
     void notifyStepBeginning(const SimContext<T> &simContext, NvU32 uStep)
     {
-        if (m_simSteps.size() >= 1000)
-        {
-            if (!m_bAlreadySaved)
-            {
-                MyWriter writer("c:\\atomNets\\networkFromWaterApp.bin");
-                serialize(writer);
-                m_bAlreadySaved = true;
-            }
-            return;
-        }
-
-        Step newStep;
-        newStep.m_index = uStep;
-        // can we save storage and get prev atoms state from the previous step?
-        if (m_simSteps.size() > 0 && m_simSteps.rbegin()->m_index + 1 == uStep)
-            newStep.m_pAtomsPrev = m_simSteps.rbegin()->m_pAtomsNext;
+        // do we have atoms from previous sim step that we can use?
+        if (m_lastSimStep.m_pAtomsNext)
+            m_lastSimStep.m_pAtomsPrev = m_lastSimStep.m_pAtomsNext;
         else
-            newStep.m_pAtomsPrev = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        newStep.m_pForceIndices = copyForceIndicesFromTheModel(simContext);
-        newStep.m_pForcesPrev = copyBondsFromTheModel(simContext.m_forces, *newStep.m_pForceIndices);
-        m_simSteps.push_back(newStep);
+            m_lastSimStep.m_pAtomsPrev = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        m_lastSimStep.m_pAtomsNext = nullptr;
+        m_lastSimStep.m_index = uStep;
+        m_lastSimStep.m_pForceIndices = copyForceIndicesFromTheModel(simContext);
+        m_lastSimStep.m_pForcesPrev = copyBondsFromTheModel(simContext.m_forces, *m_lastSimStep.m_pForceIndices);
+        m_lastSimStep.m_pForcesNext = nullptr;
     }
 
     void notifyStepDone(const SimContext<T> &simContext)
     {
-        // do we have the first part of the step stored?
-        if (m_simSteps.size() == 0)
-            return;
-        Step& simStep = *m_simSteps.rbegin();
-        if (simStep.m_pAtomsNext != nullptr || simStep.m_pForcesNext != nullptr)
-            return;
+        m_lastSimStep.m_pAtomsNext = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
+        m_lastSimStep.m_pForcesNext = copyBondsFromTheModel(simContext.m_forces, *m_lastSimStep.m_pForceIndices);
 
-        simStep.m_pAtomsNext = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
-        simStep.m_pForcesNext = copyBondsFromTheModel(simContext.m_forces, *simStep.m_pForceIndices);
+        if (m_simSteps.size() <= 1000)
+        {
+            if (m_simSteps.size() < 1000)
+            {
+                m_simSteps.push_back(m_lastSimStep);
+            }
+            if (m_simSteps.size() == 1000)
+            {
+                MyWriter writer("c:\\atomNets\\networkFromWaterApp_1000.bin");
+                serialize(writer);
+            }
+        }
     }
     NvU32 getNStoredSimSteps() const { return (NvU32)m_simSteps.size(); }
 
@@ -132,30 +151,15 @@ struct AtomsNetwork : public NeuralNetwork
         return getNStoredSimSteps() * getNAtoms() / NATOMS_PER_BATCH;
     }
 
-    TensorRef createInputTensor(const std::vector<NvU32>& atomIndices, NvU32 uFirstAtom,
-        NvU32 nAtoms) const
+    void initBatchForLastSimStep(BatchTrainer &batch)
     {
-        // initialize inputs and outputs to zero (force CPU because we have to fill those buffers on CPU)
-        std::array<unsigned, 4> inputDims = { nAtoms, s_nInputValuesPerCluster, 1, 1 };
-        TensorRef pInput = std::make_shared<Tensor<float>>(inputDims);
-        Tensor<float>& input = *pInput;
-        input.clearSubregion(0, (NvU32)input.size(), EXECUTE_MODE_FORCE_CPU);
+        NvU32 nAtoms = getNAtoms();
+        NullScrambler scrambler(0, nAtoms);
 
-        // copy all data to input and output tensors
-        for (NvU32 u = 0; u < nAtoms; ++u)
-        {
-            copyClusterToInputTensor(input, u, atomIndices[uFirstAtom + u]);
-        }
-
-        return pInput;
-    }
-    TensorRef allocateOutputTensor(NvU32 nAtoms) const
-    {
-        std::array<unsigned, 4> outputDims = { nAtoms, s_nOutputValuesPerCluster, 1, 1 };
-        TensorRef pOutput = std::make_shared<Tensor<float>>(outputDims);
-        pOutput->init(outputDims);
-        pOutput->clearSubregion(0, (NvU32)pOutput->size(), EXECUTE_MODE_FORCE_CPU);
-        return pOutput;
+        // the scrambler points to the first sim step - so put our last step there temporarily
+        nvSwap(m_lastSimStep, m_simSteps[0]);
+        initBatchInternal(batch, 0, scrambler);
+        nvSwap(m_lastSimStep, m_simSteps[0]);
     }
 
     virtual void initBatch(BatchTrainer &batchTrainer, NvU32 uBatch) override
@@ -165,17 +169,8 @@ struct AtomsNetwork : public NeuralNetwork
             NvU32 nTotalClusters = getNBatches() * NATOMS_PER_BATCH;
             createBatchAtomIndices(nTotalClusters);
         }
-        TensorRef pInput = createInputTensor(m_batchAtomIndices, uBatch * NATOMS_PER_BATCH, NATOMS_PER_BATCH);
-
-        TensorRef pWantedOutput = allocateOutputTensor(NATOMS_PER_BATCH);
-        Tensor<float>& wantedOutput = *pWantedOutput;
-        // copy data to output tensors
-        for (NvU32 u = 0; u < NATOMS_PER_BATCH; ++u)
-        {
-            copyClusterToOutputTensor(wantedOutput, u,
-                m_batchAtomIndices[uBatch * NATOMS_PER_BATCH + u]);
-        }
-        batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
+        ArrayScrambler scrambler(m_batchAtomIndices, uBatch * NATOMS_PER_BATCH, NATOMS_PER_BATCH);
+        initBatchInternal(batchTrainer, uBatch, scrambler);
     }
 
     virtual void serialize(ISerializer& s) override
@@ -195,6 +190,48 @@ struct AtomsNetwork : public NeuralNetwork
     }
 
 private:
+    template <class Scrambler>
+    void initBatchInternal(BatchTrainer& batchTrainer, NvU32 uBatch, const Scrambler &scrambler)
+    {
+        TensorRef pInput = createInputTensor(scrambler);
+
+        TensorRef pWantedOutput = allocateOutputTensor(scrambler.size());
+        Tensor<float>& wantedOutput = *pWantedOutput;
+        // copy data to output tensors
+        for (NvU32 u = 0; u < scrambler.size(); ++u)
+        {
+            copyClusterToOutputTensor(wantedOutput, u, scrambler[u]);
+        }
+        batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
+    }
+
+    template <class Scrambler>
+    TensorRef createInputTensor(const Scrambler& scrambler) const
+    {
+        // initialize inputs and outputs to zero (force CPU because we have to fill those buffers on CPU)
+        std::array<unsigned, 4> inputDims = { scrambler.size(), s_nInputValuesPerCluster, 1, 1};
+        TensorRef pInput = std::make_shared<Tensor<float>>(inputDims);
+        Tensor<float>& input = *pInput;
+        input.clearSubregion(0, (NvU32)input.size(), EXECUTE_MODE_FORCE_CPU);
+
+        // copy all data to input and output tensors
+        for (NvU32 u = 0; u < scrambler.size(); ++u)
+        {
+            copyClusterToInputTensor(input, u, scrambler[u]);
+        }
+
+        return pInput;
+    }
+
+    TensorRef allocateOutputTensor(NvU32 nAtoms) const
+    {
+        std::array<unsigned, 4> outputDims = { nAtoms, s_nOutputValuesPerCluster, 1, 1 };
+        TensorRef pOutput = std::make_shared<Tensor<float>>(outputDims);
+        pOutput->init(outputDims);
+        pOutput->clearSubregion(0, (NvU32)pOutput->size(), EXECUTE_MODE_FORCE_CPU);
+        return pOutput;
+    }
+
     // **** offsets we use to create input tensor
     static constexpr NvU32 computeInputAtomOffset(NvU32 uAtom)
     {
@@ -316,12 +353,13 @@ private:
         wantedOutput.access(uDstCluster, 3, 0, 0) = vSpeed[0];
         wantedOutput.access(uDstCluster, 4, 0, 0) = vSpeed[1];
         wantedOutput.access(uDstCluster, 5, 0, 0) = vSpeed[2];
+        // charge is 0 currently - so we don't need to assign it here
 
         // copy the force information
         for (NvU32 u = 0; u < fi.nIndices; ++u)
         {
-            nvAssert(computeOutputForceOffset(u) == 6 + u);
-            wantedOutput.access(uDstCluster, 6 + u, 0, 0) = fv.m_nCovalentBonds[u];
+            nvAssert(computeOutputForceOffset(u) == 7 + u);
+            wantedOutput.access(uDstCluster, 7 + u, 0, 0) = fv.m_nCovalentBonds[u];
         }
     }
 
@@ -340,14 +378,14 @@ private:
         atom.m_vSpeed += vSpeed;
 
         const Step &simStep = *m_simSteps.rbegin();
-        const ForceIndices& fi = simStep.m_pForceIndices[uAtom];
-        const ForceValues& fv = simStep.m_pForcesPrev[uAtom];
+        const ForceIndices& fi = (*simStep.m_pForceIndices)[uAtom];
+        const ForceValues& fv = (*simStep.m_pForcesPrev)[uAtom];
         // copy the force information
         bool bDeferredCovalentBonds = false;
         for (NvU32 u = 0; u < fi.nIndices; ++u)
         {
-            nvAssert(computeOutputForceOffset(u) == 6 + u);
-            float nCovalentBonds = round(output.access(uAtom, 6 + u, 0, 0));
+            nvAssert(computeOutputForceOffset(u) == 7 + u);
+            float nCovalentBonds = round(output.access(uAtom, 7 + u, 0, 0));
             if (nCovalentBonds > fv.m_nCovalentBonds[u]) // new covalent bonds have appeared
             {
                 NvU32 uAtom1 = fi.atomIndices[u];
@@ -480,8 +518,6 @@ private:
         return pDst;
     }
 
-    bool m_bAlreadySaved = false;
-
     GPUBuffer<ConstantAtomData> m_constAtomData; // 1 buffer - describes static properties of all simulated atoms
     struct Step
     {
@@ -507,6 +543,7 @@ private:
         std::shared_ptr<GPUBuffer<ForceValues>> m_pForcesPrev, m_pForcesNext;
         std::shared_ptr<GPUBuffer<ForceIndices>> m_pForceIndices;
     };
+    Step m_lastSimStep;
     std::vector<Step> m_simSteps;
     BoxWrapper<T> m_boxWrapper;
 

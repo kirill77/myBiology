@@ -9,6 +9,8 @@
 #include "MonteCarlo/RNGSobol.h"
 #include "MonteCarlo/distributions.h"
 #include "neural/atomsNetwork.h"
+#include "neural/l2Computer.h"
+#include "neural/learningRates.h"
 
 extern NvU32 g_debugCount;
 
@@ -433,6 +435,10 @@ private:
     SimLayer<T> m_topSimLayer; // top simulation layer
 };
 
+namespace easy3d {
+    class TextRenderer;
+};
+
 template <class _T>
 struct Water : public Propagator<_T>
 {
@@ -495,10 +501,12 @@ struct Water : public Propagator<_T>
             MyReader reader("C:\\atomNets\\prev5\\trained_4016401.bin");
             m_isNetworkTrained = true;
             m_neuralNetwork.serialize(reader);
-            m_neuralNetwork.allocateBatchData(0, (NvU32)this->m_c.m_atoms.size());
         }
 #endif
+
+        m_neuralNetwork.allocateBatchData(0, (NvU32)this->m_c.m_atoms.size());
         m_neuralNetwork.init(this->m_c);
+        m_learningRates.init(m_neuralNetwork.getNLearningRatesNeeded());
     }
 
     MyUnits<T> getFilteredAverageKin() const
@@ -515,8 +523,10 @@ struct Water : public Propagator<_T>
         this->m_c.m_globalState.resetKinComputation();
         m_neuralNetwork.notifyStepBeginning(this->m_c, m_nSimStepsMade);
 
-        if (m_isNetworkTrained)
+        m_fNNPropPrbbAccum += m_fNNPropPrbb;
+        if (m_fNNPropPrbbAccum >= 1)
         {
+            m_fNNPropPrbbAccum -= 1;
             m_neuralNetwork.propagate(this->m_c);
             auto& atoms = this->m_c.m_atoms;
             for (NvU32 u = 0; u < atoms.size(); ++u)
@@ -537,6 +547,11 @@ struct Water : public Propagator<_T>
 
         m_neuralNetwork.notifyStepDone(this->m_c);
 
+        if (m_doTraining)
+        {
+            doTraining();
+        }
+
         ++m_nSimStepsMade;
     }
 
@@ -550,6 +565,11 @@ struct Water : public Propagator<_T>
     {
         return node.getNPoints() > 0;
     }
+
+    void notifyKeyPress(int key, int modifiers);
+    // returns new y coordinate (depends on whether something was printed or not)
+    float drawText(class easy3d::TextRenderer* pTexture, float x, float y, float fDpiScaling, float fFontSize);
+    float getAvgPreError() const { return m_fLastPreError; }
 
     // returns true if after this call interaction between those two boxes are fully accounted for
     bool addLeafAndNodeInteraction(NvU32 leafIndex, const OcBoxStack<T>& leafStack, NvU32 nodeIndex, const OcBoxStack<T>& nodeStack)
@@ -603,6 +623,7 @@ struct Water : public Propagator<_T>
     }
 
 private:
+    void doTraining();
     void updateListOfForces()
     {
         this->dissociateWeakBonds();
@@ -628,6 +649,10 @@ private:
 #endif
 
     AtomsNetwork<T> m_neuralNetwork;
-    bool m_isNetworkTrained = false;
+    bool m_doTraining = true;
     NvU32 m_nSimStepsMade = 0;
+    float m_fNNPropPrbb = 0, m_fNNPropPrbbAccum = 0, m_fLastPreError = 0;
+    BatchTrainer m_batch;
+    LossComputer m_lossComputer;
+    LearningRates m_learningRates;
 };
