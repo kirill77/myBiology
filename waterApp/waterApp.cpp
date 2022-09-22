@@ -89,9 +89,13 @@ struct MyViewer : public Viewer
 
     virtual bool key_press_event(int key, int modifiers)
     {
-        if (key == GLFW_KEY_SPACE)
+        if (key == GLFW_KEY_S)
         {
-            m_bSimulationPaused = !m_bSimulationPaused;
+            m_doSimulation = !m_doSimulation;
+        }
+        if (key == GLFW_KEY_T)
+        {
+            m_doTraining = !m_doTraining;
         }
         m_water.notifyKeyPress(key, modifiers);
         return false;
@@ -225,10 +229,14 @@ private:
         if (!m_bIsFirstDraw)
         {
             auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
-            if (!m_bSimulationPaused)
+            if (m_doSimulation)
             {
                 m_water.makeTimeStep();
                 updateVertexBuffers();
+            }
+            if (m_doTraining)
+            {
+                m_water.doTraining();
             }
         }
         else
@@ -318,7 +326,7 @@ private:
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
 
-    bool m_bSimulationPaused = false;
+    bool m_doSimulation = true, m_doTraining = true;
     NvU32 m_pickedAtomIndex = -1;
 
     // for text rendering:

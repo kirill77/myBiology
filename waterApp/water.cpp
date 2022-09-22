@@ -25,19 +25,15 @@ void Water<T>::notifyKeyPress(int key, int modifiers)
         m_fNNPropPrbb += 0.05f;
         m_fNNPropPrbb = std::min(m_fNNPropPrbb, 1.f);
     }
-    if (key == GLFW_KEY_T)
-    {
-        m_doTraining = !m_doTraining;
-    }
 }
 template <class T>
 float Water<T>::drawText(TextRenderer* pTexter, float x, float y, float fDpiScaling, float fFontSize)
 {
     char sBuffer[128];
 
-    if (m_doTraining)
+    if (m_fLastPreError > 0)
     {
-        sprintf_s(sBuffer, "avgPreError: %#.3g", getAvgPreError());
+        sprintf_s(sBuffer, "avgPreError: %#.3g", m_fLastPreError);
         pTexter->draw(sBuffer,
             x * fDpiScaling, y * fDpiScaling, fFontSize, TextRenderer::ALIGN_LEFT, 1);
         y += 40;

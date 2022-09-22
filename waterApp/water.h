@@ -547,11 +547,6 @@ struct Water : public Propagator<_T>
 
         m_neuralNetwork.notifyStepDone(this->m_c);
 
-        if (m_doTraining)
-        {
-            doTraining();
-        }
-
         ++m_nSimStepsMade;
     }
 
@@ -569,7 +564,6 @@ struct Water : public Propagator<_T>
     void notifyKeyPress(int key, int modifiers);
     // returns new y coordinate (depends on whether something was printed or not)
     float drawText(class easy3d::TextRenderer* pTexture, float x, float y, float fDpiScaling, float fFontSize);
-    float getAvgPreError() const { return m_fLastPreError; }
 
     // returns true if after this call interaction between those two boxes are fully accounted for
     bool addLeafAndNodeInteraction(NvU32 leafIndex, const OcBoxStack<T>& leafStack, NvU32 nodeIndex, const OcBoxStack<T>& nodeStack)
@@ -622,8 +616,9 @@ struct Water : public Propagator<_T>
         return true;
     }
 
-private:
     void doTraining();
+
+private:
     void updateListOfForces()
     {
         this->dissociateWeakBonds();
@@ -649,7 +644,6 @@ private:
 #endif
 
     AtomsNetwork<T> m_neuralNetwork;
-    bool m_doTraining = true;
     NvU32 m_nSimStepsMade = 0;
     float m_fNNPropPrbb = 0, m_fNNPropPrbbAccum = 0, m_fLastPreError = 0;
     BatchTrainer m_batch;
