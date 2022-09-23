@@ -39,6 +39,22 @@ void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
     }
     m_deviceRev = m_hostRev + (isWriteBind ? 1 : 0);
 }
+template <class T>
+void GPUBuffer<T>::decRef()
+{
+    nvAssert(this == m_pOrig && m_nRefs > 0);
+    if (--m_nRefs == 0)
+    {
+        if (m_pDevice)
+        {
+            cudaError_t error = cudaFree(m_pDevice);
+            nvAssert(error == cudaSuccess);
+            m_pDevice = nullptr;
+        }
+        delete[]m_pHost;
+        m_pHost = nullptr;
+    }
+}
 
 template <class T>
 void GPUBuffer<T>::syncToHost()

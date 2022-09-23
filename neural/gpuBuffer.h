@@ -119,15 +119,7 @@ public:
         m_nHostElems = m_pOrig->m_nHostElems;
         m_nDeviceElems = m_pOrig->m_nDeviceElems;
     }
-    void decRef()
-    {
-        nvAssert(this == m_pOrig && m_nRefs > 0);
-        if (--m_nRefs == 0)
-        {
-            delete[]m_pHost;
-            m_pHost = nullptr;
-        }
-    }
+    void decRef();
     void resizeInternal(size_t nElemsNew)
     {
         nvAssert(this == m_pOrig);
