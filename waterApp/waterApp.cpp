@@ -12,6 +12,7 @@
 
 #include "water.h"
 #include "neural/neuralTest.h"
+#include "MonteCarlo/distributions.h"
 
 using namespace easy3d;
 
@@ -89,13 +90,9 @@ struct MyViewer : public Viewer
 
     virtual bool key_press_event(int key, int modifiers)
     {
-        if (key == GLFW_KEY_S)
+        if (key == GLFW_KEY_S && modifiers == 0)
         {
             m_doSimulation = !m_doSimulation;
-        }
-        if (key == GLFW_KEY_T)
-        {
-            m_doTraining = !m_doTraining;
         }
         m_water.notifyKeyPress(key, modifiers);
         return false;
@@ -228,21 +225,14 @@ private:
         auto curTS = std::chrono::high_resolution_clock::now();
         if (!m_bIsFirstDraw)
         {
-            auto secondsElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(curTS - m_prevDrawTS);
             if (m_doSimulation)
             {
                 m_water.makeTimeStep();
-                updateVertexBuffers();
-            }
-            if (m_doTraining)
-            {
-                m_water.doTraining();
             }
         }
-        else
-        {
-            updateVertexBuffers();
-        }
+
+        updateVertexBuffers();
+
         m_prevDrawTS = curTS;
         if (m_bIsFirstDraw)
         {
@@ -326,7 +316,7 @@ private:
     Water<T> m_water;
     Viewer* m_pViewer = nullptr;
 
-    bool m_doSimulation = true, m_doTraining = true;
+    bool m_doSimulation = true;
     NvU32 m_pickedAtomIndex = -1;
 
     // for text rendering:

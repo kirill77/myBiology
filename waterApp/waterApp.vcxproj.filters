@@ -21,6 +21,12 @@
     <ClCompile Include="water.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="forceRandomizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="statusString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="water.h">
@@ -30,6 +36,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="forcePointer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="statusString.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

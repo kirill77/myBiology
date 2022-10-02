@@ -151,6 +151,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="forceRandomizer.cpp" />
+    <ClCompile Include="statusString.cpp" />
     <ClCompile Include="water.cpp" />
     <ClCompile Include="waterApp.cpp" />
   </ItemGroup>
@@ -225,6 +227,7 @@
   <ItemGroup>
     <ClInclude Include="..\ocTree\ocTree.h" />
     <ClInclude Include="forcePointer.h" />
+    <ClInclude Include="statusString.h" />
     <ClInclude Include="water.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

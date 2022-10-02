@@ -92,7 +92,8 @@ struct AtomsNetwork : public NeuralNetwork
         m_boxWrapper = simContext.m_bBox;
     }
 
-    void propagate(SimContext<T>& simContext)
+#if 0 // not needed for now - but good code when (for when I do inference)
+    void computeNeuralDir(SimContext<T>& simContext)
     {
         NvU32 nAtoms = getNAtoms();
         NullScrambler scrambler(0, nAtoms);
@@ -108,19 +109,20 @@ struct AtomsNetwork : public NeuralNetwork
         Tensor<float>& output = *pOutput;
         for (NvU32 u = 0; u < nAtoms; ++u)
         {
-            propagateAtom(output, u, simContext);
+            computeNeuralDir(output, u, simContext);
         }
     }
+#endif
 
-    void notifyStepBeginning(const SimContext<T> &simContext, NvU32 uStep)
+    void notifyStepBeginning(const SimContext<T> &simContext, NvU32 stepIndex)
     {
-        // do we have atoms from previous sim step that we can use?
-        if (m_lastSimStep.m_pAtomsNext)
+        // do we have atoms from the previous sim step that we can use?
+        if (m_lastSimStep.m_pAtomsNext && stepIndex == m_lastSimStep.m_index + 1)
             m_lastSimStep.m_pAtomsPrev = m_lastSimStep.m_pAtomsNext;
         else
             m_lastSimStep.m_pAtomsPrev = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
         m_lastSimStep.m_pAtomsNext = nullptr;
-        m_lastSimStep.m_index = uStep;
+        m_lastSimStep.m_index = stepIndex;
         m_lastSimStep.m_pForceIndices = copyForceIndicesFromTheModel(simContext);
         m_lastSimStep.m_pForcesPrev = copyBondsFromTheModel(simContext.m_forces, *m_lastSimStep.m_pForceIndices);
         m_lastSimStep.m_pForcesNext = nullptr;
@@ -131,15 +133,19 @@ struct AtomsNetwork : public NeuralNetwork
         m_lastSimStep.m_pAtomsNext = copyTransientAtomsDataFromTheModel(simContext.m_atoms);
         m_lastSimStep.m_pForcesNext = copyBondsFromTheModel(simContext.m_forces, *m_lastSimStep.m_pForceIndices);
 
-        if (m_simSteps.size() <= 1000)
+        static const NvU32 NMAX_SIM_STEPS = 10000;
+
+        if (m_simSteps.size() <= NMAX_SIM_STEPS)
         {
-            if (m_simSteps.size() < 1000)
+            if (m_simSteps.size() < NMAX_SIM_STEPS)
             {
                 m_simSteps.push_back(m_lastSimStep);
             }
-            if (m_simSteps.size() == 1000)
+            if (m_simSteps.size() == NMAX_SIM_STEPS)
             {
-                MyWriter writer("c:\\atomNets\\networkFromWaterApp_1000.bin");
+                char sBuffer[128];
+                sprintf_s(sBuffer, "c:\\atomNets\\networkFromWaterApp_%d.bin", (NvU32)m_simSteps.size());
+                MyWriter writer(sBuffer);
                 serialize(writer);
             }
         }
@@ -363,14 +369,16 @@ private:
         }
     }
 
-    void propagateAtom(Tensor<float>& output, NvU32 uAtom, SimContext<T>& simContext) const
+#if 0 // not needed for now but good code (for when I do inference)
+    void computeNeuralDir(Tensor<float>& output, NvU32 uAtom, SimContext<T>& simContext) const
     {
         Atom<T>& atom = simContext.m_atoms[uAtom];
         rtvector<float, 3> vDir;
         vDir[0] = output.access(uAtom, 0, 0, 0);
         vDir[1] = output.access(uAtom, 1, 0, 0);
         vDir[2] = output.access(uAtom, 2, 0, 0);
-        atom.m_vPos = m_boxWrapper.wrapThePos(atom.m_vPos + vDir);
+        atom.m_vNeuralDir = vDir;
+#if 0
         rtvector<float, 3> vSpeed;
         vSpeed[0] = output.access(uAtom, 3, 0, 0);
         vSpeed[1] = output.access(uAtom, 4, 0, 0);
@@ -397,7 +405,10 @@ private:
                 force.createCovalentBondIfNeeded(atom, atom1, fDistSqr);
             }
         }
+#endif
     }
+#endif
+
     void copyConstAtomsDataFromTheModel(const std::vector<Atom<T>>& atoms)
     {
         GPUBuffer<ConstantAtomData>& dst = m_constAtomData;

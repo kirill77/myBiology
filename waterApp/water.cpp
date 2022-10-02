@@ -1,52 +1,28 @@
-#define NOMINMAX
-#include "water.h"
 #include "Easy3D/3rd_party/glfw/include/GLFW/glfw3.h"
-#include "Easy3D/easy3d/renderer/text_renderer.h"
-using TextRenderer = easy3d::TextRenderer;
+#include "water.h"
 
-template <class T>
-void Water<T>::doTraining()
-{
-    NvU32 nStepsBefore = m_learningRates.getNStepsMade();
-    m_neuralNetwork.initBatchForLastSimStep(m_batch);
-    for ( ; ; )
-    {
-        m_fLastPreError = m_batch.makeMinimalProgress(m_neuralNetwork, m_lossComputer, m_learningRates);
-        NvU32 nStepsAfter = m_learningRates.getNStepsMade();
-        if (nStepsAfter > nStepsBefore + 500)
-            break;
-    }
-}
 template <class T>
 void Water<T>::notifyKeyPress(int key, int modifiers)
 {
-    if (key == GLFW_KEY_EQUAL && (modifiers & GLFW_MOD_SHIFT))
+    if (key == GLFW_KEY_S && (modifiers & GLFW_MOD_CONTROL))
     {
-        m_fNNPropPrbb += 0.05f;
-        m_fNNPropPrbb = std::min(m_fNNPropPrbb, 1.f);
+        char sBuffer[128];
+        sprintf_s(sBuffer, "c:\\atomNets\\water_%d.bin", m_neuralNetwork.getNStoredSimSteps());
+        MyWriter writer(sBuffer);
+        m_neuralNetwork.serialize(writer);
+        m_statusString.print("%s saved", sBuffer);
+    }
+    if (key == GLFW_KEY_R)
+    {
+        this->m_c.setRandomization(!this->m_c.getRandomization());
+        m_statusString.print("randomization of forces: %s", this->m_c.getRandomization() ? "enabled" : "disabled");
     }
 }
+
 template <class T>
-float Water<T>::drawText(TextRenderer* pTexter, float x, float y, float fDpiScaling, float fFontSize)
+float Water<T>::drawText(easy3d::TextRenderer* pTexter, float x, float y, float fDpiScaling, float fFontSize)
 {
-    char sBuffer[128];
-
-    if (m_fLastPreError > 0)
-    {
-        sprintf_s(sBuffer, "avgPreError: %#.3g", m_fLastPreError);
-        pTexter->draw(sBuffer,
-            x * fDpiScaling, y * fDpiScaling, fFontSize, TextRenderer::ALIGN_LEFT, 1);
-        y += 40;
-    }
-    if (m_fNNPropPrbbAccum > 0)
-    {
-        sprintf_s(sBuffer, "m_fNNPropPrbbAccum: %#.3g", m_fNNPropPrbbAccum);
-        pTexter->draw(sBuffer,
-            x * fDpiScaling, y * fDpiScaling, fFontSize, TextRenderer::ALIGN_LEFT, 1);
-        y += 40;
-    }
-
-    return y;
+    return m_statusString.drawText(pTexter, x, y, fDpiScaling, fFontSize);
 }
 
 //template struct Water<double>;

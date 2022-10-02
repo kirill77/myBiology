@@ -7,10 +7,10 @@
 #include "basics/myFilter.h"
 #include "ocTree/ocTree.h"
 #include "MonteCarlo/RNGSobol.h"
-#include "MonteCarlo/distributions.h"
+
 #include "neural/atomsNetwork.h"
-#include "neural/l2Computer.h"
-#include "neural/learningRates.h"
+#include "forceRandomizer.h"
+#include "statusString.h"
 
 extern NvU32 g_debugCount;
 
@@ -170,6 +170,11 @@ struct PropagatorAtom
         nvAssert(m_dbgState == DBG_INITED || m_dbgState == DBG_STEP1_DONE || m_dbgState == DBG_STEP2_DONE);
         m_vEndForce += vDeltaForce;
     }
+    MyUnits3<T> getTotalForce() const
+    {
+        nvAssert(m_dbgState == DBG_STEP2_DONE);
+        return m_vBeginForce;
+    }
 
 private:
     T m_fBeginTime = 0;
@@ -217,6 +222,28 @@ struct PrContext : public SimContext<T>
     std::vector<PropagatorForce<T>> m_prForces;
     SparseHierarchy m_atomLayers, m_forceLayers;
     GlobalState<T> m_globalState;
+
+    bool getRandomization() const
+    {
+        return m_bRandomizeForces;
+    }
+    void setRandomization(bool bRandomizeForces)
+    {
+        m_bRandomizeForces = bRandomizeForces;
+        if (m_bRandomizeForces)
+        {
+            m_forceRandomizer.init(*this);
+        }
+    }
+    void randomize(NvU32 uAtom)
+    {
+        nvAssert(m_bRandomizeForces);
+        m_forceRandomizer.randomize(uAtom, *this);
+    }
+    
+private:
+    bool m_bRandomizeForces = false;
+    ForceRandomizer m_forceRandomizer;
 };
 
 // simulation layer - hierarchy of ever diminishing time steps used for accuracy
@@ -269,6 +296,14 @@ struct SimLayer
         }
 
         updateForces<0>(fBeginTime, c);
+
+        if (c.getRandomization())
+        {
+            for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
+            {
+                c.randomize(uAtom);
+            }
+        }
 
         MyUnits<T> fTimeStep = fEndTime - fBeginTime;
         for (NvU32 uAtom = c.m_atomLayers.getFirstLayerElement(m_uLevel); uAtom < c.m_atoms.size(); uAtom = c.m_atomLayers.getNextElement(uAtom))
@@ -504,9 +539,7 @@ struct Water : public Propagator<_T>
         }
 #endif
 
-        m_neuralNetwork.allocateBatchData(0, (NvU32)this->m_c.m_atoms.size());
         m_neuralNetwork.init(this->m_c);
-        m_learningRates.init(m_neuralNetwork.getNLearningRatesNeeded());
     }
 
     MyUnits<T> getFilteredAverageKin() const
@@ -521,23 +554,12 @@ struct Water : public Propagator<_T>
         updateListOfForces();
 
         this->m_c.m_globalState.resetKinComputation();
-        m_neuralNetwork.notifyStepBeginning(this->m_c, m_nSimStepsMade);
+        if (!this->m_c.getRandomization())
+        {
+            m_neuralNetwork.notifyStepBeginning(this->m_c, m_nSimStepsMade);
+        }
 
-        m_fNNPropPrbbAccum += m_fNNPropPrbb;
-        if (m_fNNPropPrbbAccum >= 1)
-        {
-            m_fNNPropPrbbAccum -= 1;
-            m_neuralNetwork.propagate(this->m_c);
-            auto& atoms = this->m_c.m_atoms;
-            for (NvU32 u = 0; u < atoms.size(); ++u)
-            {
-                this->m_c.m_globalState.notifyAtomSpeed(atoms[u].getMass(), atoms[u].m_vSpeed, this->getCurTimeStep());
-            }
-        }
-        else
-        {
-            this->propagate();
-        }
+        this->propagate();
 
         MyUnits<T> fInstantaneousAverageKin = this->getInstantaneousAverageKin();
         m_averageKinFilter.addValue(fInstantaneousAverageKin);
@@ -545,7 +567,10 @@ struct Water : public Propagator<_T>
 
         m_speedScaler.scale(fInstantaneousAverageKin, fFilteredAverageKin, this->m_c.m_atoms);
 
-        m_neuralNetwork.notifyStepDone(this->m_c);
+        if (!this->m_c.getRandomization())
+        {
+            m_neuralNetwork.notifyStepDone(this->m_c);
+        }
 
         ++m_nSimStepsMade;
     }
@@ -563,7 +588,7 @@ struct Water : public Propagator<_T>
 
     void notifyKeyPress(int key, int modifiers);
     // returns new y coordinate (depends on whether something was printed or not)
-    float drawText(class easy3d::TextRenderer* pTexture, float x, float y, float fDpiScaling, float fFontSize);
+    float drawText(class easy3d::TextRenderer* pTexter, float x, float y, float fDpiScaling, float fFontSize);
 
     // returns true if after this call interaction between those two boxes are fully accounted for
     bool addLeafAndNodeInteraction(NvU32 leafIndex, const OcBoxStack<T>& leafStack, NvU32 nodeIndex, const OcBoxStack<T>& nodeStack)
@@ -616,8 +641,6 @@ struct Water : public Propagator<_T>
         return true;
     }
 
-    void doTraining();
-
 private:
     void updateListOfForces()
     {
@@ -645,8 +668,6 @@ private:
 
     AtomsNetwork<T> m_neuralNetwork;
     NvU32 m_nSimStepsMade = 0;
-    float m_fNNPropPrbb = 0, m_fNNPropPrbbAccum = 0, m_fLastPreError = 0;
-    BatchTrainer m_batch;
-    LossComputer m_lossComputer;
-    LearningRates m_learningRates;
+
+    StatusString m_statusString;
 };
