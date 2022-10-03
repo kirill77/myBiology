@@ -26,6 +26,13 @@ struct NeuralNetwork
             m_pLayers[uLayer]->allocateBatchData(uBatch, n, uLayer == 0);
         }
     }
+    virtual void freeBatchData(NvU32 uBatch)
+    {
+        for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
+        {
+            m_pLayers[uLayer]->freeBatchData(uBatch);
+        }
+    }
 
     // returns network output tensor
     TensorRef forwardPass(NvU32 uBatch, TensorRef pInput)

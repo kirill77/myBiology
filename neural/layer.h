@@ -14,6 +14,7 @@ struct ILayer
         float fBiasesLR, float fWeightsLR) = 0;
 
     virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer);
+    virtual void freeBatchData(NvU32 uBatch);
 
     void saveCurrentStateToBackup()
     {
@@ -81,13 +82,16 @@ struct FullyConnectedLayer : public ILayer
         {
             dimsTmp[1] /= 2;
         }
-        std::vector<TensorRef>& ba = batchData.m_beforeActivation;
-        ba.resize(1);
-        if (ba[0] == nullptr)
-        {
-            ba[0] = std::make_shared<Tensor<float>>();
-        }
-        ba[0]->init(dimsTmp);
+
+        nvAssert(batchData.m_beforeActivation == nullptr);
+        batchData.m_beforeActivation = std::make_shared<Tensor<float>>();
+        batchData.m_beforeActivation->init(dimsTmp);
+    }
+    virtual void freeBatchData(NvU32 uBatch) override
+    {
+        __super::freeBatchData(uBatch);
+        auto& batchData = m_batches[uBatch];
+        batchData.m_beforeActivation = nullptr;
     }
     void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
     {

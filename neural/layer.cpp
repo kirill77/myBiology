@@ -21,6 +21,13 @@ void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
     batchData.m_pOutput = std::make_shared<Tensor<float>>();
     batchData.m_pOutput->init(outputDims);
 }
+void ILayer::freeBatchData(NvU32 uBatch)
+{
+    auto& batchData = m_batches[uBatch];
+
+    batchData.m_pPrevLoss = nullptr;
+    batchData.m_pOutput = nullptr;
+}
 void ILayer::updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer& lossComputer, Tensor<float>& outLoss, float* pErrorPtr)
 {
     auto& bd = m_batches[uBatch];

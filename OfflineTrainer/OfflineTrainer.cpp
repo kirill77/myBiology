@@ -9,7 +9,7 @@ int main()
 {
     NeuralTest::test();
 
-    AtomsNetwork<float, 64> network;
+    AtomsNetwork<float> network;
 
     // load the latest trained network
     {
@@ -30,7 +30,7 @@ int main()
         }
         if (path.empty())
         {
-            path = L"c:\\atomNets\\networkFromWaterApp.bin";
+            path = L"c:\\atomNets\\water_4231.bin";
         }
         printf("loading %S\n", path.c_str());
         MyReader reader(path);

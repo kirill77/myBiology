@@ -26,7 +26,7 @@ struct ArrayScrambler
 {
     ArrayScrambler(const std::vector<NvU32>& p, NvU32 uStart, NvU32 uSize) : m_p (&p[uStart]), m_uSize(uSize)
     {
-        nvAssert(p.size() <= uStart + uSize);
+        nvAssert(uStart + uSize <= p.size());
     }
     NvU32 operator[](NvU32 u) const
     {

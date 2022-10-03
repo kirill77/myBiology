@@ -2,6 +2,23 @@
 #include "neural/network.h"
 #include "neural/atomsNetwork.h"
 
+size_t g_myAllocatedMem = 0;
+__host__ cudaError_t myCudaMalloc(void** devPtr, size_t size)
+{
+    g_myAllocatedMem += size;
+    auto result = cudaMalloc(devPtr, size);
+    nvAssert(result == cudaSuccess);
+    return result;
+}
+__host__ cudaError_t myCudaFree(void* devPtr, size_t size)
+{
+    nvAssert(g_myAllocatedMem >= size);
+    g_myAllocatedMem -= size;
+    auto result = cudaFree(devPtr);
+    nvAssert(result == cudaSuccess);
+    return result;
+}
+
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 template <class T>
 void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
@@ -19,7 +36,7 @@ void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
         {
             if (m_pDevice)
             {
-                cudaFree(m_pDevice);
+                myCudaFree(m_pDevice, m_nDeviceElems * sizeof(T));
             }
             if (m_nHostElems == 0)
             {
@@ -27,8 +44,7 @@ void GPUBuffer<T>::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
             }
             else
             {
-                cudaError_t error = cudaMalloc(&m_pDevice, m_nHostElems * sizeof(T));
-                nvAssert(error == cudaSuccess);
+                myCudaMalloc((void **)&m_pDevice, m_nHostElems * sizeof(T));
             }
             m_nDeviceElems = m_nHostElems;
         }
@@ -47,9 +63,7 @@ void GPUBuffer<T>::decRef()
     {
         if (m_pDevice)
         {
-            cudaError_t error = cudaFree(m_pDevice);
-            nvAssert(error == cudaSuccess);
-            m_pDevice = nullptr;
+            myCudaFree(m_pDevice, m_nDeviceElems * sizeof(T));
         }
         delete[]m_pHost;
         m_pHost = nullptr;

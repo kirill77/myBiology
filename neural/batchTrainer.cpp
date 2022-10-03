@@ -11,12 +11,11 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
     m_pWantedOutput = pWantedOutput;
     m_pLoss = std::make_shared<Tensor<float>>();
     m_pLoss->init(m_pWantedOutput->getDims());
-
-    network.allocateBatchData(uBatch, m_pInput->n());
 }
 float BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
     LearningRates &lr)
 {
+    network.allocateBatchData(m_uBatch, m_pInput->n());
     forwardPass(network);
     float fPreError = 0;
     updateLoss(network, lossComputer, &fPreError);
@@ -42,6 +41,7 @@ float BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lo
     {
         network.saveCurrentStateToBackup();
     }
+    network.freeBatchData(m_uBatch);
     return fPreError;
 }
 TensorRef BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
