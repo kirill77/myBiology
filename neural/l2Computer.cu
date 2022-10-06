@@ -27,14 +27,14 @@ struct CU_LossComputer
     __device__ void computeLoss(int threadX, int blockX, int gridDimX)
     {
         int iStride = gridDimX * BLOCK_SIZE;
-        float fLossesSum = 0;
-        int nLosses = 0;
+        float fSumOfSquares = 0;
+        int nElements = 0;
         for (int i = blockX * BLOCK_SIZE + threadX; i < m_nElementsTotal; i += iStride)
         {
             float fLossDeriv = m_wantedOutput[i] - m_output[i];
             m_outLoss[i] = fLossDeriv;
-            fLossesSum += sqr(fLossDeriv);
-            ++nLosses;
+            fSumOfSquares += sqr(fLossDeriv);
+            ++nElements;
         }
         if (m_errorStat.size() == 0)
             return;
@@ -42,13 +42,13 @@ struct CU_LossComputer
         const NvU32 FULL_MASK = 0xffffffff;
         for (int offset = 16; offset > 0; offset /= 2)
         {
-            fLossesSum += __shfl_down_sync(FULL_MASK, fLossesSum, offset);
-            nLosses += __shfl_down_sync(FULL_MASK, nLosses, offset);
+            fSumOfSquares += __shfl_down_sync(FULL_MASK, fSumOfSquares, offset);
+            nElements += __shfl_down_sync(FULL_MASK, nElements, offset);
         }
         if (threadX == 0)
         {
-            m_errorStat[blockIdx.x * 2] = fLossesSum;
-            m_errorStat[blockIdx.x * 2 + 1] = nLosses;
+            m_errorStat[blockIdx.x * 2] = fSumOfSquares;
+            m_errorStat[blockIdx.x * 2 + 1] = nElements;
         }
     }
 
@@ -76,15 +76,15 @@ void LossComputer::compute(Tensor<float>& output, Tensor<float>& wantedOutput, T
     lossKernel << <grid, block >> > (c);
     if (pErrorStat)
     {
-        double fSum = 0;
-        int nSum = 0;
+        double fSumOfSquares = 0;
+        int nElements = 0;
         m_lossPerBlock.syncToHost();
         for (NvU32 u = 0; u < grid.x; ++u)
         {
-            fSum += (double)m_lossPerBlock[u * 2];
-            nSum += (int)m_lossPerBlock[u * 2 + 1];
+            fSumOfSquares += (double)m_lossPerBlock[u * 2];
+            nElements += (int)m_lossPerBlock[u * 2 + 1];
         }
-        *pErrorStat = (float)sqrt(fSum / nSum);
+        *pErrorStat = (float)sqrt(fSumOfSquares / nElements);
     }
 #else
     m_pErrors.resize(1);

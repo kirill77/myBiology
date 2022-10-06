@@ -134,20 +134,20 @@ struct FCL_Backward
                     continue;
                 float fBeforeActivation = m_beforeActivation.access(inOutNi, _outHi, outWi, inOutCi);
                 float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
-                float fMult = fLoss[0] * fActivationDer;
+                float fBackwardChain = fLoss[0] * fActivationDer;
                 if (T_ACTIVATION1 != T_ACTIVATION2)
                 {
                     float fActivation2Der = TFunctionDer<T_ACTIVATION2>(fBeforeActivation);
-                    fMult += fLoss[1] * fActivation2Der;
+                    fBackwardChain += fLoss[1] * fActivation2Der;
                 }
-                fDeltaBias += fMult;
+                fDeltaBias += fBackwardChain;
                 // modify the weight corresponding to this summator
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
-                fDeltaWeight += fMult * fInput;
+                fDeltaWeight += fBackwardChain * fInput;
                 if (m_prevLoss.n()) // have we been asked to compute deltaInput?
                 {
-                    float& fDeltaInput = m_prevLoss.access(inOutNi, inHi, inWi, inOutCi);
-                    myAtomicAdd(&fDeltaInput, fMult * fW);
+                    float& fPrevLoss = m_prevLoss.access(inOutNi, inHi, inWi, inOutCi);
+                    myAtomicAdd(&fPrevLoss, fBackwardChain * fW);
                 }
             }
         }
