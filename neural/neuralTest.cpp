@@ -2,7 +2,7 @@
 #include "neuralTest.h"
 #include "network.h"
 #include "l2Computer.h"
-#include "batchTrainer.h"
+#include "batch.h"
 #include "learningRates.h"
 
 bool NeuralTest::m_bTested = false;
@@ -17,7 +17,7 @@ struct TestNetwork : public NeuralNetwork
     {
         return 1;
     }
-    virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) override
+    virtual void initBatch(Batch& batch, NvU32 uBatch) override
     {
         nvAssert(uBatch < getNBatches());
         RNGUniform rng((uBatch + 1) * 0x12345);
@@ -28,7 +28,7 @@ struct TestNetwork : public NeuralNetwork
         TensorRef pWantedOutput = std::make_shared<Tensor<float>>();
         pWantedOutput->init(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3]);
         pWantedOutput->clearWithRandomValues(0, 1, rng);
-        batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
+        batch.init(*this, uBatch, pInput, pWantedOutput);
     }
 
 private:
@@ -62,7 +62,7 @@ struct Test1Network : public NeuralNetwork
     {
         return 1;
     }
-    virtual void initBatch(BatchTrainer& batchTrainer, NvU32 uBatch) override
+    virtual void initBatch(Batch& batch, NvU32 uBatch) override
     {
         static const NvU32 NSAMPLES_PER_BATCH = 100;
         RNGUniform rng((uBatch + 1) * 0x12345);
@@ -90,7 +90,7 @@ struct Test1Network : public NeuralNetwork
             wantedOutput.access(i, 0, 0, 0) = sin(fDist);
         }
 
-        batchTrainer.init(*this, pInput, pWantedOutput);
+        batch.init(*this, pInput, pWantedOutput);
     }
 
 private:
@@ -127,11 +127,11 @@ void NeuralTest::test()
         LearningRates lr;
         lr.init(network.getNLearningRatesNeeded());
         
-        BatchTrainer batchTrainer;
-        network.initBatch(batchTrainer, 0);
+        Batch batch;
+        network.initBatch(batch, 0);
         for (; ; )
         {
-            batchTrainer.makeMinimalProgress(network, lossComputer, lr);
+            batch.makeMinimalProgress(network, lossComputer, lr);
             if (lr.getNStepsMade() >= 10000)
                 break;
         }
@@ -144,7 +144,7 @@ void NeuralTest::test()
     {
         Test1Network network;
 
-        BatchTrainer batch0, batch1;
+        Batch batch0, batch1;
         network.initBatch(batch0, 0);
         network.initBatch(batch1, 1);
 

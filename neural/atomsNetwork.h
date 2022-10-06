@@ -5,7 +5,7 @@
 #include "../basics/vectors.h"
 #include "../basics/simContext.h"
 #include "network.h"
-#include "batchTrainer.h"
+#include "batch.h"
 
 // classes used to create scrambled arrays of atom indices for training
 struct NullScrambler
@@ -157,7 +157,7 @@ struct AtomsNetwork : public NeuralNetwork
         return getNStoredSimSteps() * getNAtoms() / NATOMS_PER_BATCH;
     }
 
-    void initBatchForLastSimStep(BatchTrainer &batch)
+    void initBatchForLastSimStep(Batch &batch)
     {
         NvU32 nAtoms = getNAtoms();
         NullScrambler scrambler(0, nAtoms);
@@ -168,7 +168,7 @@ struct AtomsNetwork : public NeuralNetwork
         nvSwap(m_lastSimStep, m_simSteps[0]);
     }
 
-    virtual void initBatch(BatchTrainer &batchTrainer, NvU32 uBatch) override
+    virtual void initBatch(Batch &batch, NvU32 uBatch) override
     {
         if (m_batchAtomIndices.size() == 0)
         {
@@ -176,7 +176,7 @@ struct AtomsNetwork : public NeuralNetwork
             createBatchAtomIndices(nTotalClusters);
         }
         ArrayScrambler scrambler(m_batchAtomIndices, uBatch * NATOMS_PER_BATCH, NATOMS_PER_BATCH);
-        initBatchInternal(batchTrainer, uBatch, scrambler);
+        initBatchInternal(batch, uBatch, scrambler);
     }
 
     virtual void serialize(ISerializer& s) override
@@ -197,7 +197,7 @@ struct AtomsNetwork : public NeuralNetwork
 
 private:
     template <class Scrambler>
-    void initBatchInternal(BatchTrainer& batchTrainer, NvU32 uBatch, const Scrambler &scrambler)
+    void initBatchInternal(Batch& batch, NvU32 uBatch, const Scrambler &scrambler)
     {
         TensorRef pInput = createInputTensor(scrambler);
 
@@ -208,7 +208,7 @@ private:
         {
             copyClusterToOutputTensor(wantedOutput, u, scrambler[u]);
         }
-        batchTrainer.init(*this, uBatch, pInput, pWantedOutput);
+        batch.init(*this, uBatch, pInput, pWantedOutput);
     }
 
     template <class Scrambler>

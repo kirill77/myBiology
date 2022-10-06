@@ -1,10 +1,10 @@
-#include "batchTrainer.h"
+#include "batch.h"
 #include "network.h"
 #include "learningRates.h"
 
-void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput)
+void Batch::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput)
 {
-    (*this) = BatchTrainer();
+    (*this) = Batch();
     m_uBatch = uBatch;
 
     m_pInput = pInput;
@@ -12,7 +12,7 @@ void BatchTrainer::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, 
     m_pLoss = std::make_shared<Tensor<float>>();
     m_pLoss->init(m_pWantedOutput->getDims());
 }
-float BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
+float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
     LearningRates &lr)
 {
     network.allocateBatchData(m_uBatch, m_pInput->n());
@@ -44,16 +44,16 @@ float BatchTrainer::makeMinimalProgress(NeuralNetwork& network, LossComputer &lo
     network.freeBatchData(m_uBatch);
     return fPreError;
 }
-TensorRef BatchTrainer::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
+TensorRef Batch::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
 {
     network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, *m_pLoss, pErrorPtr);
     return m_pLoss;
 }
-void BatchTrainer::forwardPass(NeuralNetwork& network)
+void Batch::forwardPass(NeuralNetwork& network)
 {
     network.forwardPass(m_uBatch, m_pInput);
 }
-void BatchTrainer::backwardPass(NeuralNetwork& network, LossComputer& lossComputer, LearningRates &lr)
+void Batch::backwardPass(NeuralNetwork& network, LossComputer& lossComputer, LearningRates &lr)
 {
     TensorRef pLoss = updateLoss(network, lossComputer);
     network.backwardPass(m_uBatch, pLoss.get(), lr);

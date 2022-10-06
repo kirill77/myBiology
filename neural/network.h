@@ -13,7 +13,7 @@ struct NeuralNetwork
     }
 
     virtual NvU32 getNBatches() = 0;
-    virtual void initBatch(struct BatchTrainer& batchTrainer, NvU32 uBatch) = 0;
+    virtual void initBatch(struct Batch& batchTrainer, NvU32 uBatch) = 0;
     virtual NvU32 getNLearningRatesNeeded() const
     {
         return (NvU32)m_pLayers.size();

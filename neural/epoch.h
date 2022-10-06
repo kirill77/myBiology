@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include "neural/batchTrainer.h"
+#include "neural/batch.h"
 
 struct Epoch
 {
@@ -13,6 +13,6 @@ struct Epoch
    float getAvgPostError() const { return m_fAvgPostError; }
 
 private:
-   std::vector<BatchTrainer> m_batches;
+   std::vector<Batch> m_batches;
    float m_fAvgPreError = 0, m_fAvgPostError = 0;
 };

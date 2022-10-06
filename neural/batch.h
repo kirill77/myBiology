@@ -2,7 +2,7 @@
 
 #include "tensor.h"
 
-struct BatchTrainer
+struct Batch
 {
     void init(struct NeuralNetwork& network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput);
 
