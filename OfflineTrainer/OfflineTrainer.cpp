@@ -5,6 +5,8 @@
 #include "neural/epoch.h"
 #include "neural/learningRates.h"
 
+extern size_t g_nCudaBytes;
+
 int main()
 {
     NeuralTest::test();
@@ -44,6 +46,9 @@ int main()
     
     LearningRates lr;
     lr.init(network.getNLearningRatesNeeded());
+
+    std::string sBuffer;
+    sBuffer.resize(1024);
     
     printf("training starts...\n");
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -56,22 +61,19 @@ int main()
         std::chrono::duration<double> secondsSinceStart = curTime - startTime;
         double fMSecsPerTrainingStep = (secondsSinceStart.count() / lr.getNStepsMade()) * 1000;
 
-        printf(
+        sprintf_s(&sBuffer[0], sBuffer.size() - 2,
             "nSteps: %d, avgPreError: %#.3g, avgPostError: %#.3g, avgLRate: %#.3g, "
-            "MSecPerStep: %.2f\n",
+            "MSecPerStep: %.2f, MB: %.2f\n",
             lr.getNStepsMade(), epoch.getAvgPreError(), epoch.getAvgPostError(),
-            network.computeAvgLRStats(), fMSecsPerTrainingStep);
+            network.computeAvgLRStats(), fMSecsPerTrainingStep, (double)g_nCudaBytes / (1024 * 1024));
+        printf("%s", sBuffer.c_str());
 
         {
             FILE* fp = nullptr;
             fopen_s(&fp, "c:\\atomNets\\log.txt", "a+");
             if (fp)
             {
-                fprintf(fp,
-                    "nSteps: %d, avgPreError: %#.3g, avgPostError: %#.3g, avgLRate: %#.3g, "
-                    "MSecPerStep: %.2f\n",
-                    lr.getNStepsMade(), epoch.getAvgPreError(), epoch.getAvgPostError(),
-                    network.computeAvgLRStats(), fMSecsPerTrainingStep);
+                fprintf(fp, "%s", sBuffer.c_str());
                 fclose(fp);
             }
         }

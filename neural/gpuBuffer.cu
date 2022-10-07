@@ -2,18 +2,18 @@
 #include "neural/network.h"
 #include "neural/atomsNetwork.h"
 
-size_t g_myAllocatedMem = 0;
+size_t g_nCudaBytes = 0;
 __host__ cudaError_t myCudaMalloc(void** devPtr, size_t size)
 {
-    g_myAllocatedMem += size;
+    g_nCudaBytes += size;
     auto result = cudaMalloc(devPtr, size);
     nvAssert(result == cudaSuccess);
     return result;
 }
 __host__ cudaError_t myCudaFree(void* devPtr, size_t size)
 {
-    nvAssert(g_myAllocatedMem >= size);
-    g_myAllocatedMem -= size;
+    nvAssert(g_nCudaBytes >= size);
+    g_nCudaBytes -= size;
     auto result = cudaFree(devPtr);
     nvAssert(result == cudaSuccess);
     return result;
