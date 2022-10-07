@@ -39,7 +39,6 @@ float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossCompu
     {
         network.saveCurrentStateToBackup();
     }
-    network.freeBatchData(m_uBatch);
     return fPreError;
 }
 TensorRef Batch::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)

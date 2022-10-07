@@ -57,7 +57,7 @@ __global__ void fclForwardKernel(FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> p)
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 TensorRef FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(NvU32 uBatch, TensorRef pInput)
 {
-    LayerBatchData& batchData = m_batches[uBatch];
+    LayerBatchData& batchData = m_batchesData.accessBatchData(uBatch);
     batchData.m_pPrevInput = pInput;
     Tensor<float>& input = *pInput;
     NvU32 n = input.n();
@@ -171,12 +171,12 @@ template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 Tensor<float> *FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(NvU32 uBatch, Tensor<float>& loss,
     float fBiasesLR, float fWeightsLR)
 {
-    auto& batchData = m_batches[uBatch];
+    auto& batchData = m_batchesData.accessBatchData(uBatch);
     Tensor<float>& input = *batchData.m_pPrevInput;
     NvU32 n = input.n();
     nvAssert(m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
     Tensor<float> prevLoss;
-    if (m_batches[uBatch].m_pPrevLoss)
+    if (batchData.m_pPrevLoss)
     {
         prevLoss = *batchData.m_pPrevLoss;
         nvAssert(prevLoss.n() == n && prevLoss.h() == m_inputDims[1] &&

@@ -3,9 +3,7 @@
 
 void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
 {
-    if (uBatch >= m_batches.size())
-        m_batches.resize(uBatch + 1);
-    auto& batchData = m_batches[uBatch];
+    LayerBatchData& batchData = m_batchesData.allocateBatchData(uBatch);
 
     std::array<unsigned, 4> outputDims = m_outputDims;
     outputDims[0] = n;
@@ -21,16 +19,9 @@ void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
     batchData.m_pOutput = std::make_shared<Tensor<float>>();
     batchData.m_pOutput->init(outputDims);
 }
-void ILayer::freeBatchData(NvU32 uBatch)
-{
-    auto& batchData = m_batches[uBatch];
-
-    batchData.m_pPrevLoss = nullptr;
-    batchData.m_pOutput = nullptr;
-}
 void ILayer::updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer& lossComputer, Tensor<float>& outLoss, float* pErrorPtr)
 {
-    auto& bd = m_batches[uBatch];
+    auto& bd = m_batchesData.accessBatchData(uBatch);
     Tensor<float>& output = (*bd.m_pOutput);
     lossComputer.compute(output, wantedOutput, outLoss, pErrorPtr);
 }
