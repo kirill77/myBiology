@@ -58,10 +58,16 @@ struct NeuralNetwork
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
-        LossComputer& lossComputer, Tensor<float> &outLoss, float* pErrorPtr)
+    TensorRef getTmpLossTensor(const std::array<NvU32, 4> &dims)
     {
-        (*m_pLayers.rbegin())->updateLoss(uBatch, wantedOutput, lossComputer, outLoss, pErrorPtr);
+        return getTmpTensor(m_pTmpLoss, dims);
+    }
+    TensorRef updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
+        LossComputer& lossComputer, float* pErrorPtr)
+    {
+        TensorRef pLoss = getTmpLossTensor(wantedOutput.getDims());
+        (*m_pLayers.rbegin())->updateLoss(uBatch, wantedOutput, lossComputer, *pLoss, pErrorPtr);
+        return pLoss;
     }
 
     virtual void serialize(ISerializer& s)
@@ -106,6 +112,8 @@ protected:
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
 private:
+    TensorRef getTmpTensor(TensorRef& pCache, const std::array<NvU32, 4>& dims);
+    TensorRef m_pTmpLoss = nullptr;
     double m_fLRSum = 0;
     int m_nLRSamples = 0;
 };

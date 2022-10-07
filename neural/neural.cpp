@@ -36,3 +36,15 @@ void NeuralNetwork::backwardPass(NvU32 uBatch, Tensor<float>* pLoss, struct Lear
         --uLayer;
     }
 }
+
+TensorRef NeuralNetwork::getTmpTensor(TensorRef& pCache, const std::array<NvU32, 4>& dims)
+{
+    // if we have cached object and nobody is using this cache object except us and dimensions match - just return that object
+    if (pCache && pCache.use_count() == 1 && pCache->getDims() == dims)
+    {
+        return pCache;
+    }
+    pCache = std::make_shared<Tensor<float>>(dims);
+    return pCache;
+}
+

@@ -18,5 +18,5 @@ private:
 
     TensorRef updateLoss(NeuralNetwork& network, LossComputer& lossComputer, float* pError = nullptr);
 
-    TensorRef m_pInput, m_pWantedOutput, m_pLoss;
+    TensorRef m_pInput, m_pWantedOutput;
 };
