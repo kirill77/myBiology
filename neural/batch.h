@@ -4,14 +4,22 @@
 
 struct Batch
 {
-    void init(struct NeuralNetwork& network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput);
+    Batch(NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput) :
+        m_uBatch(uBatch), m_pInput(pInput), m_pWantedOutput(pWantedOutput)
+    {
+    }
 
     // returns the initial error (before progress was made)
-    float makeMinimalProgress(NeuralNetwork& network, struct LossComputer& lossComputer,
+    float makeMinimalProgress(struct NeuralNetwork& network, struct LossComputer& lossComputer,
         struct LearningRates& lr);
 
     void forwardPass(NeuralNetwork& network);
     void backwardPass(NeuralNetwork& network, LossComputer& lossComputer, LearningRates &lr);
+    
+    NvU32 n() const
+    {
+        return m_pInput->n();
+    }
 
 private:
     NvU32 m_uBatch = 0;

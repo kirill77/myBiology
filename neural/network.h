@@ -4,6 +4,7 @@
 #include "basics/serializer.h"
 #include "neuralTest.h"
 #include "layer.h"
+#include "batch.h"
 
 struct NeuralNetwork
 {
@@ -13,18 +14,20 @@ struct NeuralNetwork
     }
 
     virtual NvU32 getNBatches() = 0;
-    virtual void initBatch(struct Batch& batchTrainer, NvU32 uBatch) = 0;
+
     virtual NvU32 getNLearningRatesNeeded() const
     {
         return (NvU32)m_pLayers.size();
     }
 
-    virtual void allocateBatchData(NvU32 uBatch, NvU32 n)
+    virtual Batch allocateBatchData(NvU32 uBatch)
     {
+        Batch batch = createAndInitBatchInternal(uBatch);
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
-            m_pLayers[uLayer]->allocateBatchData(uBatch, n, uLayer == 0);
+            m_pLayers[uLayer]->allocateBatchData(uBatch, batch.n(), uLayer == 0);
         }
+        return batch;
     }
 
     // returns network output tensor
@@ -102,6 +105,7 @@ struct NeuralNetwork
 
 
 protected:
+    virtual Batch createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
 private:

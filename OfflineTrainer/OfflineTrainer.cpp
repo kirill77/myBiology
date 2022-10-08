@@ -40,7 +40,6 @@ int main()
     }
 
     Epoch epoch;
-    epoch.init(network);
 
     LossComputer lossComputer;
     

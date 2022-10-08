@@ -2,18 +2,9 @@
 #include "network.h"
 #include "learningRates.h"
 
-void Batch::init(NeuralNetwork &network, NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput)
-{
-    (*this) = Batch();
-    m_uBatch = uBatch;
-
-    m_pInput = pInput;
-    m_pWantedOutput = pWantedOutput;
-}
 float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
     LearningRates &lr)
 {
-    network.allocateBatchData(m_uBatch, m_pInput->n());
     forwardPass(network);
     float fPreError = 0;
     updateLoss(network, lossComputer, &fPreError);

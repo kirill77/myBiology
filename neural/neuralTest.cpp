@@ -17,7 +17,7 @@ struct TestNetwork : public NeuralNetwork
     {
         return 1;
     }
-    virtual void initBatch(Batch& batch, NvU32 uBatch) override
+    virtual Batch createAndInitBatchInternal(NvU32 uBatch) override
     {
         nvAssert(uBatch < getNBatches());
         RNGUniform rng((uBatch + 1) * 0x12345);
@@ -28,7 +28,7 @@ struct TestNetwork : public NeuralNetwork
         TensorRef pWantedOutput = std::make_shared<Tensor<float>>();
         pWantedOutput->init(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3]);
         pWantedOutput->clearWithRandomValues(0, 1, rng);
-        batch.init(*this, uBatch, pInput, pWantedOutput);
+        return Batch(uBatch, pInput, pWantedOutput);
     }
 
 private:
@@ -127,9 +127,8 @@ void NeuralTest::test()
         LearningRates lr;
         lr.init(network.getNLearningRatesNeeded());
         
-        Batch batch;
-        network.initBatch(batch, 0);
-        for (; ; )
+        Batch batch = network.allocateBatchData(0);
+        for ( ; ; )
         {
             batch.makeMinimalProgress(network, lossComputer, lr);
             if (lr.getNStepsMade() >= 10000)

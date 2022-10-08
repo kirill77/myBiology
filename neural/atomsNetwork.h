@@ -157,28 +157,6 @@ struct AtomsNetwork : public NeuralNetwork
         return getNStoredSimSteps() * getNAtoms() / NATOMS_PER_BATCH;
     }
 
-    void initBatchForLastSimStep(Batch &batch)
-    {
-        NvU32 nAtoms = getNAtoms();
-        NullScrambler scrambler(0, nAtoms);
-
-        // the scrambler points to the first sim step - so put our last step there temporarily
-        nvSwap(m_lastSimStep, m_simSteps[0]);
-        initBatchInternal(batch, 0, scrambler);
-        nvSwap(m_lastSimStep, m_simSteps[0]);
-    }
-
-    virtual void initBatch(Batch &batch, NvU32 uBatch) override
-    {
-        if (m_batchAtomIndices.size() == 0)
-        {
-            NvU32 nTotalClusters = getNBatches() * NATOMS_PER_BATCH;
-            createBatchAtomIndices(nTotalClusters);
-        }
-        ArrayScrambler scrambler(m_batchAtomIndices, uBatch * NATOMS_PER_BATCH, NATOMS_PER_BATCH);
-        initBatchInternal(batch, uBatch, scrambler);
-    }
-
     virtual void serialize(ISerializer& s) override
     {
         NeuralNetwork::serialize(s);
@@ -197,7 +175,7 @@ struct AtomsNetwork : public NeuralNetwork
 
 private:
     template <class Scrambler>
-    void initBatchInternal(Batch& batch, NvU32 uBatch, const Scrambler &scrambler)
+    Batch initBatchInternal(NvU32 uBatch, const Scrambler &scrambler)
     {
         TensorRef pInput = createInputTensor(scrambler);
 
@@ -208,7 +186,17 @@ private:
         {
             copyClusterToOutputTensor(wantedOutput, u, scrambler[u]);
         }
-        batch.init(*this, uBatch, pInput, pWantedOutput);
+        return Batch(uBatch, pInput, pWantedOutput);
+    }
+    virtual Batch createAndInitBatchInternal(NvU32 uBatch) override
+    {
+        if (m_batchAtomIndices.size() == 0)
+        {
+            NvU32 nTotalClusters = getNBatches() * NATOMS_PER_BATCH;
+            createBatchAtomIndices(nTotalClusters);
+        }
+        ArrayScrambler scrambler(m_batchAtomIndices, uBatch * NATOMS_PER_BATCH, NATOMS_PER_BATCH);
+        return initBatchInternal(uBatch, scrambler);
     }
 
     template <class Scrambler>
