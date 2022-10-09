@@ -127,7 +127,7 @@ void NeuralTest::test()
         LearningRates lr;
         lr.init(network.getNLearningRatesNeeded());
         
-        Batch batch = network.allocateBatchData(0);
+        Batch batch = network.createBatch(0);
         for ( ; ; )
         {
             batch.makeMinimalProgress(network, lossComputer, lr);

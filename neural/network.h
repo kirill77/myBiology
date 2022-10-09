@@ -20,7 +20,7 @@ struct NeuralNetwork
         return (NvU32)m_pLayers.size();
     }
 
-    virtual Batch allocateBatchData(NvU32 uBatch)
+    Batch createBatch(NvU32 uBatch)
     {
         Batch batch = createAndInitBatchInternal(uBatch);
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)

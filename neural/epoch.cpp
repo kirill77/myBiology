@@ -11,7 +11,7 @@ void Epoch::makeStep(NeuralNetwork &network, LossComputer &lossComputer, Learnin
     NvU32 nBatches = network.getNBatches();
     for (NvU32 uBatch = 0; uBatch < nBatches; ++uBatch)
     {
-        Batch batch = network.allocateBatchData(uBatch);
+        Batch batch = network.createBatch(uBatch);
         fPreErrorsSum += batch.makeMinimalProgress(network, lossComputer, lr);
         fPostErrorsSum += lr.getLastError();
 
