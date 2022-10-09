@@ -54,10 +54,6 @@ struct NeuralNetwork
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    TensorRef getTmpLossTensor(const std::array<NvU32, 4> &dims)
-    {
-        return getTmpTensor(m_pTmpLoss, dims);
-    }
     TensorRef updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
         LossComputer& lossComputer, float* pErrorPtr)
     {
@@ -103,12 +99,15 @@ struct NeuralNetwork
         m_nLRSamples = 0;
     }
 
-
 protected:
     virtual Batch createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
 private:
+    TensorRef getTmpLossTensor(const std::array<NvU32, 4>& dims)
+    {
+        return getTmpTensor(m_pTmpLoss, dims);
+    }
     TensorRef getTmpTensor(TensorRef& pCache, const std::array<NvU32, 4>& dims);
     TensorRef m_pTmpLoss = nullptr;
     double m_fLRSum = 0;
