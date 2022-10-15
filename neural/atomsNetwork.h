@@ -562,6 +562,4 @@ private:
             nvSwap(m_batchAtomIndices[u1], m_batchAtomIndices[u]);
         }
     }
-
-    RNGUniform m_rng;
 };

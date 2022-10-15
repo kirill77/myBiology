@@ -13,8 +13,8 @@ struct Batch
     float makeMinimalProgress(struct NeuralNetwork& network, struct LossComputer& lossComputer,
         struct LearningRates& lr);
 
-    void forwardPass(NeuralNetwork& network);
-    void backwardPass(NeuralNetwork& network, LossComputer& lossComputer, LearningRates &lr);
+    TensorRef forwardPass(NeuralNetwork& network);
+    void backwardPass(NeuralNetwork& network, Tensor<float>& loss, LearningRates &lr);
     
     NvU32 n() const
     {

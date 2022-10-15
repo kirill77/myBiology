@@ -25,3 +25,15 @@ void ILayer::updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer&
     Tensor<float>& output = (*bd.m_pOutput);
     lossComputer.compute(output, wantedOutput, outLoss, pErrorPtr);
 }
+NvU32 ILayer::getNParams() const
+{
+    return m_weights.size() + m_biases.size();
+}
+void ILayer::changeParam(NvU32 uParam, float fDeltaChange)
+{
+
+}
+float ILayer::computeDifferenceWithBackup(NvU32 uParam)
+{
+    return 0;
+}

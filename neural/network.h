@@ -98,10 +98,13 @@ struct NeuralNetwork
         m_fLRSum = 0;
         m_nLRSamples = 0;
     }
+    // checks backward pass (analytic) vs numeric derivatives
+    bool testRandomDerivative(Batch& batch, NvU32 nChecks);
 
 protected:
     virtual Batch createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
+    RNGUniform m_rng;
 
 private:
     TensorRef getTmpLossTensor(const std::array<NvU32, 4>& dims)

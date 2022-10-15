@@ -19,9 +19,6 @@
     <ClInclude Include="atomsNetwork.h">
       <Filter>H</Filter>
     </ClInclude>
-    <ClInclude Include="batchTrainer.h">
-      <Filter>H</Filter>
-    </ClInclude>
     <ClInclude Include="tensor.h">
       <Filter>H</Filter>
     </ClInclude>
@@ -29,6 +26,10 @@
       <Filter>H</Filter>
     </ClInclude>
     <ClInclude Include="learningRates.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="batch.h" />
+    <ClInclude Include="l2Computer.h">
       <Filter>H</Filter>
     </ClInclude>
   </ItemGroup>
@@ -50,9 +51,6 @@
     <ClCompile Include="neuralTest.cpp">
       <Filter>CPP</Filter>
     </ClCompile>
-    <ClCompile Include="batchTrainer.cpp">
-      <Filter>CPP</Filter>
-    </ClCompile>
     <ClCompile Include="learningRates.cpp">
       <Filter>CPP</Filter>
     </ClCompile>
@@ -62,5 +60,6 @@
     <ClCompile Include="epoch.cpp">
       <Filter>CPP</Filter>
     </ClCompile>
+    <ClCompile Include="batch.cpp" />
   </ItemGroup>
 </Project>

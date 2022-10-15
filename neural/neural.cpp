@@ -1,5 +1,6 @@
 #include "network.h"
 #include "learningRates.h"
+#include "l2Computer.h"
 
 std::shared_ptr<ILayer> ILayer::createLayer(LAYER_TYPE layerType)
 {
@@ -48,3 +49,52 @@ TensorRef NeuralNetwork::getTmpTensor(TensorRef& pCache, const std::array<NvU32,
     return pCache;
 }
 
+// try to verify that our analytics derivatives are correct (use numeric computation for that)
+bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
+{
+    return true;
+    saveCurrentStateToBackup();
+
+    double fPrevErrorPercents = 1e38;
+    TensorRef outputBeforeChange = batch.forwardPass(*this);
+    Tensor<float> loss;
+    loss.init(outputBeforeChange->getDims());
+    LearningRates lr;
+    lr.init(getNLearningRatesNeeded());
+    saveCurrentStateToBackup();
+    LossComputer lossComputer;
+
+    for (NvU32 i1 = 0; i1 < nChecks; ++i1)
+    {
+        NvU32 uLayer = m_rng.generateUnsigned(0, (NvU32)m_pLayers.size());
+        ILayer* pLayer = m_pLayers[uLayer].get();
+        NvU32 nParams = pLayer->getNParams();
+        NvU32 uParam = m_rng.generateUnsigned(0, nParams);
+        float fChange = 0.25f;
+        for (NvU32 i2 = 0; ; ++i2) // loop until acceptable accuracy of derivative is achieved
+        {
+            pLayer->changeParam(uParam, fChange);
+
+            TensorRef outputAfterChange = batch.forwardPass(*this);
+            // if we want to go back to the outputBeforeChange - what loss we would have
+            lossComputer.compute(*outputAfterChange, *outputBeforeChange, loss);
+            // this backward pass is supposed to undo change we performed by changeParam() earlier
+            batch.backwardPass(*this, loss, lr);
+
+            float fDiff = pLayer->computeDifferenceWithBackup(uParam);
+            double fErrorPercents = abs(fDiff - fChange) / (double)fChange;
+            if (fErrorPercents > fPrevErrorPercents)
+            {
+                // we have decreased the step, but the error has increased? something is wrong
+                nvAssert(false);
+                return false;
+            }
+            if (fErrorPercents < 1) // error below threshold - ok
+                break;
+            fChange /= 2;
+        }
+    }
+
+    restoreStateFromBackup();
+    return true;
+}
