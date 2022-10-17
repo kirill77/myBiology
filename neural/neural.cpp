@@ -53,15 +53,24 @@ TensorRef NeuralNetwork::getTmpTensor(TensorRef& pCache, const std::array<NvU32,
 bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
 {
     return true;
+    // make internal copy of weights and biases
     saveCurrentStateToBackup();
 
     double fPrevErrorPercents = 1e38;
-    TensorRef outputBeforeChange = batch.forwardPass(*this);
+
+    // remember what the output was before we started changing weights/biases
+    Tensor<float> outputBeforeChange;
+    {
+        TensorRef tmp = batch.forwardPass(*this);
+        outputBeforeChange.init(tmp->getDims());
+        outputBeforeChange.copySubregionFrom(0, *tmp, 0, tmp->size());
+    }
+
     Tensor<float> loss;
-    loss.init(outputBeforeChange->getDims());
+    loss.init(outputBeforeChange.getDims());
+
     LearningRates lr;
     lr.init(getNLearningRatesNeeded());
-    saveCurrentStateToBackup();
     LossComputer lossComputer;
 
     for (NvU32 i1 = 0; i1 < nChecks; ++i1)
@@ -70,19 +79,28 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
         ILayer* pLayer = m_pLayers[uLayer].get();
         NvU32 nParams = pLayer->getNParams();
         NvU32 uParam = m_rng.generateUnsigned(0, nParams);
-        float fChange = 0.25f;
+        float fDeltaParamForward = 0.25f;
         for (NvU32 i2 = 0; ; ++i2) // loop until acceptable accuracy of derivative is achieved
         {
-            pLayer->changeParam(uParam, fChange);
+            // change weight/bias by some small amount
+            pLayer->changeParam(uParam, fDeltaParamForward);
 
+            // see how that has affected the output
             TensorRef outputAfterChange = batch.forwardPass(*this);
-            // if we want to go back to the outputBeforeChange - what loss we would have
-            lossComputer.compute(*outputAfterChange, *outputBeforeChange, loss);
-            // this backward pass is supposed to undo change we performed by changeParam() earlier
+
+            // compute the change in output due to changeParam() that we did
+            lossComputer.compute(outputBeforeChange, *outputAfterChange, loss);
+
+            // restore weights/biases
+            pLayer->restoreStateFromBackup();
+
+            // re-do the forward pass with the original value of parameter
+            batch.forwardPass(*this);
+            // now try to numerically calculate the change of parameters needed to change output by the loss we computed earlier
             batch.backwardPass(*this, loss, lr);
 
-            float fDiff = pLayer->computeDifferenceWithBackup(uParam);
-            double fErrorPercents = abs(fDiff - fChange) / (double)fChange;
+            float fDeltaParamBackward = pLayer->computeCurrentMinusBackup(uParam);
+            double fErrorPercents = abs((fDeltaParamForward - fDeltaParamBackward) / (double)fDeltaParamForward) * 100;
             if (fErrorPercents > fPrevErrorPercents)
             {
                 // we have decreased the step, but the error has increased? something is wrong
@@ -91,7 +109,13 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
             }
             if (fErrorPercents < 1) // error below threshold - ok
                 break;
-            fChange /= 2;
+            fPrevErrorPercents = fErrorPercents;
+
+            // error is above threshold - try smaller param change
+            fDeltaParamForward /= 2;
+
+            // restore all weights/biases from the backup (needed because backwardPass() has changed everything)
+            restoreStateFromBackup();
         }
     }
 

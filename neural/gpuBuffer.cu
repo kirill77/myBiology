@@ -163,6 +163,30 @@ NvU32 GPUBuffer<T>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, Nv
 #endif
     return dstOffset + nDstElems;
 }
+template <class T>
+T GPUBuffer<T>::getDeviceElem(NvU32 uElem)
+{
+    if (m_pOrig != this)
+        return m_pOrig->getDeviceElem(uElem);
+    nvAssert(m_deviceRev >= m_hostRev);
+    T value;
+    cudaError_t result = cudaMemcpy(&value, m_pDevice + uElem, sizeof(T), cudaMemcpyDeviceToHost);
+    nvAssert(result == cudaSuccess);
+    return value;
+}
+template <class T>
+void GPUBuffer<T>::setDeviceElem(NvU32 uElem, T value)
+{
+    if (m_pOrig != this)
+    {
+        m_pOrig->setDeviceElem(uElem, value);
+        return;
+    }
+    nvAssert(m_deviceRev >= m_hostRev);
+    cudaError_t result = cudaMemcpy(m_pDevice + uElem, &value, sizeof(T), cudaMemcpyHostToDevice);
+    nvAssert(result == cudaSuccess);
+    m_deviceRev = m_hostRev + 1;
+}
 
 // explicit instantiations
 template NvU32 GPUBuffer<float>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<float>& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy);

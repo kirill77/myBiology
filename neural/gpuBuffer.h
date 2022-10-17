@@ -102,8 +102,10 @@ struct GPUBuffer
         resize(nElems);
         s.serializePreallocatedMem("m_pHost", m_pHost, sizeof(T) * m_nHostElems);
     }
+    T getDeviceElem(NvU32 uElem);
+    void setDeviceElem(NvU32 uElem, T value);
 
-public:
+private:
     void copyFrom(const GPUBuffer<T>& other)
     {
         if (other.size() == 0)

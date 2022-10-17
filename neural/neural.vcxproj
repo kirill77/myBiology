@@ -96,6 +96,7 @@
   <ItemGroup>
     <ClInclude Include="atomsNetwork.h" />
     <ClInclude Include="batch.h" />
+    <ClInclude Include="gpuBuffer.h" />
     <ClInclude Include="l2Computer.h" />
     <ClInclude Include="layer.h" />
     <ClInclude Include="learningRates.h" />
