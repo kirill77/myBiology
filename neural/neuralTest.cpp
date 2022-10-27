@@ -135,7 +135,7 @@ void NeuralTest::test()
                 break;
         }
         float fError = lr.getLastError();
-        m_bTested = m_bTested && fError > 2e-6 && fError < 2.6e-6;
+        m_bTested = m_bTested && fError > 0 && fError < 1e-11;
         nvAssert(m_bTested);
 
         m_bTested = m_bTested && network.testRandomDerivative(batch, 100);

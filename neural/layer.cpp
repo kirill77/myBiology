@@ -35,13 +35,13 @@ void ILayer::changeParam(NvU32 uParam, float fDeltaChange)
     NvU32 nWeights = m_weights.size();
     if (uParam < nWeights)
     {
-        float fPrev = m_weights.getDeviceElem(uParam);
-        m_weights.setDeviceElem(uParam, fPrev + fDeltaChange);
+        float fPrev = m_weights.autoReadElem(uParam);
+        m_weights.autoWriteElem(uParam, fPrev + fDeltaChange);
         return;
     }
     uParam -= nWeights;
-    float fPrev = m_biases.getDeviceElem(uParam);
-    m_biases.setDeviceElem(uParam, fPrev + fDeltaChange);
+    float fPrev = m_biases.autoReadElem(uParam);
+    m_biases.autoWriteElem(uParam, fPrev + fDeltaChange);
 }
 float ILayer::computeCurrentMinusBackup(NvU32 uParam)
 {
@@ -49,14 +49,14 @@ float ILayer::computeCurrentMinusBackup(NvU32 uParam)
     float fCurrent = 0, fBackup = 0;
     if (uParam < nWeights)
     {
-        fBackup = m_weightsBackup.getDeviceElem(uParam);
-        fCurrent = m_weights.getDeviceElem(uParam);
+        fBackup = m_weightsBackup.autoReadElem(uParam);
+        fCurrent = m_weights.autoReadElem(uParam);
     }
     else
     {
 	    uParam -= nWeights;
-        fBackup = m_biasesBackup.getDeviceElem(uParam);
-        fCurrent = m_biases.getDeviceElem(uParam);
+        fBackup = m_biasesBackup.autoReadElem(uParam);
+        fCurrent = m_biases.autoReadElem(uParam);
     }
     return fCurrent - fBackup;
 }

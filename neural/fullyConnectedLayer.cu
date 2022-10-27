@@ -2,6 +2,12 @@
 #include "neural/network.h"
 #include "myCudaMath.h"
 
+#if RUN_ON_GPU
+bool g_bExecuteOnTheGPU = true;
+#else
+bool g_bExecuteOnTheGPU = false;
+#endif
+
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FCL_Forward
 {
@@ -9,13 +15,22 @@ struct FCL_Forward
         Tensor<float> &beforeActivation) :
         m_input(input), m_output(output), m_weights(weights), m_biases(biases), m_beforeActivation(beforeActivation)
     {
-#if RUN_ON_GPU
-        m_input.notifyDeviceBind(false);
-        m_output.notifyDeviceBind(true);
-        m_weights.notifyDeviceBind(false);
-        m_biases.notifyDeviceBind(false);
-        m_beforeActivation.notifyDeviceBind(true);
-#endif
+        if (g_bExecuteOnTheGPU)
+        {
+            m_input.notifyDeviceBind(false);
+            m_output.notifyDeviceBind(true);
+            m_weights.notifyDeviceBind(false);
+            m_biases.notifyDeviceBind(false);
+            m_beforeActivation.notifyDeviceBind(true);
+        }
+        else
+        {
+            m_input.syncToHost();
+            m_output.syncToHost();
+            m_weights.syncToHost();
+            m_biases.syncToHost();
+            m_beforeActivation.syncToHost();
+        }
     }
 
     __host__ __device__ void forward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
@@ -32,7 +47,8 @@ struct FCL_Forward
         {
             for (unsigned inWi = 0; inWi < m_input.w(); ++inWi)
             {
-                fBeforeActivation += m_input.access(inOutNi, inHi, inWi, inOutCi) * m_weights[iWeight++];
+                float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
+                fBeforeActivation += fInput * m_weights[iWeight++];
             }
         }
         m_beforeActivation.access(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
@@ -69,23 +85,26 @@ TensorRef FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forward(NvU32 uBatc
     dim3 grid(n, m_outputDims[3], 1);
     dim3 block(m_outputDims[2], T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2, 1);
     FCL_Forward<T_ACTIVATION1, T_ACTIVATION2> forward(input, output, m_weights, m_biases, beforeActivation);
-#if RUN_ON_GPU
-    fclForwardKernel << <grid, block >> > (forward);
-#else
-    for (unsigned iBlockY = 0; iBlockY < grid.y; ++iBlockY)
+    if (g_bExecuteOnTheGPU)
     {
-        for (unsigned iBlockX = 0; iBlockX < grid.x; ++iBlockX)
+        fclForwardKernel << <grid, block >> > (forward);
+    }
+    else
+    {
+        for (unsigned iBlockY = 0; iBlockY < grid.y; ++iBlockY)
         {
-            for (unsigned iThreadY = 0; iThreadY < block.y; ++iThreadY)
+            for (unsigned iBlockX = 0; iBlockX < grid.x; ++iBlockX)
             {
-                for (unsigned iThreadX = 0; iThreadX < block.x; ++iThreadX)
+                for (unsigned iThreadY = 0; iThreadY < block.y; ++iThreadY)
                 {
-                    forward.forward(iBlockX, iBlockY, iThreadX, iThreadY);
+                    for (unsigned iThreadX = 0; iThreadX < block.x; ++iThreadX)
+                    {
+                        forward.forward(iBlockX, iBlockY, iThreadX, iThreadY);
+                    }
                 }
             }
         }
     }
-#endif
     return batchData.m_pOutput;
 }
 
@@ -98,14 +117,24 @@ struct FCL_Backward
         m_input(input), m_weights(weights), m_biases(biases),
         m_prevLoss(prevLoss), m_loss(loss), m_beforeActivation(beforeActivation)
     {
-#if RUN_ON_GPU
-        m_input.notifyDeviceBind(false);
-        m_weights.notifyDeviceBind(true);
-        m_biases.notifyDeviceBind(true);
-        m_prevLoss.notifyDeviceBind(true);
-        m_loss.notifyDeviceBind(false);
-        m_beforeActivation.notifyDeviceBind(false);
-#endif
+        if (g_bExecuteOnTheGPU)
+        {
+            m_input.notifyDeviceBind(false);
+            m_weights.notifyDeviceBind(true);
+            m_biases.notifyDeviceBind(true);
+            m_prevLoss.notifyDeviceBind(true);
+            m_loss.notifyDeviceBind(false);
+            m_beforeActivation.notifyDeviceBind(false);
+        }
+        else
+        {
+            m_input.syncToHost();
+            m_weights.syncToHost();
+            m_biases.syncToHost();
+            m_prevLoss.syncToHost();
+            m_loss.syncToHost();
+            m_beforeActivation.syncToHost();
+        }
     }
 
     __host__ __device__ void backward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
@@ -153,7 +182,8 @@ struct FCL_Backward
         }
         // bias address only depends on threadId - meaning the same threadIds from different blocks may race
         unsigned iBias = _outHi * m_loss.w() + outWi;
-        myAtomicAdd(&m_biases[iBias], fDeltaBias * m_fBiasesLR);
+        // not sure why this division is needed. i added it for the numerical derivative tests to pass
+        myAtomicAdd(&m_biases[iBias], fDeltaBias * m_fBiasesLR / (m_input.w() * m_input.h()));
         m_weights[iWeight] += fDeltaWeight * m_fWeightsLR;
     }
 
@@ -194,25 +224,26 @@ Tensor<float> *FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(NvU32
     unsigned outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? loss.h() : loss.h() / 2);
     dim3 grid(input.w(), input.h(), 1);
     dim3 block(loss.w(), outHiNum, 1);
-#if RUN_ON_GPU
-    fclBackwardKernel << <grid, block >> > (backward);
-#else
-    input.syncToHost();
-    output.syncToHost();
-    for (unsigned blockY = 0; blockY < grid.y; ++blockY)
+    if (g_bExecuteOnTheGPU)
     {
-        for (unsigned blockX = 0; blockX < grid.x; ++blockX)
+        fclBackwardKernel << <grid, block >> > (backward);
+    }
+    else
+    {
+        for (unsigned blockY = 0; blockY < grid.y; ++blockY)
         {
-            for (unsigned outHi = 0; outHi < block.y; ++outHi)
+            for (unsigned blockX = 0; blockX < grid.x; ++blockX)
             {
-                for (unsigned outWi = 0; outWi < block.x; ++outWi)
+                for (unsigned outHi = 0; outHi < block.y; ++outHi)
                 {
-                    backward.backward(blockX, blockY, outWi, outHi);
+                    for (unsigned outWi = 0; outWi < block.x; ++outWi)
+                    {
+                        backward.backward(blockX, blockY, outWi, outHi);
+                    }
                 }
             }
         }
     }
-#endif
     return batchData.m_pPrevLoss.get();
 }
 

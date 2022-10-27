@@ -164,28 +164,37 @@ NvU32 GPUBuffer<T>::copySubregionFrom(NvU32 dstOffset, GPUBuffer<SRC_T>& src, Nv
     return dstOffset + nDstElems;
 }
 template <class T>
-T GPUBuffer<T>::getDeviceElem(NvU32 uElem)
+T GPUBuffer<T>::autoReadElem(NvU32 uElem)
 {
     if (m_pOrig != this)
-        return m_pOrig->getDeviceElem(uElem);
-    nvAssert(m_deviceRev >= m_hostRev);
-    T value;
-    cudaError_t result = cudaMemcpy(&value, m_pDevice + uElem, sizeof(T), cudaMemcpyDeviceToHost);
-    nvAssert(result == cudaSuccess);
-    return value;
+        return m_pOrig->autoReadElem(uElem);
+    if (m_deviceRev > m_hostRev)
+    {
+        T value;
+        cudaError_t result = cudaMemcpy(&value, m_pDevice + uElem, sizeof(T), cudaMemcpyDeviceToHost);
+        nvAssert(result == cudaSuccess);
+        return value;
+    }
+    return m_pHost[uElem];
 }
 template <class T>
-void GPUBuffer<T>::setDeviceElem(NvU32 uElem, T value)
+void GPUBuffer<T>::autoWriteElem(NvU32 uElem, T value)
 {
     if (m_pOrig != this)
     {
-        m_pOrig->setDeviceElem(uElem, value);
+        m_pOrig->autoWriteElem(uElem, value);
         return;
     }
-    nvAssert(m_deviceRev >= m_hostRev);
-    cudaError_t result = cudaMemcpy(m_pDevice + uElem, &value, sizeof(T), cudaMemcpyHostToDevice);
-    nvAssert(result == cudaSuccess);
-    m_deviceRev = m_hostRev + 1;
+    if (m_deviceRev > m_hostRev)
+    {
+        cudaError_t result = cudaMemcpy(m_pDevice + uElem, &value, sizeof(T), cudaMemcpyHostToDevice);
+        nvAssert(result == cudaSuccess);
+    }
+    else
+    {
+        m_pHost[uElem] = value;
+        m_hostRev = m_deviceRev + 1;
+    }
 }
 
 // explicit instantiations

@@ -56,9 +56,7 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
     // make internal copy of weights and biases
     saveCurrentStateToBackup();
 
-    double fPrevErrorPercents = 1e38;
-
-    // remember what the output was before we started changing weights/biases
+    // remember what was the output before we started changing weights/biases
     Tensor<float> outputBeforeChange;
     {
         TensorRef tmp = batch.forwardPass(*this);
@@ -66,59 +64,77 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
         outputBeforeChange.copySubregionFrom(0, *tmp, 0, tmp->size());
     }
 
-    Tensor<float> loss;
-    loss.init(outputBeforeChange.getDims());
+    // generate some kind of random wanted output
+    Tensor<float> wantedOutput;
+    wantedOutput.init(outputBeforeChange.getDims());
+    wantedOutput.clearWithRandomValues(-1, 1, m_rng);
+
+    Tensor<float> lossDeriv;
+    lossDeriv.init(outputBeforeChange.getDims());
 
     LearningRates lr;
     lr.init(getNLearningRatesNeeded());
     LossComputer lossComputer;
 
-    for (NvU32 i1 = 0; i1 < nChecks; ++i1)
+    // compute the change in output due to changeParam() that we did
+    float fLossBefore = 0;
+    lossComputer.compute(outputBeforeChange, wantedOutput, lossDeriv, &fLossBefore);
+
+    for (NvU32 i1 = 0; i1 < nChecks * 100; ++i1)
     {
-        NvU32 uLayer = m_rng.generateUnsigned(0, (NvU32)m_pLayers.size());
+        NvU32 uLayer = 0;// m_rng.generateUnsigned(0, (NvU32)m_pLayers.size());
         ILayer* pLayer = m_pLayers[uLayer].get();
         NvU32 nParams = pLayer->getNParams();
         NvU32 uParam = m_rng.generateUnsigned(0, nParams);
         float fDeltaParamForward = 0.25f;
+        double fPrevPercentDifference = 1e38;
+        std::vector<float> fN, fA;
         for (NvU32 i2 = 0; ; ++i2) // loop until acceptable accuracy of derivative is achieved
         {
-            // change weight/bias by some small amount
+            // compute the numeric derivative dLoss/dParam
             pLayer->changeParam(uParam, fDeltaParamForward);
-
             // see how that has affected the output
             TensorRef outputAfterChange = batch.forwardPass(*this);
-
             // compute the change in output due to changeParam() that we did
-            lossComputer.compute(outputBeforeChange, *outputAfterChange, loss);
+            float fLossAfter = 0;
+            lossComputer.compute(*outputAfterChange, wantedOutput, lossDeriv, &fLossAfter);
+            double fNumericDeriv = (fLossAfter - fLossBefore) / fDeltaParamForward;
 
             // restore weights/biases
             pLayer->restoreStateFromBackup();
-
-            // re-do the forward pass with the original value of parameter
             batch.forwardPass(*this);
-            // now try to numerically calculate the change of parameters needed to change output by the loss we computed earlier
-            batch.backwardPass(*this, loss, lr);
+            batch.backwardPass(*this, lossDeriv, lr);
+            // backward pass is supposed to change param by the analytic loss derivative
+            float fAnalyticDeriv = -pLayer->computeCurrentMinusBackup(uParam);
 
-            float fDeltaParamBackward = pLayer->computeCurrentMinusBackup(uParam);
-            double fErrorPercents = abs((fDeltaParamForward - fDeltaParamBackward) / (double)fDeltaParamForward) * 100;
-            if (fErrorPercents > fPrevErrorPercents)
-            {
-                // we have decreased the step, but the error has increased? something is wrong
-                nvAssert(false);
-                return false;
-            }
-            if (fErrorPercents < 1) // error below threshold - ok
-                break;
-            fPrevErrorPercents = fErrorPercents;
-
-            // error is above threshold - try smaller param change
-            fDeltaParamForward /= 2;
+            fN.push_back((float)fNumericDeriv);
+            fA.push_back(fAnalyticDeriv);
 
             // restore all weights/biases from the backup (needed because backwardPass() has changed everything)
             restoreStateFromBackup();
+
+            // loss seem to not depend on this particular param - go to the next sample
+            if (abs(fNumericDeriv + fAnalyticDeriv) < 1e-10)
+            {
+                break;
+            }
+            double fPercentDifference = 200 * abs((fNumericDeriv - fAnalyticDeriv) / (fNumericDeriv + fAnalyticDeriv));
+            if (fPercentDifference < 1)
+            {
+                break; // accuracy of this sample is good enough - go to the next sample
+            }
+            fPrevPercentDifference = fPercentDifference;
+
+            // error is above threshold - try smaller param change
+            fDeltaParamForward /= 2;
+            if (fDeltaParamForward < 1e-10)
+            {
+                // could not reach desired accuracy of derivative - something seems wrong
+                nvAssert(false);
+                return false;
+            }
         }
     }
 
-    restoreStateFromBackup();
     return true;
 }

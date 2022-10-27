@@ -15,11 +15,9 @@ struct CU_LossComputer
             m_errorStat = *m_lossPerBlock;
             m_errorStat.notifyDeviceBind(true, true);
         }
-        m_nElementsTotal = output.size();
-        nvAssert(wantedOutput.size() == m_nElementsTotal);
-        nvAssert(m_nElementsTotal % output.n() == 0);
-        m_nElementsPerBatch = m_nElementsTotal / output.n();
-        nvAssert(outLoss.size() == m_nElementsTotal);
+        nvAssert(wantedOutput.size() == output.size());
+        nvAssert(output.size() % output.n() == 0);
+        nvAssert(outLoss.size() == output.size());
         m_output.notifyDeviceBind(false);
         m_wantedOutput.notifyDeviceBind(false);
         m_outLoss.notifyDeviceBind(true, true);
@@ -29,11 +27,11 @@ struct CU_LossComputer
         int iStride = gridDimX * BLOCK_SIZE;
         float fSumOfSquares = 0;
         int nElements = 0;
-        for (int i = blockX * BLOCK_SIZE + threadX; i < m_nElementsTotal; i += iStride)
+        for (int i = blockX * BLOCK_SIZE + threadX; i < m_output.size(); i += iStride)
         {
-            float fLossDeriv = m_wantedOutput[i] - m_output[i];
-            m_outLoss[i] = fLossDeriv;
-            fSumOfSquares += sqr(fLossDeriv);
+            float fDiff = m_wantedOutput[i] - m_output[i];
+            m_outLoss[i] = fDiff / (2.f / m_output.size());
+            fSumOfSquares += sqr(fDiff) / m_output.size();
             ++nElements;
         }
         if (m_errorStat.size() == 0)
@@ -55,7 +53,6 @@ struct CU_LossComputer
 private:
     Tensor<float> m_output, m_wantedOutput, m_outLoss;
     GPUBuffer<float> m_errorStat;
-    int m_nElementsTotal, m_nElementsPerBatch;
 };
 #endif
 
@@ -84,7 +81,7 @@ void LossComputer::compute(Tensor<float>& output, Tensor<float>& wantedOutput, T
             fSumOfSquares += (double)m_lossPerBlock[u * 2];
             nElements += (int)m_lossPerBlock[u * 2 + 1];
         }
-        *pErrorStat = (float)sqrt(fSumOfSquares / nElements);
+        *pErrorStat = (float)fSumOfSquares;
     }
 #else
     m_pErrors.resize(1);
