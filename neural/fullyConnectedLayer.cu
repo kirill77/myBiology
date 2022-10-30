@@ -40,7 +40,7 @@ struct FCL_Forward
         unsigned outWi = threadX;
         unsigned outHi = (T_ACTIVATION1 != T_ACTIVATION2) ? threadY * 2 : threadY;
 
-        unsigned iBias = outHi / (T_ACTIVATION1 == T_ACTIVATION2 ? 1 : 2) * m_output.w() + outWi;
+        unsigned iBias = threadY * m_output.w() + outWi;
         unsigned iWeight = m_input.h() * m_input.w() * iBias;
         float fBeforeActivation = m_biases[iBias];
         for (unsigned inHi = 0; inHi < m_input.h(); ++inHi)
