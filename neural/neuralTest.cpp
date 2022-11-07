@@ -24,10 +24,10 @@ struct TestNetwork : public NeuralNetwork
         static const NvU32 NSAMPLES_PER_BATCH = 10;
         TensorRef pInput = std::make_shared<Tensor<float>>();
         pInput->init(NSAMPLES_PER_BATCH, s_inputDims[1], s_inputDims[2], s_inputDims[3]);
-        pInput->clearWithRandomValues(0, 1, rng);
+        pInput->clearWithRandomValues<float>(0, 1, rng);
         TensorRef pWantedOutput = std::make_shared<Tensor<float>>();
         pWantedOutput->init(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3]);
-        pWantedOutput->clearWithRandomValues(0, 1, rng);
+        pWantedOutput->clearWithRandomValues<float>(0, 1, rng);
         return Batch(uBatch, pInput, pWantedOutput);
     }
 

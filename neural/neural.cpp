@@ -60,14 +60,13 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
     Tensor<float> outputBeforeChange;
     {
         TensorRef tmp = batch.forwardPass(*this);
-        outputBeforeChange.init(tmp->getDims());
-        outputBeforeChange.copySubregionFrom(0, *tmp, 0, tmp->size());
+        outputBeforeChange.copyFrom(*tmp);
     }
 
     // generate some kind of random wanted output
     Tensor<float> wantedOutput;
     wantedOutput.init(outputBeforeChange.getDims());
-    wantedOutput.clearWithRandomValues(-1, 1, m_rng);
+    wantedOutput.clearWithRandomValues<float>(-1, 1, m_rng);
 
     Tensor<float> lossDeriv;
     lossDeriv.init(outputBeforeChange.getDims());

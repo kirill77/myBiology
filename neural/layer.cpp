@@ -12,12 +12,10 @@ void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
 
     if (!isFirstLayer)
     {
-        batchData.m_pPrevLoss = std::make_shared<Tensor<float>>();
-        batchData.m_pPrevLoss->init(inputDims);
+        batchData.m_pPrevLoss = std::make_shared<Tensor<float>>(inputDims);
     }
 
-    batchData.m_pOutput = std::make_shared<Tensor<float>>();
-    batchData.m_pOutput->init(outputDims);
+    batchData.m_pOutput = std::make_shared<Tensor<float>>(outputDims);
 }
 void ILayer::updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer& lossComputer, Tensor<float>& outLoss, float* pErrorPtr)
 {
@@ -35,13 +33,13 @@ void ILayer::changeParam(NvU32 uParam, float fDeltaChange)
     NvU32 nWeights = m_weights.size();
     if (uParam < nWeights)
     {
-        float fPrev = m_weights.autoReadElem(uParam);
-        m_weights.autoWriteElem(uParam, fPrev + fDeltaChange);
+        float fPrev = m_weights.autoReadElem<float>(uParam);
+        m_weights.autoWriteElem<float>(uParam, fPrev + fDeltaChange);
         return;
     }
     uParam -= nWeights;
-    float fPrev = m_biases.autoReadElem(uParam);
-    m_biases.autoWriteElem(uParam, fPrev + fDeltaChange);
+    float fPrev = m_biases.autoReadElem<float>(uParam);
+    m_biases.autoWriteElem<float>(uParam, fPrev + fDeltaChange);
 }
 float ILayer::computeCurrentMinusBackup(NvU32 uParam)
 {
@@ -49,14 +47,14 @@ float ILayer::computeCurrentMinusBackup(NvU32 uParam)
     float fCurrent = 0, fBackup = 0;
     if (uParam < nWeights)
     {
-        fBackup = m_weightsBackup.autoReadElem(uParam);
-        fCurrent = m_weights.autoReadElem(uParam);
+        fBackup = m_weightsBackup.autoReadElem<float>(uParam);
+        fCurrent = m_weights.autoReadElem<float>(uParam);
     }
     else
     {
 	    uParam -= nWeights;
-        fBackup = m_biasesBackup.autoReadElem(uParam);
-        fCurrent = m_biases.autoReadElem(uParam);
+        fBackup = m_biasesBackup.autoReadElem<float>(uParam);
+        fCurrent = m_biases.autoReadElem<float>(uParam);
     }
     return fCurrent - fBackup;
 }

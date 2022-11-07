@@ -7,7 +7,7 @@ struct CU_LossComputer
     static const NvU32 BLOCK_SIZE = 32;
 
     CU_LossComputer(Tensor<float>& output, Tensor<float>& wantedOutput,
-        Tensor<float>& outLoss, GPUBuffer<float>* m_lossPerBlock) : m_output(output),
+        Tensor<float>& outLoss, GPUBuffer* m_lossPerBlock) : m_output(output),
         m_wantedOutput(wantedOutput), m_outLoss(outLoss)
     {
         if (m_lossPerBlock)
@@ -29,8 +29,8 @@ struct CU_LossComputer
         int nElements = 0;
         for (int i = blockX * BLOCK_SIZE + threadX; i < m_output.size(); i += iStride)
         {
-            float fDiff = m_wantedOutput[i] - m_output[i];
-            m_outLoss[i] = fDiff / (2.f / m_output.size());
+            float fDiff = m_wantedOutput.as<float>(i) - m_output.as<float>(i);
+            m_outLoss.as<float>(i) = fDiff / (2.f / m_output.size());
             fSumOfSquares += sqr(fDiff) / m_output.size();
             ++nElements;
         }
@@ -45,14 +45,14 @@ struct CU_LossComputer
         }
         if (threadX == 0)
         {
-            m_errorStat[blockIdx.x * 2] = fSumOfSquares;
-            m_errorStat[blockIdx.x * 2 + 1] = nElements;
+            m_errorStat.as<float>(blockIdx.x * 2) = fSumOfSquares;
+            m_errorStat.as<float>(blockIdx.x * 2 + 1) = nElements;
         }
     }
 
 private:
     Tensor<float> m_output, m_wantedOutput, m_outLoss;
-    GPUBuffer<float> m_errorStat;
+    GPUBuffer m_errorStat;
 };
 #endif
 
@@ -78,8 +78,8 @@ void LossComputer::compute(Tensor<float>& output, Tensor<float>& wantedOutput, T
         m_lossPerBlock.syncToHost();
         for (NvU32 u = 0; u < grid.x; ++u)
         {
-            fSumOfSquares += (double)m_lossPerBlock[u * 2];
-            nElements += (int)m_lossPerBlock[u * 2 + 1];
+            fSumOfSquares += (double)m_lossPerBlock.as<float>(u * 2);
+            nElements += (int)m_lossPerBlock.as<float>(u * 2 + 1);
         }
         *pErrorStat = (float)fSumOfSquares;
     }

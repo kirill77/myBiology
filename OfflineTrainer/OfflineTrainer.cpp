@@ -32,7 +32,7 @@ int main()
         }
         if (path.empty())
         {
-            path = L"c:\\atomNets\\water_4231.bin";
+            path = L"c:\\atomNets\\water_4237.bin";
         }
         printf("loading %S\n", path.c_str());
         MyReader reader(path);
@@ -42,13 +42,13 @@ int main()
     Epoch epoch;
 
     LossComputer lossComputer;
-    
+
     LearningRates lr;
     lr.init(network.getNLearningRatesNeeded());
 
     std::string sBuffer;
     sBuffer.resize(1024);
-    
+
     printf("training starts...\n");
     auto startTime = std::chrono::high_resolution_clock::now();
     auto lastSaveTime = startTime;

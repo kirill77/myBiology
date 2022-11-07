@@ -42,22 +42,22 @@ struct FCL_Forward
 
         unsigned iBias = threadY * m_output.w() + outWi;
         unsigned iWeight = m_input.h() * m_input.w() * iBias;
-        float fBeforeActivation = m_biases[iBias];
+        float fBeforeActivation = m_biases.as<float>(iBias);
         for (unsigned inHi = 0; inHi < m_input.h(); ++inHi)
         {
             for (unsigned inWi = 0; inWi < m_input.w(); ++inWi)
             {
-                float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
-                fBeforeActivation += fInput * m_weights[iWeight++];
+                float fInput = m_input.access<float>(inOutNi, inHi, inWi, inOutCi);
+                fBeforeActivation += fInput * m_weights.as<float>(iWeight++);
             }
         }
-        m_beforeActivation.access(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
+        m_beforeActivation.access<float>(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
         float fAfterActivation = TFunction<T_ACTIVATION1>(fBeforeActivation);
-        m_output.access(inOutNi, outHi, outWi, inOutCi) = fAfterActivation;
+        m_output.access<float>(inOutNi, outHi, outWi, inOutCi) = fAfterActivation;
         if (T_ACTIVATION1 != T_ACTIVATION2)
         {
             float fAfterActivation2 = TFunction<T_ACTIVATION2>(fBeforeActivation);
-            m_output.access(inOutNi, outHi + 1, outWi, inOutCi) = fAfterActivation2;
+            m_output.access<float>(inOutNi, outHi + 1, outWi, inOutCi) = fAfterActivation2;
         }
     }
 
@@ -146,7 +146,7 @@ struct FCL_Backward
 
         float fDeltaBias = 0, fDeltaWeight = 0;
         unsigned iWeight = (outWi + _outHi * m_loss.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
-        float fW = m_weights[iWeight];
+        float fW = m_weights.as<float>(iWeight);
         for (unsigned inOutNi = 0; inOutNi < m_loss.n(); ++inOutNi)
         {
             for (unsigned inOutCi = 0; inOutCi < m_loss.c(); ++inOutCi)
@@ -154,14 +154,14 @@ struct FCL_Backward
                 unsigned outHi = _outHi * (T_ACTIVATION1 != T_ACTIVATION2 ? 2 : 1);
 
                 float fLoss[2] = {0 , 0};
-                fLoss[0] = m_loss.access(inOutNi, outHi, outWi, inOutCi);
+                fLoss[0] = m_loss.access<float>(inOutNi, outHi, outWi, inOutCi);
                 if (T_ACTIVATION1 != T_ACTIVATION2)
                 {
-                    fLoss[1] = m_loss.access(inOutNi, outHi + 1, outWi, inOutCi);
+                    fLoss[1] = m_loss.access<float>(inOutNi, outHi + 1, outWi, inOutCi);
                 }
                 if (fLoss[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fLoss[1] == 0)) // if no error - nothing to do
                     continue;
-                float fBeforeActivation = m_beforeActivation.access(inOutNi, _outHi, outWi, inOutCi);
+                float fBeforeActivation = m_beforeActivation.access<float>(inOutNi, _outHi, outWi, inOutCi);
                 float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
                 float fBackwardChain = fLoss[0] * fActivationDer;
                 if (T_ACTIVATION1 != T_ACTIVATION2)
@@ -171,11 +171,11 @@ struct FCL_Backward
                 }
                 fDeltaBias += fBackwardChain;
                 // modify the weight corresponding to this summator
-                float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
+                float fInput = m_input.access<float>(inOutNi, inHi, inWi, inOutCi);
                 fDeltaWeight += fBackwardChain * fInput;
                 if (m_prevLoss.n()) // have we been asked to compute deltaInput?
                 {
-                    float& fPrevLoss = m_prevLoss.access(inOutNi, inHi, inWi, inOutCi);
+                    float& fPrevLoss = m_prevLoss.access<float>(inOutNi, inHi, inWi, inOutCi);
                     myAtomicAdd(&fPrevLoss, fBackwardChain * fW);
                 }
             }
@@ -183,8 +183,8 @@ struct FCL_Backward
         // bias address only depends on threadId - meaning the same threadIds from different blocks may race
         unsigned iBias = _outHi * m_loss.w() + outWi;
         // not sure why this division is needed. i added it for the numerical derivative tests to pass
-        myAtomicAdd(&m_biases[iBias], fDeltaBias * m_fBiasesLR / (m_input.w() * m_input.h()));
-        m_weights[iWeight] += fDeltaWeight * m_fWeightsLR;
+        myAtomicAdd(&m_biases.as<float>(iBias), fDeltaBias* m_fBiasesLR / (m_input.w() * m_input.h()));
+        m_weights.as<float>(iWeight) += fDeltaWeight * m_fWeightsLR;
     }
 
     Tensor<float> m_input, m_weights, m_biases, m_prevLoss, m_loss, m_beforeActivation;

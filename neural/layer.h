@@ -17,15 +17,13 @@ struct ILayer
 
     void saveCurrentStateToBackup()
     {
-        m_weightsBackup.resize(m_weights.size());
-        m_weightsBackup.copySubregionFrom(0, m_weights, 0, (NvU32)m_weights.size());
-        m_biasesBackup.resize(m_biases.size());
-        m_biasesBackup.copySubregionFrom(0, m_biases, 0, (NvU32)m_biases.size());
+        m_weightsBackup.copyFrom(m_weights);
+        m_biasesBackup.copyFrom(m_biases);
     }
     void restoreStateFromBackup()
     {
-        m_weights.copySubregionFrom(0, m_weightsBackup, 0, (NvU32)m_weightsBackup.size());
-        m_biases.copySubregionFrom(0, m_biasesBackup, 0, (NvU32)m_biasesBackup.size());
+        m_weights.copyFrom(m_weightsBackup);
+        m_biases.copyFrom(m_biasesBackup);
     }
 
     void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
@@ -110,9 +108,9 @@ struct FullyConnectedLayer : public ILayer
         // fully connected means we have this many weights and biases:
         RNGUniform rng;
         m_weights.init(1, nSummatorsPerOutputCluster, nValuesPerInputCluster, 1);
-        m_weights.clearWithRandomValues(-1, 1, rng);
+        m_weights.clearWithRandomValues<float>(-1, 1, rng);
         m_biases.init(1, nSummatorsPerOutputCluster, 1, 1);
-        m_biases.clearWithRandomValues(-1, 1, rng);
+        m_biases.clearWithRandomValues<float>(-1, 1, rng);
 
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
