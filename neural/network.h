@@ -39,7 +39,7 @@ struct NeuralNetwork
         }
         return pInput;
     }
-    void backwardPass(NvU32 uBatch, Tensor<float>* pLoss, struct LearningRates& lr);
+    void backwardPass(NvU32 uBatch, Tensor* pLoss, struct LearningRates& lr);
     void saveCurrentStateToBackup()
     {
         for (NvU32 u = 0; u < m_pLayers.size(); ++u)
@@ -54,7 +54,7 @@ struct NeuralNetwork
             m_pLayers[u]->restoreStateFromBackup();
         }
     }
-    TensorRef updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
+    TensorRef updateLoss(NvU32 uBatch, Tensor& wantedOutput,
         LossComputer& lossComputer, float* pErrorPtr)
     {
         TensorRef pLoss = getTmpLossTensor(wantedOutput.getDims());

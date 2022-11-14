@@ -106,7 +106,7 @@ struct AtomsNetwork : public NeuralNetwork
         TensorRef pOutput = this->forwardPass(0, pInput);
         pOutput->syncToHost();
 
-        Tensor<float>& output = *pOutput;
+        Tensor& output = *pOutput;
         for (NvU32 u = 0; u < nAtoms; ++u)
         {
             computeNeuralDir(output, u, simContext);
@@ -180,7 +180,7 @@ private:
         TensorRef pInput = createInputTensor(scrambler);
 
         TensorRef pWantedOutput = allocateOutputTensor(scrambler.size());
-        Tensor<float>& wantedOutput = *pWantedOutput;
+        Tensor& wantedOutput = *pWantedOutput;
         // copy data to output tensors
         for (NvU32 u = 0; u < scrambler.size(); ++u)
         {
@@ -204,8 +204,8 @@ private:
     {
         // initialize inputs and outputs to zero (force CPU because we have to fill those buffers on CPU)
         std::array<unsigned, 4> inputDims = { scrambler.size(), s_nInputValuesPerCluster, 1, 1};
-        TensorRef pInput = std::make_shared<Tensor<float>>(inputDims);
-        Tensor<float>& input = *pInput;
+        TensorRef pInput = std::make_shared<Tensor>(inputDims, sizeof(float));
+        Tensor& input = *pInput;
         input.clearSubregion(0, (NvU32)input.size(), EXECUTE_MODE_FORCE_CPU);
 
         // copy all data to input and output tensors
@@ -220,8 +220,7 @@ private:
     TensorRef allocateOutputTensor(NvU32 nAtoms) const
     {
         std::array<unsigned, 4> outputDims = { nAtoms, s_nOutputValuesPerCluster, 1, 1 };
-        TensorRef pOutput = std::make_shared<Tensor<float>>(outputDims);
-        pOutput->init(outputDims);
+        TensorRef pOutput = std::make_shared<Tensor>(outputDims, sizeof(float));
         pOutput->clearSubregion(0, (NvU32)pOutput->size(), EXECUTE_MODE_FORCE_CPU);
         return pOutput;
     }
@@ -284,7 +283,7 @@ private:
     }
     static const NvU32 NATOMS_PER_BATCH = 256; // number of atoms we train on simultaneously
 
-    void copyClusterToInputTensor(Tensor<float> &input, NvU32 uDstCluster,
+    void copyClusterToInputTensor(Tensor &input, NvU32 uDstCluster,
         NvU32 uSrcCluster) const
     {
         NvU32 uSimStep = uSrcCluster / getNAtoms();
@@ -304,7 +303,7 @@ private:
             input.access<float>(uDstCluster, computeInputForceOffset(u), 0, 0) = fv.m_nCovalentBonds[u]; // copy the force information
         }
     }
-    void copyAtomToInputTensor(Tensor<float>& input, NvU32 uDstCluster, NvU32 uDstSlot,
+    void copyAtomToInputTensor(Tensor& input, NvU32 uDstCluster, NvU32 uDstSlot,
         NvU32 uCentralAtom, NvU32 uSrcAtom,
         const GPUBuffer &transientData) const
     {
@@ -326,7 +325,7 @@ private:
         input.access<float>(uDstCluster, hi++, 0, 0) = vSpeed[1];
         input.access<float>(uDstCluster, hi++, 0, 0) = vSpeed[2];
     }
-    void copyClusterToOutputTensor(Tensor<float> &wantedOutput, NvU32 uDstCluster,
+    void copyClusterToOutputTensor(Tensor &wantedOutput, NvU32 uDstCluster,
         NvU32 uSrcCluster) const
     {
         NvU32 uSimStep = uSrcCluster / getNAtoms();
@@ -362,7 +361,7 @@ private:
     }
 
 #if 0 // not needed for now but good code (for when I do inference)
-    void computeNeuralDir(Tensor<float>& output, NvU32 uAtom, SimContext<T>& simContext) const
+    void computeNeuralDir(Tensor& output, NvU32 uAtom, SimContext<T>& simContext) const
     {
         Atom<T>& atom = simContext.m_atoms[uAtom];
         rtvector<float, 3> vDir;

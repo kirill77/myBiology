@@ -6,8 +6,8 @@ struct CU_LossComputer
 {
     static const NvU32 BLOCK_SIZE = 32;
 
-    CU_LossComputer(Tensor<float>& output, Tensor<float>& wantedOutput,
-        Tensor<float>& outLoss, GPUBuffer* m_lossPerBlock) : m_output(output),
+    CU_LossComputer(Tensor& output, Tensor& wantedOutput,
+        Tensor& outLoss, GPUBuffer* m_lossPerBlock) : m_output(output),
         m_wantedOutput(wantedOutput), m_outLoss(outLoss)
     {
         if (m_lossPerBlock)
@@ -51,7 +51,7 @@ struct CU_LossComputer
     }
 
 private:
-    Tensor<float> m_output, m_wantedOutput, m_outLoss;
+    Tensor m_output, m_wantedOutput, m_outLoss;
     GPUBuffer m_errorStat;
 };
 #endif
@@ -61,7 +61,7 @@ __global__ void lossKernel(CU_LossComputer lossComputer)
     lossComputer.computeLoss(threadIdx.x, blockIdx.x, gridDim.x);
 }
 
-void LossComputer::compute(Tensor<float>& output, Tensor<float>& wantedOutput, Tensor<float>& outLoss, float* pErrorStat)
+void LossComputer::compute(Tensor& output, Tensor& wantedOutput, Tensor& outLoss, float* pErrorStat)
 {
     nvAssert(output.getDims() == wantedOutput.getDims());
     nvAssert(output.getDims() == outLoss.getDims());

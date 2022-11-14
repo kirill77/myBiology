@@ -41,7 +41,7 @@ TensorRef Batch::forwardPass(NeuralNetwork& network)
 {
     return network.forwardPass(m_uBatch, m_pInput);
 }
-void Batch::backwardPass(NeuralNetwork& network, Tensor<float> &loss, LearningRates &lr)
+void Batch::backwardPass(NeuralNetwork& network, Tensor &loss, LearningRates &lr)
 {
     network.backwardPass(m_uBatch, &loss, lr);
 }

@@ -10,7 +10,7 @@ struct ILayer
     // returns input for the next layer
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) = 0;
     // returns computed loss for the previous layer
-    virtual Tensor<float> *backward(NvU32 uBatch, Tensor<float> &loss,
+    virtual Tensor *backward(NvU32 uBatch, Tensor &loss,
         float fBiasesLR, float fWeightsLR) = 0;
 
     virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer);
@@ -26,8 +26,8 @@ struct ILayer
         m_biases.copyFrom(m_biasesBackup);
     }
 
-    void updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput,
-        struct LossComputer& lossComputer, Tensor<float> &outLoss, float* pErrorPtr);
+    void updateLoss(NvU32 uBatch, Tensor& wantedOutput,
+        struct LossComputer& lossComputer, Tensor &outLoss, float* pErrorPtr);
 
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
 
@@ -51,7 +51,7 @@ protected:
     {
     }
     std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
-    Tensor<float> m_weights, m_biases, m_weightsBackup, m_biasesBackup;
+    Tensor m_weights, m_biases, m_weightsBackup, m_biasesBackup;
     BatchDataContainer m_batchesData;
 };
 
@@ -86,8 +86,7 @@ struct FullyConnectedLayer : public ILayer
         }
 
         nvAssert(batchData.m_beforeActivation == nullptr);
-        batchData.m_beforeActivation = std::make_shared<Tensor<float>>();
-        batchData.m_beforeActivation->init(dimsTmp);
+        batchData.m_beforeActivation = std::make_shared<Tensor>(dimsTmp, sizeof(float));
     }
     void init(const std::array<unsigned, 4> &inputDims, const std::array<unsigned, 4> &outputDims)
     {
@@ -107,9 +106,9 @@ struct FullyConnectedLayer : public ILayer
 
         // fully connected means we have this many weights and biases:
         RNGUniform rng;
-        m_weights.init(1, nSummatorsPerOutputCluster, nValuesPerInputCluster, 1);
+        m_weights.init(1, nSummatorsPerOutputCluster, nValuesPerInputCluster, 1, sizeof(float));
         m_weights.clearWithRandomValues<float>(-1, 1, rng);
-        m_biases.init(1, nSummatorsPerOutputCluster, 1, 1);
+        m_biases.init(1, nSummatorsPerOutputCluster, 1, 1, sizeof(float));
         m_biases.clearWithRandomValues<float>(-1, 1, rng);
 
         // and our output will be:
@@ -119,7 +118,7 @@ struct FullyConnectedLayer : public ILayer
     // returns input for the next layer
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) override;
     // returns computed loss for the previous layer
-    virtual Tensor<float> *backward(NvU32 uBatch, Tensor<float>& loss,
+    virtual Tensor *backward(NvU32 uBatch, Tensor& loss,
         float fBiasesLR, float fWeightsLR) override;
 
     virtual void serialize(ISerializer& s) override

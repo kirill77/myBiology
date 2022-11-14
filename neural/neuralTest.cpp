@@ -22,11 +22,9 @@ struct TestNetwork : public NeuralNetwork
         nvAssert(uBatch < getNBatches());
         RNGUniform rng((uBatch + 1) * 0x12345);
         static const NvU32 NSAMPLES_PER_BATCH = 10;
-        TensorRef pInput = std::make_shared<Tensor<float>>();
-        pInput->init(NSAMPLES_PER_BATCH, s_inputDims[1], s_inputDims[2], s_inputDims[3]);
+        TensorRef pInput = std::make_shared<Tensor>(NSAMPLES_PER_BATCH, s_inputDims[1], s_inputDims[2], s_inputDims[3], sizeof(float));
         pInput->clearWithRandomValues<float>(0, 1, rng);
-        TensorRef pWantedOutput = std::make_shared<Tensor<float>>();
-        pWantedOutput->init(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3]);
+        TensorRef pWantedOutput = std::make_shared<Tensor>(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3], sizeof(float));
         pWantedOutput->clearWithRandomValues<float>(0, 1, rng);
         return Batch(uBatch, pInput, pWantedOutput);
     }
@@ -67,13 +65,13 @@ struct Test1Network : public NeuralNetwork
         static const NvU32 NSAMPLES_PER_BATCH = 100;
         RNGUniform rng((uBatch + 1) * 0x12345);
 
-        TensorRef pInput = std::make_shared<Tensor<float>>();
-        Tensor<float>& input = *pInput;
+        TensorRef pInput = std::make_shared<Tensor>();
+        Tensor& input = *pInput;
         std::array<unsigned, 4> inputDims = s_layerDims[0];
         std::array<unsigned, 4> outputDims = *s_layerDims.rbegin();
         input.init(NSAMPLES_PER_BATCH, inputDims[1], inputDims[2], inputDims[3]);
-        TensorRef pWantedOutput = std::make_shared<Tensor<float>>();
-        Tensor<float>& wantedOutput = *pWantedOutput;
+        TensorRef pWantedOutput = std::make_shared<Tensor>();
+        Tensor& wantedOutput = *pWantedOutput;
         wantedOutput.init(NSAMPLES_PER_BATCH, outputDims[1], outputDims[2], outputDims[3]);
 
         for (int i = 0; i < (int)input.n(); ++i)

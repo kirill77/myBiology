@@ -23,7 +23,7 @@ std::shared_ptr<ILayer> ILayer::createLayer(LAYER_TYPE layerType)
     return pLayer;
 }
 
-void NeuralNetwork::backwardPass(NvU32 uBatch, Tensor<float>* pLoss, struct LearningRates& lr)
+void NeuralNetwork::backwardPass(NvU32 uBatch, Tensor* pLoss, struct LearningRates& lr)
 {
     NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
     while (uLayer < m_pLayers.size())
@@ -45,7 +45,7 @@ TensorRef NeuralNetwork::getTmpTensor(TensorRef& pCache, const std::array<NvU32,
     {
         return pCache;
     }
-    pCache = std::make_shared<Tensor<float>>(dims);
+    pCache = std::make_shared<Tensor>(dims, sizeof(float));
     return pCache;
 }
 
@@ -57,19 +57,19 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
     saveCurrentStateToBackup();
 
     // remember what was the output before we started changing weights/biases
-    Tensor<float> outputBeforeChange;
+    Tensor outputBeforeChange;
     {
         TensorRef tmp = batch.forwardPass(*this);
         outputBeforeChange.copyFrom(*tmp);
     }
 
     // generate some kind of random wanted output
-    Tensor<float> wantedOutput;
-    wantedOutput.init(outputBeforeChange.getDims());
+    Tensor wantedOutput;
+    wantedOutput.init(outputBeforeChange.getDims(), sizeof(float));
     wantedOutput.clearWithRandomValues<float>(-1, 1, m_rng);
 
-    Tensor<float> lossDeriv;
-    lossDeriv.init(outputBeforeChange.getDims());
+    Tensor lossDeriv;
+    lossDeriv.init(outputBeforeChange.getDims(), sizeof(float));
 
     LearningRates lr;
     lr.init(getNLearningRatesNeeded());

@@ -10,7 +10,7 @@ struct LossComputer
         m_lossPerBlock.resize<float>(1024 * 2);
     }
 
-    void compute(Tensor<float> &outputs, Tensor<float> &wantedOutputs, Tensor<float> &outLoss, float *pAvgError = nullptr);
+    void compute(Tensor &outputs, Tensor &wantedOutputs, Tensor &outLoss, float *pAvgError = nullptr);
 
 private:
     GPUBuffer m_lossPerBlock;

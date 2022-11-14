@@ -12,15 +12,15 @@ void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
 
     if (!isFirstLayer)
     {
-        batchData.m_pPrevLoss = std::make_shared<Tensor<float>>(inputDims);
+        batchData.m_pPrevLoss = std::make_shared<Tensor>(inputDims, sizeof(float));
     }
 
-    batchData.m_pOutput = std::make_shared<Tensor<float>>(outputDims);
+    batchData.m_pOutput = std::make_shared<Tensor>(outputDims, sizeof(float));
 }
-void ILayer::updateLoss(NvU32 uBatch, Tensor<float>& wantedOutput, LossComputer& lossComputer, Tensor<float>& outLoss, float* pErrorPtr)
+void ILayer::updateLoss(NvU32 uBatch, Tensor& wantedOutput, LossComputer& lossComputer, Tensor& outLoss, float* pErrorPtr)
 {
     auto& bd = m_batchesData.accessBatchData(uBatch);
-    Tensor<float>& output = (*bd.m_pOutput);
+    Tensor& output = (*bd.m_pOutput);
     lossComputer.compute(output, wantedOutput, outLoss, pErrorPtr);
 }
 // functions used to check analytic derivative against numeric ones
