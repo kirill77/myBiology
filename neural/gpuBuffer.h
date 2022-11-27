@@ -8,6 +8,14 @@
 
 enum EXECUTE_MODE { EXECUTE_MODE_DEFAULT, EXECUTE_MODE_FORCE_GPU, EXECUTE_MODE_FORCE_CPU };
 
+inline void myCheckCudaErrors()
+{
+#if 1
+    extern void _myCheckCudaErrors();
+    _myCheckCudaErrors();
+#endif
+}
+
 struct GPUBuffer
 {
     GPUBuffer()
@@ -91,16 +99,6 @@ struct GPUBuffer
 
     void clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE mode);
 
-    GPUBuffer(const GPUBuffer& other)
-    {
-        copyFrom(other);
-    }
-    void operator =(const GPUBuffer& other)
-    {
-        if (m_pOrig == other.m_pOrig) return;
-        decRef();
-        copyFrom(other);
-    }
     virtual ~GPUBuffer()
     {
         m_pOrig->decRef();
@@ -131,22 +129,8 @@ struct GPUBuffer
     NvU32 elemSize() const { return m_elemSize; }
 
 private:
-    void copyFrom(const GPUBuffer& other)
-    {
-        if (other.size() == 0)
-        {
-            // if the other tensor is empty - we can just make ourselves
-            // empty instead of storing a pointer to that other tensor
-            nullify();
-            return;
-        }
-        m_pOrig = other.m_pOrig;
-        ++m_pOrig->m_nRefs;
-        m_pDevice = m_pOrig->m_pDevice;
-        m_nHostElems = m_pOrig->m_nHostElems;
-        m_nDeviceElems = m_pOrig->m_nDeviceElems;
-        m_elemSize = m_pOrig->m_elemSize;
-    }
+    GPUBuffer(const GPUBuffer& other) = delete;
+    void operator = (const GPUBuffer& other) = delete;
     void decRef();
     // having this as template allows calling constructor on T - which is what we want
     template <class T>
@@ -176,5 +160,53 @@ private:
     NvU32 m_nHostElems = 0, m_nDeviceElems = 0, m_elemSize = 0;
     int m_nRefs = 0;
     GPUBuffer* m_pOrig = nullptr;
+};
+
+template <class T>
+struct CUDAROBuffer
+{
+    CUDAROBuffer() { }
+    CUDAROBuffer(GPUBuffer& b)
+    {
+        b.notifyDeviceBind(false);
+        m_pDevice = b.getDevicePointer<T>();
+        m_size = b.size();
+    }
+    __device__ __host__ const T& operator[](NvU32 u) const
+    {
+#ifdef __CUDA_ARCH__
+        assert(u < m_size);
+        return m_pDevice[u];
+#else
+        nvAssert(u < m_size);
+        return m_pHost[u];
+#endif
+    }
+    __device__ __host__ NvU32 size() const { return m_size; }
+
+protected:
+    T* m_pHost = nullptr, *m_pDevice = nullptr;
+    NvU32 m_size = 0;
+};
+
+template <class T>
+struct CUDARWBuffer : public CUDAROBuffer<T>
+{
+    CUDARWBuffer() { }
+    CUDARWBuffer(GPUBuffer &b, bool bDiscardPrevContent)
+    {
+        b.notifyDeviceBind(true, bDiscardPrevContent);
+        this->m_pDevice = b.getDevicePointer<T>();
+        this->m_size = b.size();
+    }
+    __device__ __host__ T& operator[](NvU32 u)
+    {
+        nvAssert(u < this->m_size);
+#ifdef __CUDA_ARCH__
+        return m_pDevice[u];
+#else
+        return this->m_pHost[u];
+#endif
+    }
 };
 

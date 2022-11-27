@@ -13,24 +13,8 @@ struct FCL_Forward
 {
     FCL_Forward(Tensor& input, Tensor& output, Tensor& weights, Tensor& biases,
         Tensor &beforeActivation) :
-        m_input(input), m_output(output), m_weights(weights), m_biases(biases), m_beforeActivation(beforeActivation)
+        m_input(input), m_output(output, true), m_weights(weights), m_biases(biases), m_beforeActivation(beforeActivation, true)
     {
-        if (g_bExecuteOnTheGPU)
-        {
-            m_input.notifyDeviceBind(false);
-            m_output.notifyDeviceBind(true);
-            m_weights.notifyDeviceBind(false);
-            m_biases.notifyDeviceBind(false);
-            m_beforeActivation.notifyDeviceBind(true);
-        }
-        else
-        {
-            m_input.syncToHost();
-            m_output.syncToHost();
-            m_weights.syncToHost();
-            m_biases.syncToHost();
-            m_beforeActivation.syncToHost();
-        }
     }
 
     __host__ __device__ void forward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
@@ -42,26 +26,27 @@ struct FCL_Forward
 
         unsigned iBias = threadY * m_output.w() + outWi;
         unsigned iWeight = m_input.h() * m_input.w() * iBias;
-        float fBeforeActivation = m_biases.as<float>(iBias);
+        float fBeforeActivation = m_biases[iBias];
         for (unsigned inHi = 0; inHi < m_input.h(); ++inHi)
         {
             for (unsigned inWi = 0; inWi < m_input.w(); ++inWi)
             {
-                float fInput = m_input.access<float>(inOutNi, inHi, inWi, inOutCi);
-                fBeforeActivation += fInput * m_weights.as<float>(iWeight++);
+                float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
+                fBeforeActivation += fInput * m_weights[iWeight++];
             }
         }
-        m_beforeActivation.access<float>(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
+        m_beforeActivation.access(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
         float fAfterActivation = TFunction<T_ACTIVATION1>(fBeforeActivation);
-        m_output.access<float>(inOutNi, outHi, outWi, inOutCi) = fAfterActivation;
+        m_output.access(inOutNi, outHi, outWi, inOutCi) = fAfterActivation;
         if (T_ACTIVATION1 != T_ACTIVATION2)
         {
             float fAfterActivation2 = TFunction<T_ACTIVATION2>(fBeforeActivation);
-            m_output.access<float>(inOutNi, outHi + 1, outWi, inOutCi) = fAfterActivation2;
+            m_output.access(inOutNi, outHi + 1, outWi, inOutCi) = fAfterActivation2;
         }
     }
 
-    Tensor m_input, m_weights, m_biases, m_beforeActivation, m_output;
+    CUDAROTensor<float> m_input, m_weights, m_biases;
+    CUDARWTensor<float> m_output, m_beforeActivation;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -112,28 +97,14 @@ template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FCL_Backward
 {
     FCL_Backward(float fBiasesLR, float fWeightsLR, Tensor& input, Tensor& weights, Tensor& biases,
-    Tensor &prevLoss, Tensor &loss, Tensor &beforeActivation) :
+    Tensor *pPrevLoss, Tensor &loss, Tensor &beforeActivation) :
         m_fBiasesLR(fBiasesLR), m_fWeightsLR(fWeightsLR),
-        m_input(input), m_weights(weights), m_biases(biases),
-        m_prevLoss(prevLoss), m_loss(loss), m_beforeActivation(beforeActivation)
+        m_input(input), m_weights(weights, false), m_biases(biases, false),
+        m_loss(loss), m_beforeActivation(beforeActivation)
     {
-        if (g_bExecuteOnTheGPU)
+        if (pPrevLoss)
         {
-            m_input.notifyDeviceBind(false);
-            m_weights.notifyDeviceBind(true);
-            m_biases.notifyDeviceBind(true);
-            m_prevLoss.notifyDeviceBind(true);
-            m_loss.notifyDeviceBind(false);
-            m_beforeActivation.notifyDeviceBind(false);
-        }
-        else
-        {
-            m_input.syncToHost();
-            m_weights.syncToHost();
-            m_biases.syncToHost();
-            m_prevLoss.syncToHost();
-            m_loss.syncToHost();
-            m_beforeActivation.syncToHost();
+            m_prevLoss = CUDARWTensor<float>(*pPrevLoss, true);
         }
     }
 
@@ -146,7 +117,7 @@ struct FCL_Backward
 
         float fDeltaBias = 0, fDeltaWeight = 0;
         unsigned iWeight = (outWi + _outHi * m_loss.w()) * m_input.h() * m_input.w() + inHi * m_input.w() + inWi;
-        float fW = m_weights.as<float>(iWeight);
+        float fW = m_weights[iWeight];
         for (unsigned inOutNi = 0; inOutNi < m_loss.n(); ++inOutNi)
         {
             for (unsigned inOutCi = 0; inOutCi < m_loss.c(); ++inOutCi)
@@ -154,14 +125,14 @@ struct FCL_Backward
                 unsigned outHi = _outHi * (T_ACTIVATION1 != T_ACTIVATION2 ? 2 : 1);
 
                 float fLoss[2] = {0 , 0};
-                fLoss[0] = m_loss.access<float>(inOutNi, outHi, outWi, inOutCi);
+                fLoss[0] = m_loss.access(inOutNi, outHi, outWi, inOutCi);
                 if (T_ACTIVATION1 != T_ACTIVATION2)
                 {
-                    fLoss[1] = m_loss.access<float>(inOutNi, outHi + 1, outWi, inOutCi);
+                    fLoss[1] = m_loss.access(inOutNi, outHi + 1, outWi, inOutCi);
                 }
                 if (fLoss[0] == 0 && (T_ACTIVATION1 == T_ACTIVATION2 || fLoss[1] == 0)) // if no error - nothing to do
                     continue;
-                float fBeforeActivation = m_beforeActivation.access<float>(inOutNi, _outHi, outWi, inOutCi);
+                float fBeforeActivation = m_beforeActivation.access(inOutNi, _outHi, outWi, inOutCi);
                 float fActivationDer = TFunctionDer<T_ACTIVATION1>(fBeforeActivation);
                 float fBackwardChain = fLoss[0] * fActivationDer;
                 if (T_ACTIVATION1 != T_ACTIVATION2)
@@ -171,11 +142,11 @@ struct FCL_Backward
                 }
                 fDeltaBias += fBackwardChain;
                 // modify the weight corresponding to this summator
-                float fInput = m_input.access<float>(inOutNi, inHi, inWi, inOutCi);
+                float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
                 fDeltaWeight += fBackwardChain * fInput;
                 if (m_prevLoss.n()) // have we been asked to compute deltaInput?
                 {
-                    float& fPrevLoss = m_prevLoss.access<float>(inOutNi, inHi, inWi, inOutCi);
+                    float& fPrevLoss = m_prevLoss.access(inOutNi, inHi, inWi, inOutCi);
                     myAtomicAdd(&fPrevLoss, fBackwardChain * fW);
                 }
             }
@@ -183,11 +154,12 @@ struct FCL_Backward
         // bias address only depends on threadId - meaning the same threadIds from different blocks may race
         unsigned iBias = _outHi * m_loss.w() + outWi;
         // not sure why this division is needed. i added it for the numerical derivative tests to pass
-        myAtomicAdd(&m_biases.as<float>(iBias), fDeltaBias* m_fBiasesLR / (m_input.w() * m_input.h()));
-        m_weights.as<float>(iWeight) += fDeltaWeight * m_fWeightsLR;
+        myAtomicAdd(&m_biases[iBias], fDeltaBias* m_fBiasesLR / (m_input.w() * m_input.h()));
+        m_weights[iWeight] += fDeltaWeight * m_fWeightsLR;
     }
 
-    Tensor m_input, m_weights, m_biases, m_prevLoss, m_loss, m_beforeActivation;
+    CUDARWTensor<float> m_weights, m_biases, m_prevLoss;
+    CUDAROTensor<float> m_input, m_loss, m_beforeActivation;
     float m_fBiasesLR = 0, m_fWeightsLR = 0;
 };
 
@@ -205,21 +177,16 @@ Tensor *FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(NvU32 uBatch
     Tensor& input = *batchData.m_pPrevInput;
     NvU32 n = input.n();
     nvAssert(m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
-    Tensor prevLoss;
     if (batchData.m_pPrevLoss)
     {
-        prevLoss = *batchData.m_pPrevLoss;
-        nvAssert(prevLoss.n() == n && prevLoss.h() == m_inputDims[1] &&
-            prevLoss.w() == m_inputDims[2] && prevLoss.c() == m_inputDims[3]);
+        nvAssert(batchData.m_pPrevLoss->n() == n && batchData.m_pPrevLoss->h() == m_inputDims[1] &&
+            batchData.m_pPrevLoss->w() == m_inputDims[2] && batchData.m_pPrevLoss->c() == m_inputDims[3]);
+        batchData.m_pPrevLoss->clearSubregion(0, (NvU32)batchData.m_pPrevLoss->size(), EXECUTE_MODE_DEFAULT);
     }
     nvAssert(loss.n() == n && m_outputDims[0] == 1 && loss.h() == m_outputDims[1] && loss.w() == m_outputDims[2] && loss.c() == m_outputDims[3]);
-    if (prevLoss.n())
-    {
-        prevLoss.clearSubregion(0, (NvU32)prevLoss.size(), EXECUTE_MODE_DEFAULT);
-    }
     Tensor& beforeActivation = *batchData.m_beforeActivation;
     FCL_Backward<T_ACTIVATION1, T_ACTIVATION2> backward(fBiasesLR, fWeightsLR,
-        input, m_weights, m_biases, prevLoss, loss, beforeActivation);
+        input, m_weights, m_biases, batchData.m_pPrevLoss.get(), loss, beforeActivation);
     nvAssert(T_ACTIVATION1 == T_ACTIVATION2 || loss.h() % 2 == 0);
     unsigned outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? loss.h() : loss.h() / 2);
     dim3 grid(input.w(), input.h(), 1);

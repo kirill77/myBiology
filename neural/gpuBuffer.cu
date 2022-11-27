@@ -2,6 +2,12 @@
 #include "neural/network.h"
 #include "neural/atomsNetwork.h"
 
+__host__ void _myCheckCudaErrors()
+{
+    cudaError_t status = cudaDeviceSynchronize();
+    nvAssert(status == cudaSuccess);
+}
+
 size_t g_nCudaBytes = 0;
 __host__ cudaError_t myCudaMalloc(void** devPtr, size_t size)
 {
