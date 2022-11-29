@@ -9,25 +9,25 @@
 struct Tensor : public GPUBuffer
 {
     Tensor() { }
-    Tensor(const std::array<unsigned, 4>& dims, NvU32 elemSize)
+    Tensor(const std::array<unsigned, 4>& dims, size_t elemSize)
     {
-        init(dims, elemSize);
+        init(dims, (NvU32)elemSize);
     }
-    Tensor(NvU32 n, NvU32 h, NvU32 w, NvU32 c, NvU32 elemSize)
+    Tensor(NvU32 n, NvU32 h, NvU32 w, NvU32 c, size_t elemSize)
     {
-        init(n, h, w, c , elemSize);
+        init(n, h, w, c , (NvU32)elemSize);
     }
-    void init(NvU32 n, NvU32 h, NvU32 w, NvU32 c, NvU32 elemSize)
+    void init(NvU32 n, NvU32 h, NvU32 w, NvU32 c, size_t elemSize)
     {
         m_dims[0] = n;
         m_dims[1] = h;
         m_dims[2] = w;
         m_dims[3] = c;
-        this->resizeWithoutConstructor(n * h * w * c, elemSize);
+        this->resizeWithoutConstructor(n * h * w * c, (NvU32)elemSize);
     }
-    void init(const std::array<unsigned, 4>& dims, NvU32 elemSize)
+    void init(const std::array<unsigned, 4>& dims, size_t elemSize)
     {
-        init(dims[0], dims[1], dims[2], dims[3], elemSize);
+        init(dims[0], dims[1], dims[2], dims[3], (NvU32)elemSize);
     } 
     unsigned compute1DIndex(NvU32 in, NvU32 ih, NvU32 iw, NvU32 ic) const
     {

@@ -28,11 +28,6 @@ __host__ cudaError_t myCudaFree(void* devPtr, size_t size)
 // when we bind buffer for device access, we have to make sure GPU memory is all up-to-date
 void GPUBuffer::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
 {
-    if (this != m_pOrig)
-    {
-        m_pOrig->notifyDeviceBind(isWriteBind);
-        return;
-    }
     if (m_hostRev < m_deviceRev)
         return;
     if (m_hostRev > m_deviceRev)
@@ -61,28 +56,19 @@ void GPUBuffer::notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent)
     }
     m_deviceRev = m_hostRev + (isWriteBind ? 1 : 0);
 }
-void GPUBuffer::decRef()
+GPUBuffer::~GPUBuffer()
 {
-    nvAssert(this == m_pOrig && m_nRefs > 0);
-    if (--m_nRefs == 0)
+    if (m_pDevice)
     {
-        if (m_pDevice)
-        {
-            nvAssert(m_elemSize > 0);
-            myCudaFree(m_pDevice, m_nDeviceElems * m_elemSize);
-        }
-        delete[](char *)m_pHost;
-        m_pHost = nullptr;
+        nvAssert(m_elemSize > 0);
+        myCudaFree(m_pDevice, m_nDeviceElems * m_elemSize);
     }
+    delete[](char*)m_pHost;
+    m_pHost = nullptr;
 }
 
 void GPUBuffer::syncToHost()
 {
-    if (this != m_pOrig)
-    {
-        m_pOrig->syncToHost();
-        return;
-    }
     if (m_hostRev >= m_deviceRev)
         return;
     nvAssert(m_nHostElems == m_nDeviceElems);
@@ -120,16 +106,16 @@ void GPUBuffer::clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE m
     nvAssert(elemSize() == sizeof(float));
     if (doesRunOnGPU(mode))
     {
-        m_pOrig->notifyDeviceBind(true, nElemsToClear == m_pOrig->m_nHostElems);
+        notifyDeviceBind(true, nElemsToClear == m_nHostElems);
         dim3 block(256, 1, 1);
         dim3 grid((nElemsToClear + block.x - 1) / block.x, 1, 1);
-        clearKernel<<<grid, block>>>(((float*)m_pOrig->m_pDevice) + offset, nElemsToClear);
+        clearKernel<<<grid, block>>>(((float*)m_pDevice) + offset, nElemsToClear);
     }
     else
     {
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
+        m_hostRev = m_deviceRev + 1;
         nvAssert(offset + nElemsToClear <= size());
-        memset(&(m_pOrig->as<float>(offset)), 0, nElemsToClear * elemSize());
+        memset(&(as<float>(offset)), 0, nElemsToClear * elemSize());
     }
 }
 
@@ -149,7 +135,7 @@ NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOff
     nvAssert(srcOffset + nSrcElemsToCopy <= src.size());
 #if RUN_ON_GPU
     src.notifyDeviceBind(false);
-    m_pOrig->notifyDeviceBind(true, src.sizeInBytes() == m_pOrig->sizeInBytes());
+    notifyDeviceBind(true, src.sizeInBytes() == sizeInBytes());
     nvAssert(elemSize() == sizeof(float) && src.elemSize() == sizeof(float));
     float* pSrc = src.getDevicePointer<float>() + srcOffset;
     float* pDst = getDevicePointer<float>() + dstOffset;
@@ -159,8 +145,8 @@ NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOff
 #else
     syncToHost();
     src.syncToHost();
-    nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-    m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
+    nvAssert(m_hostRev >= m_deviceRev);
+    m_hostRev = m_deviceRev + 1;
     memcpy(&((*m_pOrig)[dstOffset]), &(src[srcOffset]), nSrcElemsToCopy * src.elemSize());
 #endif
     return dstOffset + nDstElems;
@@ -169,8 +155,6 @@ NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOff
 template <class T>
 T GPUBuffer::autoReadElem(NvU32 uElem)
 {
-    if (m_pOrig != this)
-        return m_pOrig->autoReadElem<T>(uElem);
     nvAssert(m_elemSize == sizeof(T));
     if (m_deviceRev > m_hostRev)
     {
@@ -185,11 +169,6 @@ T GPUBuffer::autoReadElem(NvU32 uElem)
 template <class T>
 void GPUBuffer::autoWriteElem(NvU32 uElem, T value)
 {
-    if (m_pOrig != this)
-    {
-        m_pOrig->autoWriteElem(uElem, value);
-        return;
-    }
     nvAssert(m_elemSize == sizeof(T));
     if (m_deviceRev > m_hostRev)
     {

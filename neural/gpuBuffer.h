@@ -20,8 +20,6 @@ struct GPUBuffer
 {
     GPUBuffer()
     {
-        m_pOrig = this;
-        m_pOrig->m_nRefs = 1;
     }
     template <class T>
     __host__ __device__ const T& as(NvU32 u) const
@@ -31,9 +29,9 @@ struct GPUBuffer
         return ((T*)m_pDevice)[u];
 #else
         nvAssert(u < m_nHostElems);
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        nvAssert(m_pOrig->m_elemSize == sizeof(T));
-        return ((T*)m_pOrig->m_pHost)[u];
+        nvAssert(m_hostRev >= m_deviceRev);
+        nvAssert(m_elemSize == sizeof(T));
+        return ((T*)m_pHost)[u];
 #endif
     }
     template <class T>
@@ -43,11 +41,11 @@ struct GPUBuffer
         nvAssert(u < m_nDeviceElems);
         return ((T *)m_pDevice)[u];
 #else
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        nvAssert(m_pOrig->m_elemSize == sizeof(T));
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        nvAssert(u < m_pOrig->m_nHostElems);
-        return ((T*)m_pOrig->m_pHost)[u];
+        nvAssert(m_hostRev >= m_deviceRev);
+        nvAssert(m_elemSize == sizeof(T));
+        m_hostRev = m_deviceRev + 1;
+        nvAssert(u < m_nHostElems);
+        return ((T*)m_pHost)[u];
 #endif
     }
     __host__ __device__ NvU32 size() const
@@ -55,12 +53,12 @@ struct GPUBuffer
 #ifdef __CUDA_ARCH__
         return m_nHostElems;
 #else
-        return m_pOrig->m_nHostElems;
+        return m_nHostElems;
 #endif
     }
     size_t sizeInBytes() const
     {
-        return m_pOrig->m_elemSize * m_pOrig->m_nHostElems;
+        return m_elemSize * m_nHostElems;
     }
     // having this function as a template allows calling T constructor
     template <class T>
@@ -69,13 +67,13 @@ struct GPUBuffer
         nvAssert((m_nHostElems * m_elemSize) % sizeof(T) == 0);
         m_nHostElems = (m_nHostElems * m_elemSize) / sizeof(T);
         m_elemSize = sizeof(T);
-        m_pOrig->resizeInternal<T>(nElems);
+        resizeInternal<T>(nElems);
     }
     void resizeWithoutConstructor(size_t nElems, NvU32 elemSize)
     {
         m_nHostElems *= m_elemSize;
         m_elemSize = 1;
-        m_pOrig->resizeInternal<char>(nElems * elemSize);
+        resizeInternal<char>(nElems * elemSize);
         if (m_nHostElems > 0)
         {
             nvAssert(m_nHostElems % elemSize == 0);
@@ -86,12 +84,12 @@ struct GPUBuffer
     template <class T>
     void clearWithRandomValues(float fMin, float fMax, RNGUniform &rng)
     {
-        nvAssert(m_pOrig->m_hostRev >= m_pOrig->m_deviceRev);
-        m_pOrig->m_hostRev = m_pOrig->m_deviceRev + 1;
-        nvAssert(m_pOrig->m_elemSize == sizeof(T));
+        nvAssert(m_hostRev >= m_deviceRev);
+        m_hostRev = m_deviceRev + 1;
+        nvAssert(m_elemSize == sizeof(T));
         for (NvU32 i = 0; i < size(); ++i)
         {
-            m_pOrig->as<T>(i) = (T)(rng.generate01() * (fMax - fMin) + fMin);
+            as<T>(i) = (T)(rng.generate01() * (fMax - fMin) + fMin);
         }
     }
 
@@ -99,24 +97,20 @@ struct GPUBuffer
 
     void clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE mode);
 
-    virtual ~GPUBuffer()
-    {
-        m_pOrig->decRef();
-    }
+    virtual ~GPUBuffer();
     void notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent = false);
     void syncToHost();
     template <class T>
     T* getDevicePointer() const
     {
-        nvAssert(m_pOrig->m_elemSize == sizeof(T));
-        nvAssert(m_pOrig->m_deviceRev >= m_pOrig->m_hostRev);
+        nvAssert(m_elemSize == sizeof(T));
+        nvAssert(m_deviceRev >= m_hostRev);
         return (T*)m_pDevice;
     }
     virtual void serialize(const char* sName, ISerializer& s)
     {
         std::string sIndent = std::string("GPUBuffer ") + sName;
         std::shared_ptr<Indent> pIndent = s.pushIndent(sIndent.c_str());
-        nvAssert(m_pOrig == this);
         syncToHost();
         NvU32 nElems = m_nHostElems, elemSize = m_elemSize;
         s.serializeSimpleType("m_nHostElems", nElems);
@@ -131,12 +125,11 @@ struct GPUBuffer
 private:
     GPUBuffer(const GPUBuffer& other) = delete;
     void operator = (const GPUBuffer& other) = delete;
-    void decRef();
     // having this as template allows calling constructor on T - which is what we want
     template <class T>
     void resizeInternal(size_t nElemsNew)
     {
-        nvAssert(this == m_pOrig && m_elemSize == sizeof(T));
+        nvAssert(m_elemSize == sizeof(T));
         m_hostRev = m_deviceRev + 1;
         if (nElemsNew > m_nHostElems)
         {
@@ -147,19 +140,9 @@ private:
         }
         m_nHostElems = (NvU32)nElemsNew;
     }
-    void nullify()
-    {
-        m_hostRev = 0, m_deviceRev = 0;
-        m_pHost = nullptr,  m_pDevice = nullptr;
-        m_nHostElems = 0, m_nDeviceElems = 0;
-        m_nRefs = 1;
-        m_pOrig = this;
-    }
     NvU32 m_hostRev = 0, m_deviceRev = 0;
     void* m_pHost = nullptr, *m_pDevice = nullptr;
     NvU32 m_nHostElems = 0, m_nDeviceElems = 0, m_elemSize = 0;
-    int m_nRefs = 0;
-    GPUBuffer* m_pOrig = nullptr;
 };
 
 template <class T>
