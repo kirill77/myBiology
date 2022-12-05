@@ -1,6 +1,5 @@
 #include "neural/l2Computer.h"
 
-#if RUN_ON_GPU
 // this class collects data from multiple thread of the same block - so it can only run on the GPU
 struct CU_LossComputer
 {
@@ -26,7 +25,7 @@ struct CU_LossComputer
         for (int i = blockX * BLOCK_SIZE + threadX; i < m_output.size(); i += iStride)
         {
             float fDiff = m_wantedOutput[i] - m_output[i];
-            m_outLoss[i] = fDiff / (2.f / m_output.size());
+            m_outLoss[i] = fDiff / (m_output.size() / 2.f);
             fSumOfSquares += sqr(fDiff) / m_output.size();
             ++nElements;
         }
@@ -51,7 +50,6 @@ private:
     CUDAROTensor<float> m_output, m_wantedOutput;
     CUDARWBuffer<float> m_errorStat;
 };
-#endif
 
 __global__ void lossKernel(CU_LossComputer lossComputer)
 {
@@ -62,33 +60,44 @@ void LossComputer::compute(Tensor& output, Tensor& wantedOutput, Tensor& outLoss
 {
     nvAssert(output.getDims() == wantedOutput.getDims());
     nvAssert(output.getDims() == outLoss.getDims());
-#if RUN_ON_GPU
     dim3 grid((output.size() + CU_LossComputer::BLOCK_SIZE - 1) / CU_LossComputer::BLOCK_SIZE, 1, 1);
     grid.x = std::min(grid.x, m_lossPerBlock.size() / 2);
     dim3 block(CU_LossComputer::BLOCK_SIZE, 1, 1);
     CU_LossComputer c(output, wantedOutput, outLoss, (pErrorStat == nullptr) ? nullptr : &m_lossPerBlock);
-    lossKernel << <grid, block >> > (c);
-    if (pErrorStat)
+    if (g_bExecuteOnTheGPU)
     {
-        double fSumOfSquares = 0;
-        int nElements = 0;
-        m_lossPerBlock.syncToHost();
-        for (NvU32 u = 0; u < grid.x; ++u)
+        lossKernel << <grid, block >> > (c);
+        if (pErrorStat)
         {
-            fSumOfSquares += (double)m_lossPerBlock.as<float>(u * 2);
-            nElements += (int)m_lossPerBlock.as<float>(u * 2 + 1);
+            double fSumOfSquares = 0;
+            int nElements = 0;
+            m_lossPerBlock.syncToHost();
+            for (NvU32 u = 0; u < grid.x; ++u)
+            {
+                fSumOfSquares += (double)m_lossPerBlock.as<float>(u * 2);
+                nElements += (int)m_lossPerBlock.as<float>(u * 2 + 1);
+            }
+            *pErrorStat = (float)fSumOfSquares;
         }
-        *pErrorStat = (float)fSumOfSquares;
     }
-#else
-    m_pErrors.resize(1);
-    if (mode == L2_MODE_RESET) m_pErrors[0] = 0;
-    b1.syncToHost();
-    b2.syncToHost();
-    for (NvU32 u = 0; u < b1.size(); ++u)
+    else
     {
-        m_pErrors[0] += sqr(b1[u] - b2[u]);
+        output.syncToHost();
+        wantedOutput.syncToHost();
+        double fSumOfSquares = 0;
+        NvU32 nElements = 0;
+        for (NvU32 i = 0; i < outLoss.size(); ++i)
+        {
+            float fOutput = output.as<float>(i);
+            float fDiff = wantedOutput.as<float>(i) - fOutput;
+            outLoss.as<float>(i) = fDiff / (output.size() / 2.f);
+            fSumOfSquares += sqr(fDiff) / output.size();
+            ++nElements;
+        }
+        if (pErrorStat)
+        {
+            *pErrorStat = (float)fSumOfSquares;
+        }
     }
-#endif
 }
 

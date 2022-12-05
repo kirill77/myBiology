@@ -49,12 +49,14 @@ TensorRef NeuralNetwork::getTmpTensor(TensorRef& pCache, const std::array<NvU32,
     return pCache;
 }
 
-// try to verify that our analytics derivatives are correct (use numeric computation for that)
+// try to verify that our analytic derivatives are correct (use numeric computation for that)
 bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
 {
     return true;
     // make internal copy of weights and biases
     saveCurrentStateToBackup();
+
+    //g_bExecuteOnTheGPU = false;
 
     // remember what was the output before we started changing weights/biases
     Tensor outputBeforeChange;
@@ -75,36 +77,48 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
     lr.init(getNLearningRatesNeeded());
     LossComputer lossComputer;
 
-    // compute the change in output due to changeParam() that we did
+    // compute the initial loss - before we call changeParam()
     float fLossBefore = 0;
     lossComputer.compute(outputBeforeChange, wantedOutput, lossDeriv, &fLossBefore);
 
-    for (NvU32 i1 = 0; i1 < nChecks * 100; ++i1)
+    NvU32 nChecksWanted = nChecks * 100;
+    double fCheckedParamStride = 1;
+    NvU32 nTotalParams = 0;
     {
-        NvU32 uLayer = 0;// m_rng.generateUnsigned(0, (NvU32)m_pLayers.size());
-        ILayer* pLayer = m_pLayers[uLayer].get();
-        NvU32 nParams = pLayer->getNParams();
-        NvU32 uParam = m_rng.generateUnsigned(0, nParams);
+        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
+        {
+            nTotalParams += m_pLayers[u]->getNParams();
+        }
+        fCheckedParamStride = nTotalParams / (double)nChecksWanted;
+        fCheckedParamStride = std::max(fCheckedParamStride, 1.);
+    }
+
+    double fCheckedParam = 0;
+    for (NvU32 nChecksMade = 0, nCheckedLayers = 0, nPastLayerParams = 0; nCheckedLayers < m_pLayers.size(); ++nChecksMade)
+    {
+        ILayer *pCurCheckedLayer = m_pLayers[nCheckedLayers].get();
+        NvU32 uCheckedParam = (NvU32)fCheckedParam - nPastLayerParams;
         float fDeltaParamForward = 0.25f;
         double fPrevPercentDifference = 1e38;
         std::vector<float> fN, fA;
         for (NvU32 i2 = 0; ; ++i2) // loop until acceptable accuracy of derivative is achieved
         {
-            // compute the numeric derivative dLoss/dParam
-            pLayer->changeParam(uParam, fDeltaParamForward);
+            // change the param so that we could compute the numeric derivative dLoss/dParam later on
+            pCurCheckedLayer->changeParam(uCheckedParam, fDeltaParamForward);
             // see how that has affected the output
-            TensorRef outputAfterChange = batch.forwardPass(*this);
+            TensorRef outputAfterChangeRef = batch.forwardPass(*this);
+            Tensor& outputAfterChange = *outputAfterChangeRef;
             // compute the change in output due to changeParam() that we did
             float fLossAfter = 0;
-            lossComputer.compute(*outputAfterChange, wantedOutput, lossDeriv, &fLossAfter);
+            lossComputer.compute(outputAfterChange, wantedOutput, lossDeriv, &fLossAfter);
             double fNumericDeriv = (fLossAfter - fLossBefore) / fDeltaParamForward;
 
-            // restore weights/biases
-            pLayer->restoreStateFromBackup();
+            // restore weights/biases (no need for full restoreStateFromBackup() here because we just changed one layer)
+            pCurCheckedLayer->restoreStateFromBackup();
             batch.forwardPass(*this);
             batch.backwardPass(*this, lossDeriv, lr);
             // backward pass is supposed to change param by the analytic loss derivative
-            float fAnalyticDeriv = -pLayer->computeCurrentMinusBackup(uParam);
+            float fAnalyticDeriv = -pCurCheckedLayer->computeCurrentMinusBackup(uCheckedParam);
 
             fN.push_back((float)fNumericDeriv);
             fA.push_back(fAnalyticDeriv);
@@ -132,6 +146,16 @@ bool NeuralNetwork::testRandomDerivative(Batch &batch, NvU32 nChecks)
                 nvAssert(false);
                 return false;
             }
+        }
+        
+        fCheckedParam += fCheckedParamStride;
+        // search what's the next layer we'll be testing
+        while (fCheckedParam >= nPastLayerParams + pCurCheckedLayer->getNParams())
+        {
+            nPastLayerParams += pCurCheckedLayer->getNParams();
+            if (++nCheckedLayers >= m_pLayers.size())
+                break;
+            pCurCheckedLayer = m_pLayers[nCheckedLayers].get();
         }
     }
 

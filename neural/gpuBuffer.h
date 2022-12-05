@@ -4,7 +4,7 @@
 #include <basics/serializer.h>
 #include <MonteCarlo/RNGUniform.h>
 
-#define RUN_ON_GPU 1
+extern bool g_bExecuteOnTheGPU;
 
 enum EXECUTE_MODE { EXECUTE_MODE_DEFAULT, EXECUTE_MODE_FORCE_GPU, EXECUTE_MODE_FORCE_CPU };
 
@@ -107,6 +107,13 @@ struct GPUBuffer
         nvAssert(m_deviceRev >= m_hostRev);
         return (T*)m_pDevice;
     }
+    template <class T>
+    T* getHostPointer() const
+    {
+        nvAssert(m_elemSize == sizeof(T));
+        nvAssert(m_hostRev >= m_deviceRev);
+        return (T*)m_pHost;
+    }
     virtual void serialize(const char* sName, ISerializer& s)
     {
         std::string sIndent = std::string("GPUBuffer ") + sName;
@@ -151,8 +158,16 @@ struct CUDAROBuffer
     CUDAROBuffer() { }
     CUDAROBuffer(GPUBuffer& b)
     {
-        b.notifyDeviceBind(false);
-        m_pDevice = b.getDevicePointer<T>();
+        if (g_bExecuteOnTheGPU)
+        {
+            b.notifyDeviceBind(false);
+            m_pDevice = b.getDevicePointer<T>();
+        }
+        else
+        {
+            b.syncToHost();
+            m_pHost = b.getHostPointer<T>();
+        }
         m_size = b.size();
     }
     __device__ __host__ const T& operator[](NvU32 u) const
@@ -178,8 +193,16 @@ struct CUDARWBuffer : public CUDAROBuffer<T>
     CUDARWBuffer() { }
     CUDARWBuffer(GPUBuffer &b, bool bDiscardPrevContent)
     {
-        b.notifyDeviceBind(true, bDiscardPrevContent);
-        this->m_pDevice = b.getDevicePointer<T>();
+        if (g_bExecuteOnTheGPU)
+        {
+            b.notifyDeviceBind(true, bDiscardPrevContent);
+            this->m_pDevice = b.getDevicePointer<T>();
+        }
+        else
+        {
+            b.syncToHost();
+            this->m_pHost = b.getHostPointer<T>();
+        }
         this->m_size = b.size();
     }
     __device__ __host__ T& operator[](NvU32 u)

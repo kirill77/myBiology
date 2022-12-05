@@ -90,7 +90,7 @@ static inline bool doesRunOnGPU(EXECUTE_MODE mode)
     switch (mode)
     {
     case EXECUTE_MODE_DEFAULT:
-        return (RUN_ON_GPU ? true : false);
+        return g_bExecuteOnTheGPU;
     case EXECUTE_MODE_FORCE_GPU:
         return true;
     case EXECUTE_MODE_FORCE_CPU:
@@ -133,22 +133,25 @@ NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOff
     nvAssert(nDstElems * elemSize() == nSrcElemsToCopy * src.elemSize());
     nvAssert(dstOffset + nDstElems <= size());
     nvAssert(srcOffset + nSrcElemsToCopy <= src.size());
-#if RUN_ON_GPU
-    src.notifyDeviceBind(false);
-    notifyDeviceBind(true, src.sizeInBytes() == sizeInBytes());
-    nvAssert(elemSize() == sizeof(float) && src.elemSize() == sizeof(float));
-    float* pSrc = src.getDevicePointer<float>() + srcOffset;
-    float* pDst = getDevicePointer<float>() + dstOffset;
-    dim3 block(256, 1, 1);
-    dim3 grid((nDstElems + block.x - 1) / block.x, 1, 1);
-    copyKernel<<<grid, block>>>(pDst, pSrc, nDstElems);
-#else
-    syncToHost();
-    src.syncToHost();
-    nvAssert(m_hostRev >= m_deviceRev);
-    m_hostRev = m_deviceRev + 1;
-    memcpy(&((*m_pOrig)[dstOffset]), &(src[srcOffset]), nSrcElemsToCopy * src.elemSize());
-#endif
+    if (g_bExecuteOnTheGPU)
+    {
+        src.notifyDeviceBind(false);
+        notifyDeviceBind(true, src.sizeInBytes() == sizeInBytes());
+        nvAssert(elemSize() == sizeof(float) && src.elemSize() == sizeof(float));
+        float* pSrc = src.getDevicePointer<float>() + srcOffset;
+        float* pDst = getDevicePointer<float>() + dstOffset;
+        dim3 block(256, 1, 1);
+        dim3 grid((nDstElems + block.x - 1) / block.x, 1, 1);
+        copyKernel << <grid, block >> > (pDst, pSrc, nDstElems);
+    }
+    else
+    {
+        syncToHost();
+        src.syncToHost();
+        nvAssert(m_hostRev >= m_deviceRev);
+        m_hostRev = m_deviceRev + 1;
+        memcpy(&this->as<float>(dstOffset), &src.as<float>(srcOffset), nSrcElemsToCopy* src.elemSize());
+    }
     return dstOffset + nDstElems;
 }
 

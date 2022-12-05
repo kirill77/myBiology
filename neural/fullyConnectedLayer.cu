@@ -2,11 +2,7 @@
 #include "neural/network.h"
 #include "myCudaMath.h"
 
-#if RUN_ON_GPU
 bool g_bExecuteOnTheGPU = true;
-#else
-bool g_bExecuteOnTheGPU = false;
-#endif
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 struct FCL_Forward
@@ -17,12 +13,12 @@ struct FCL_Forward
     {
     }
 
-    __host__ __device__ void forward(unsigned blockX, unsigned blockY, unsigned threadX, unsigned threadY)
+    __host__ __device__ void forward(const unsigned blockX, const unsigned blockY, const unsigned threadX, const unsigned threadY)
     {
-        unsigned inOutNi = blockX;
-        unsigned inOutCi = blockY;
-        unsigned outWi = threadX;
-        unsigned outHi = (T_ACTIVATION1 != T_ACTIVATION2) ? threadY * 2 : threadY;
+        const unsigned inOutNi = blockX;
+        const unsigned inOutCi = blockY;
+        const unsigned outWi = threadX;
+        const unsigned outHi = (T_ACTIVATION1 != T_ACTIVATION2) ? threadY * 2 : threadY;
 
         unsigned iBias = threadY * m_output.w() + outWi;
         unsigned iWeight = m_input.h() * m_input.w() * iBias;
@@ -32,7 +28,8 @@ struct FCL_Forward
             for (unsigned inWi = 0; inWi < m_input.w(); ++inWi)
             {
                 float fInput = m_input.access(inOutNi, inHi, inWi, inOutCi);
-                fBeforeActivation += fInput * m_weights[iWeight++];
+                float fWeight = m_weights[iWeight++];
+                fBeforeActivation += fInput * fWeight;
             }
         }
         m_beforeActivation.access(inOutNi, threadY, outWi, inOutCi) = fBeforeActivation;
