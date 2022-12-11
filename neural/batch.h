@@ -14,11 +14,14 @@ struct Batch
         struct LearningRates& lr);
 
     TensorRef forwardPass(NeuralNetwork& network);
-    void backwardPass(NeuralNetwork& network, Tensor& loss, LearningRates &lr);
     
     NvU32 n() const
     {
         return m_pInput->n();
+    }
+    NvU32 getBatchIndex() const
+    {
+        return m_uBatch;
     }
 
 private:

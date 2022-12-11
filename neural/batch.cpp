@@ -14,7 +14,7 @@ float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossCompu
     for (NvU32 u = 0; u < lr.getNStepsToMake(); ++u)
     {
         TensorRef pLoss = updateLoss(network, lossComputer);
-        backwardPass(network, *pLoss, lr);
+        network.backwardPass(m_uBatch, pLoss.get(), lr);
         forwardPass(network);
     }
 
@@ -40,8 +40,4 @@ TensorRef Batch::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, 
 TensorRef Batch::forwardPass(NeuralNetwork& network)
 {
     return network.forwardPass(m_uBatch, m_pInput);
-}
-void Batch::backwardPass(NeuralNetwork& network, Tensor &loss, LearningRates &lr)
-{
-    network.backwardPass(m_uBatch, &loss, lr);
 }
