@@ -101,6 +101,10 @@ struct NeuralNetwork
     // checks backward pass (analytic) vs numeric derivatives
     bool testRandomDerivative(Batch& batch, NvU32 nChecks);
 
+    virtual NvU32 getNTrainableParams() const;
+    virtual double getTrainableParam(NvU32 uParam);
+    virtual void setTrainableParam(NvU32 uParam, double fValue);
+
 protected:
     virtual Batch createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;

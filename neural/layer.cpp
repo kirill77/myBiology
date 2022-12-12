@@ -24,37 +24,30 @@ void ILayer::updateLoss(NvU32 uBatch, Tensor& wantedOutput, LossComputer& lossCo
     lossComputer.compute(output, wantedOutput, outLoss, pErrorPtr);
 }
 // functions used to check analytic derivative against numeric ones
-NvU32 ILayer::getNParams() const
+NvU32 ILayer::getNTrainableParams() const
 {
     return m_weights.size() + m_biases.size();
 }
-void ILayer::changeParam(NvU32 uParam, float fDeltaChange)
+double ILayer::getTrainableParam(NvU32 uParam)
 {
     NvU32 nWeights = m_weights.size();
     if (uParam < nWeights)
     {
-        float fPrev = m_weights.autoReadElem<float>(uParam);
-        m_weights.autoWriteElem<float>(uParam, fPrev + fDeltaChange);
+        double f = m_weights.autoReadElem<float>(uParam);
+        return f;
+    }
+    uParam -= nWeights;
+    double f = m_biases.autoReadElem<float>(uParam);
+    return f;
+}
+void ILayer::setTrainableParam(NvU32 uParam, double fValue)
+{
+    NvU32 nWeights = m_weights.size();
+    if (uParam < nWeights)
+    {
+        m_weights.autoWriteElem<float>(uParam, fValue);
         return;
     }
     uParam -= nWeights;
-    float fPrev = m_biases.autoReadElem<float>(uParam);
-    m_biases.autoWriteElem<float>(uParam, fPrev + fDeltaChange);
-}
-float ILayer::computeCurrentMinusBackup(NvU32 uParam)
-{
-    NvU32 nWeights = m_weights.size();
-    float fCurrent = 0, fBackup = 0;
-    if (uParam < nWeights)
-    {
-        fBackup = m_weightsBackup.autoReadElem<float>(uParam);
-        fCurrent = m_weights.autoReadElem<float>(uParam);
-    }
-    else
-    {
-	    uParam -= nWeights;
-        fBackup = m_biasesBackup.autoReadElem<float>(uParam);
-        fCurrent = m_biases.autoReadElem<float>(uParam);
-    }
-    return fCurrent - fBackup;
+    m_biases.autoWriteElem<float>(uParam, fValue);
 }

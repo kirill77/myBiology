@@ -42,9 +42,9 @@ struct ILayer
     }
 
     // functions used to check analytic derivative against numeric ones
-    virtual NvU32 getNParams() const;
-    virtual void changeParam(NvU32 uParam, float fDeltaChange);
-    virtual float computeCurrentMinusBackup(NvU32 uParam);
+    virtual NvU32 getNTrainableParams() const;
+    virtual double getTrainableParam(NvU32 uParam);
+    virtual void setTrainableParam(NvU32 uParam, double fValue);
 
 protected:
     ILayer(LAYER_TYPE type) : m_type(type)
