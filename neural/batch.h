@@ -27,7 +27,7 @@ struct Batch
 private:
     NvU32 m_uBatch = 0;
 
-    TensorRef updateLoss(NeuralNetwork& network, LossComputer& lossComputer, float* pError = nullptr);
+    TensorRef updateLoss(NeuralNetwork& network, LossComputer& lossComputer, double* pError = nullptr);
 
     TensorRef m_pInput, m_pWantedOutput;
 };

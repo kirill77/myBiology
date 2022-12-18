@@ -21,7 +21,7 @@ struct LearningRates
         m_isGlobal = true;
         m_pRatesInfo.resize(nRates);
     }
-    void setInitialError(float fError)
+    void setInitialError(double fError)
     {
         nvAssert(isfinite(fError));
         m_fPrevError = fError;
@@ -46,14 +46,14 @@ struct LearningRates
 private:
     struct RateInfo
     {
-        float m_fPrevValue = 1, m_fValue = 1;
+        double m_fPrevValue = 1, m_fValue = 1;
         NvU32 m_uAttemptThreshold = 1, m_uAttemptCounter = 0;
     };
     std::vector<RateInfo> m_pRatesInfo;
     bool m_isGlobal = true, m_bLocalIncreaseOnPrevStep = false;
-    float m_fPrevErrorDecreaseRate = 0;
+    double m_fPrevErrorDecreaseRate = 0;
     NvU32 m_uLastAttemptedRate = 0;
 
-    float m_fPrevError = std::numeric_limits<float>::max();
+    double m_fPrevError = std::numeric_limits<float>::max();
     NvU32 m_nStepsToMake = 1, m_nStepsMade = 0;
 };

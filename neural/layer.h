@@ -27,7 +27,7 @@ struct ILayer
     }
 
     void updateLoss(NvU32 uBatch, Tensor& wantedOutput,
-        struct LossComputer& lossComputer, Tensor &outLoss, float* pErrorPtr);
+        struct LossComputer& lossComputer, Tensor &outLoss, double* pErrorPtr);
 
     const LAYER_TYPE m_type = LAYER_TYPE_UNKNOWN;
 

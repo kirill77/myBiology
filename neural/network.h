@@ -55,7 +55,7 @@ struct NeuralNetwork
         }
     }
     TensorRef updateLoss(NvU32 uBatch, Tensor& wantedOutput,
-        LossComputer& lossComputer, float* pErrorPtr)
+        LossComputer& lossComputer, double* pErrorPtr)
     {
         TensorRef pLoss = getTmpLossTensor(wantedOutput.getDims());
         (*m_pLayers.rbegin())->updateLoss(uBatch, wantedOutput, lossComputer, *pLoss, pErrorPtr);

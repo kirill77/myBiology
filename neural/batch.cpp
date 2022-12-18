@@ -6,7 +6,7 @@ float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossCompu
     LearningRates &lr)
 {
     forwardPass(network);
-    float fPreError = 0;
+    double fPreError = 0;
     updateLoss(network, lossComputer, &fPreError);
     lr.setInitialError(fPreError);
     network.saveCurrentStateToBackup();
@@ -18,7 +18,7 @@ float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossCompu
         forwardPass(network);
     }
 
-    float fCurrentError = 0;
+    double fCurrentError = 0;
     updateLoss(network, lossComputer, &fCurrentError);
     bool bShouldRedo = true;
     lr.notifyNewError(fCurrentError, bShouldRedo);
@@ -33,7 +33,7 @@ float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossCompu
     }
     return fPreError;
 }
-TensorRef Batch::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, float *pErrorPtr)
+TensorRef Batch::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, double *pErrorPtr)
 {
     return network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, pErrorPtr);
 }

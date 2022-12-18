@@ -56,7 +56,7 @@ __global__ void lossKernel(CU_LossComputer lossComputer)
     lossComputer.computeLoss(threadIdx.x, blockIdx.x, gridDim.x);
 }
 
-void LossComputer::compute(Tensor& output, Tensor& wantedOutput, Tensor& outLoss, float* pErrorStat)
+void LossComputer::compute(Tensor& output, Tensor& wantedOutput, Tensor& outLoss, double* pErrorStat)
 {
     nvAssert(output.getDims() == wantedOutput.getDims());
     nvAssert(output.getDims() == outLoss.getDims());
