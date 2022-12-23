@@ -155,38 +155,40 @@ NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOff
     return dstOffset + nDstElems;
 }
 
-template <class T>
-T GPUBuffer::autoReadElem(NvU32 uElem)
+double GPUBuffer::autoReadElem(NvU32 uElem)
 {
-    nvAssert(m_elemSize == sizeof(T));
+    char buffer[8];
     if (m_deviceRev > m_hostRev)
     {
-        T value;
-        cudaError_t result = cudaMemcpy(&value, (T*)m_pDevice + uElem, sizeof(T), cudaMemcpyDeviceToHost);
-        nvAssert(result == cudaSuccess);
-        return value;
-    }
-    return ((T*)m_pHost)[uElem];
-}
-
-template <class T>
-void GPUBuffer::autoWriteElem(NvU32 uElem, T value)
-{
-    nvAssert(m_elemSize == sizeof(T));
-    if (m_deviceRev > m_hostRev)
-    {
-        cudaError_t result = cudaMemcpy((T*)m_pDevice + uElem, &value, sizeof(T), cudaMemcpyHostToDevice);
+        cudaError_t result = cudaMemcpy(buffer, (char *)m_pDevice + uElem * elemSize(), elemSize(), cudaMemcpyDeviceToHost);
         nvAssert(result == cudaSuccess);
     }
     else
     {
-        ((T*)m_pHost)[uElem] = value;
+        memcpy(buffer, (char*)m_pDevice + uElem * elemSize(), elemSize());
+    }
+    return elemSize() == 4 ? *(float*)buffer : *(double*)buffer;
+}
+
+void GPUBuffer::autoWriteElem(NvU32 uElem, double value)
+{
+    char buffer[8];
+    if (elemSize() == 4)
+    {
+        *(float*)buffer = (float)value;
+    }
+    else
+    {
+        *(double*)buffer = value;
+    }
+    if (m_deviceRev > m_hostRev)
+    {
+        cudaError_t result = cudaMemcpy((char *)m_pDevice + uElem * elemSize(), buffer, elemSize(), cudaMemcpyHostToDevice);
+        nvAssert(result == cudaSuccess);
+    }
+    else
+    {
+        memcpy((char*)m_pHost + uElem * elemSize(), buffer, elemSize());
         m_hostRev = m_deviceRev + 1;
     }
 }
-
-// explicit instantiations
-template float GPUBuffer::autoReadElem(NvU32 uElem);
-template double GPUBuffer::autoReadElem(NvU32 uElem);
-template void GPUBuffer::autoWriteElem(NvU32 uElem, float value);
-template void GPUBuffer::autoWriteElem(NvU32 uElem, double value);

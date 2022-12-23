@@ -13,5 +13,7 @@ struct LossComputer
     void compute(Tensor &outputs, Tensor &wantedOutputs, Tensor &outLoss, double *pAvgError = nullptr);
 
 private:
+    template <class T>
+    void computeInternal(Tensor& outputs, Tensor& wantedOutputs, Tensor& outLoss, double* pAvgError);
     GPUBuffer m_lossPerBlock;
 };

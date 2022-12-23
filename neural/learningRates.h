@@ -4,7 +4,7 @@
 
 struct LearningRates
 {
-    void notifyNewError(float fError, bool& bShouldRedo);
+    void notifyNewError(double fError, bool& bShouldRedo);
     void serialize(ISerializer& s)
     {
         s.serializeStdArray("m_pRatesInfo", m_pRatesInfo);
@@ -26,11 +26,11 @@ struct LearningRates
         nvAssert(isfinite(fError));
         m_fPrevError = fError;
     }
-    float getLearningRate(NvU32 uRate) const
+    double getLearningRate(NvU32 uRate) const
     {
         return m_pRatesInfo[uRate].m_fValue;
     }
-    float getLastError() const
+    double getLastError() const
     {
         return m_fPrevError;
     }

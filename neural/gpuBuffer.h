@@ -125,8 +125,8 @@ struct GPUBuffer
         resizeWithoutConstructor(nElems, elemSize);
         s.serializePreallocatedMem("m_pHost", m_pHost, m_elemSize * m_nHostElems);
     }
-    template <class T> T autoReadElem(NvU32 uElem);
-    template <class T> void autoWriteElem(NvU32 uElem, T value);
+    double autoReadElem(NvU32 uElem);
+    void autoWriteElem(NvU32 uElem, double value);
     NvU32 elemSize() const { return m_elemSize; }
 
 private:
@@ -158,6 +158,7 @@ struct CUDAROBuffer
     CUDAROBuffer() { }
     CUDAROBuffer(GPUBuffer& b)
     {
+        nvAssert(sizeof(T) == b.elemSize());
         if (g_bExecuteOnTheGPU)
         {
             b.notifyDeviceBind(false);
@@ -193,6 +194,7 @@ struct CUDARWBuffer : public CUDAROBuffer<T>
     CUDARWBuffer() { }
     CUDARWBuffer(GPUBuffer &b, bool bDiscardPrevContent)
     {
+        nvAssert(sizeof(T) == b.elemSize());
         if (g_bExecuteOnTheGPU)
         {
             b.notifyDeviceBind(true, bDiscardPrevContent);

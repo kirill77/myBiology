@@ -11,7 +11,7 @@ struct ILayer
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) = 0;
     // returns computed loss for the previous layer
     virtual Tensor *backward(NvU32 uBatch, Tensor &loss,
-        float fBiasesLR, float fWeightsLR) = 0;
+        double fBiasesLR, double fWeightsLR) = 0;
 
     virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer);
 
@@ -119,7 +119,7 @@ struct FullyConnectedLayer : public ILayer
     virtual TensorRef forward(NvU32 uBatch, TensorRef pInput) override;
     // returns computed loss for the previous layer
     virtual Tensor *backward(NvU32 uBatch, Tensor& loss,
-        float fBiasesLR, float fWeightsLR) override;
+        double fBiasesLR, double fWeightsLR) override;
 
     virtual void serialize(ISerializer& s) override
     {
@@ -128,4 +128,9 @@ struct FullyConnectedLayer : public ILayer
         s.serializeSimpleType("m_inputDims", m_inputDims);
         s.serializeSimpleType("m_outputDims", m_outputDims);
     }
+private:
+    template <class T>
+    TensorRef forwardInternal(NvU32 uBatch, TensorRef pInput);
+    template <class T>
+    Tensor* backwardInternal(NvU32 uBatch, Tensor& loss, double fBiasesLR, double fWeightsLR);
 };

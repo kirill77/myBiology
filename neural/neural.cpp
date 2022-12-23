@@ -28,8 +28,8 @@ void NeuralNetwork::backwardPass(NvU32 uBatch, Tensor* pLoss, struct LearningRat
     NvU32 uLayer = (NvU32)m_pLayers.size() - 1;
     while (uLayer < m_pLayers.size())
     {
-        float fBiasesLR = lr.getLearningRate(uLayer);
-        float fWeightsLR = lr.getLearningRate(uLayer);
+        double fBiasesLR = lr.getLearningRate(uLayer);
+        double fWeightsLR = lr.getLearningRate(uLayer);
         m_fLRSum += fBiasesLR + fWeightsLR;
         m_nLRSamples += 2;
         pLoss = m_pLayers[uLayer]->backward(uBatch, *pLoss,

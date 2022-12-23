@@ -1,6 +1,6 @@
 #include "learningRates.h"
 
-void LearningRates::notifyNewError(float fError, bool& bShouldRedo)
+void LearningRates::notifyNewError(double fError, bool& bShouldRedo)
 {
     bool bLocalIncreaseOnPrevStep = m_bLocalIncreaseOnPrevStep;
     m_bLocalIncreaseOnPrevStep = false;

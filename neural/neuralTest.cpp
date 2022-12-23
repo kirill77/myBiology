@@ -132,7 +132,7 @@ void NeuralTest::test()
             if (lr.getNStepsMade() >= 10000)
                 break;
         }
-        float fError = lr.getLastError();
+        double fError = lr.getLastError();
         m_bTested = m_bTested && fError > 0 && fError < 1e-11;
         nvAssert(m_bTested);
 

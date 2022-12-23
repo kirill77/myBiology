@@ -33,11 +33,11 @@ double ILayer::getTrainableParam(NvU32 uParam)
     NvU32 nWeights = m_weights.size();
     if (uParam < nWeights)
     {
-        double f = m_weights.autoReadElem<float>(uParam);
+        double f = m_weights.autoReadElem(uParam);
         return f;
     }
     uParam -= nWeights;
-    double f = m_biases.autoReadElem<float>(uParam);
+    double f = m_biases.autoReadElem(uParam);
     return f;
 }
 void ILayer::setTrainableParam(NvU32 uParam, double fValue)
@@ -45,9 +45,9 @@ void ILayer::setTrainableParam(NvU32 uParam, double fValue)
     NvU32 nWeights = m_weights.size();
     if (uParam < nWeights)
     {
-        m_weights.autoWriteElem<float>(uParam, fValue);
+        m_weights.autoWriteElem(uParam, fValue);
         return;
     }
     uParam -= nWeights;
-    m_biases.autoWriteElem<float>(uParam, fValue);
+    m_biases.autoWriteElem(uParam, fValue);
 }
