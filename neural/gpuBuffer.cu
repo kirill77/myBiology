@@ -119,30 +119,48 @@ void GPUBuffer::clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE m
     }
 }
 
-__global__ void copyKernel(float* pDst, float *pSrc, NvU32 nElems)
+template <class DstType>
+__global__ void copyKernel(DstType* pDst, float *pSrc, NvU32 nElems)
 {
     NvU32 uElem = blockIdx.x * blockDim.x + threadIdx.x;
     if (uElem >= nElems)
         return;
-    pDst[uElem] = pSrc[uElem];
+    pDst[uElem] = (DstType)pSrc[uElem];
 }
 
-NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy)
+template <class DstType>
+void cpuCopy(DstType* pDst, float* pSrc, NvU32 nElems)
 {
-    NvU32 nDstElems = nSrcElemsToCopy * src.elemSize() / elemSize();
-    nvAssert(nDstElems * elemSize() == nSrcElemsToCopy * src.elemSize());
-    nvAssert(dstOffset + nDstElems <= size());
-    nvAssert(srcOffset + nSrcElemsToCopy <= src.size());
+    for (NvU32 u = 0; u < nElems; ++u)
+    {
+        pDst[u] = (DstType)pSrc[u];
+    }
+}
+
+void GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOffset, NvU32 nElemsToCopy)
+{
+    nvAssert(dstOffset + nElemsToCopy <= this->size());
+    nvAssert(srcOffset + nElemsToCopy <= src.size());
+
     if (g_bExecuteOnTheGPU)
     {
         src.notifyDeviceBind(false);
-        notifyDeviceBind(true, src.sizeInBytes() == sizeInBytes());
-        nvAssert(elemSize() == sizeof(float) && src.elemSize() == sizeof(float));
-        float* pSrc = src.getDevicePointer<float>() + srcOffset;
-        float* pDst = getDevicePointer<float>() + dstOffset;
+        // (ElemsToCopy == size()) - means we overwrite everything - so can discard the prev content
+        notifyDeviceBind(true, nElemsToCopy == size());
         dim3 block(256, 1, 1);
-        dim3 grid((nDstElems + block.x - 1) / block.x, 1, 1);
-        copyKernel << <grid, block >> > (pDst, pSrc, nDstElems);
+        dim3 grid((nElemsToCopy + block.x - 1) / block.x, 1, 1);
+        nvAssert(src.elemSize() == 4);
+        float* pSrc = src.getDevicePointer<float>() + srcOffset;
+        if (elemSize() == 4)
+        {
+            float* pDst = getDevicePointer<float>() + dstOffset;
+            copyKernel<<<grid, block>>>(pDst, pSrc, nElemsToCopy);
+        }
+        else
+        {
+            double* pDst = getDevicePointer<double>() + dstOffset;
+            copyKernel<<<grid, block>>>(pDst, pSrc, nElemsToCopy);
+        }
     }
     else
     {
@@ -150,9 +168,19 @@ NvU32 GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOff
         src.syncToHost();
         nvAssert(m_hostRev >= m_deviceRev);
         m_hostRev = m_deviceRev + 1;
-        memcpy(&this->as<float>(dstOffset), &src.as<float>(srcOffset), nSrcElemsToCopy* src.elemSize());
+        nvAssert(src.elemSize() == 4);
+        float* pSrc = &src.as<float>(srcOffset);
+        if (elemSize() == 4)
+        {
+            float* pDst = &this->as<float>(dstOffset);
+            cpuCopy(pDst, pSrc, nElemsToCopy);
+        }
+        else
+        {
+            double* pDst = &this->as<double>(dstOffset);
+            cpuCopy(pDst, pSrc, nElemsToCopy);
+        }
     }
-    return dstOffset + nDstElems;
 }
 
 double GPUBuffer::autoReadElem(NvU32 uElem)

@@ -93,7 +93,7 @@ struct GPUBuffer
         }
     }
 
-    NvU32 copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOffset, NvU32 nSrcElemsToCopy);
+    void copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOffset, NvU32 nElemsToCopy);
 
     void clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE mode);
 

@@ -61,23 +61,18 @@ struct DerivChecker
 
         //g_bExecuteOnTheGPU = false;
 
-        // remember what was the output before we started changing weights/biases
-        Tensor outputBeforeChange;
-        {
-            TensorRef tmp = m_pBatch->forwardPass(*m_pNetwork);
-            outputBeforeChange.copyFrom(*tmp);
-        }
+        TensorRef pOutput = m_pBatch->forwardPass(*m_pNetwork);
 
         // generate some kind of random wanted output
-        m_wantedOutput.init(outputBeforeChange.getDims(), sizeof(float));
+        m_wantedOutput.init(pOutput->getDims(), sizeof(float));
         m_wantedOutput.clearWithRandomValues<float>(-1, 1, *pRNG);
 
-        m_lossDeriv.init(outputBeforeChange.getDims(), sizeof(float));
+        m_lossDeriv.init(pOutput->getDims(), sizeof(float));
 
         m_lr.init(m_pNetwork->getNLearningRatesNeeded());
 
         // compute the initial loss - before we call changeParam()
-        m_lossComputer.compute(outputBeforeChange, m_wantedOutput, m_lossDeriv, &m_fLossBefore);
+        m_lossComputer.compute(*pOutput, m_wantedOutput, m_lossDeriv, &m_fLossBefore);
     }
     bool doDerivativesMatch(NvU32 uParam)
     {
@@ -111,7 +106,7 @@ struct DerivChecker
             fA.push_back(fAnalyticDeriv);
 
             // restore all weights/biases from the backup (needed because backwardPass() has changed everything)
-            m_pNetwork->restoreStateFromBackup();
+            m_pNetwork->restoreStateFromBackup(DeepCopy);
 
             // loss seem to not depend on this particular param - go to the next sample
             if (abs(fNumericDeriv + fAnalyticDeriv) < 1e-10)
@@ -135,6 +130,7 @@ struct DerivChecker
                 return false;
             }
         }
+        return true;
     }
 
 private:

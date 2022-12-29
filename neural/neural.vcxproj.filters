@@ -64,5 +64,8 @@
       <Filter>CPP</Filter>
     </ClCompile>
     <ClCompile Include="batch.cpp" />
+    <ClCompile Include="tensor.cpp">
+      <Filter>CPP</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -10,7 +10,7 @@ struct Batch
     }
 
     // returns the initial error (before progress was made)
-    float makeMinimalProgress(struct NeuralNetwork& network, struct LossComputer& lossComputer,
+    double makeMinimalProgress(struct NeuralNetwork& network, struct LossComputer& lossComputer,
         struct LearningRates& lr);
 
     TensorRef forwardPass(NeuralNetwork& network);

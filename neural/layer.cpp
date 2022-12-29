@@ -26,28 +26,28 @@ void ILayer::updateLoss(NvU32 uBatch, Tensor& wantedOutput, LossComputer& lossCo
 // functions used to check analytic derivative against numeric ones
 NvU32 ILayer::getNTrainableParams() const
 {
-    return m_weights.size() + m_biases.size();
+    return m_pWeights->size() + m_pBiases->size();
 }
 double ILayer::getTrainableParam(NvU32 uParam)
 {
-    NvU32 nWeights = m_weights.size();
+    NvU32 nWeights = m_pWeights->size();
     if (uParam < nWeights)
     {
-        double f = m_weights.autoReadElem(uParam);
+        double f = m_pWeights->autoReadElem(uParam);
         return f;
     }
     uParam -= nWeights;
-    double f = m_biases.autoReadElem(uParam);
+    double f = m_pBiases->autoReadElem(uParam);
     return f;
 }
 void ILayer::setTrainableParam(NvU32 uParam, double fValue)
 {
-    NvU32 nWeights = m_weights.size();
+    NvU32 nWeights = m_pWeights->size();
     if (uParam < nWeights)
     {
-        m_weights.autoWriteElem(uParam, fValue);
+        m_pWeights->autoWriteElem(uParam, fValue);
         return;
     }
     uParam -= nWeights;
-    m_biases.autoWriteElem(uParam, fValue);
+    m_pBiases->autoWriteElem(uParam, fValue);
 }

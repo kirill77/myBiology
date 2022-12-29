@@ -4,6 +4,7 @@
 #include "layerBatchData.h"
 
 enum LAYER_TYPE { LAYER_TYPE_UNKNOWN = 0, LAYER_TYPE_FCL_IDENTITY, LAYER_TYPE_FCL_MIRRORED };
+enum CopyType { DeepCopy, ShallowCopy };
 
 struct ILayer
 {
@@ -17,13 +18,16 @@ struct ILayer
 
     void saveCurrentStateToBackup()
     {
-        m_weightsBackup.copyFrom(m_weights);
-        m_biasesBackup.copyFrom(m_biases);
+        m_pWeightsBackup =  m_pWeights->clone(m_pWeights->elemSize());
+        m_pBiasesBackup = m_pBiases->clone(m_pBiases->elemSize());
     }
-    void restoreStateFromBackup()
+    void restoreStateFromBackup(CopyType copyType = ShallowCopy)
     {
-        m_weights.copyFrom(m_weightsBackup);
-        m_biases.copyFrom(m_biasesBackup);
+        nvAssert(m_pWeights != m_pWeightsBackup && m_pBiases != m_pBiasesBackup);
+        nvAssert(m_pWeights->getDims() == m_pWeightsBackup->getDims());
+        nvAssert(m_pBiases->getDims() == m_pBiasesBackup->getDims());
+        m_pWeights = (copyType == ShallowCopy) ? m_pWeightsBackup : m_pWeightsBackup->clone(m_pWeightsBackup->elemSize());
+        m_pBiases = (copyType == ShallowCopy) ? m_pBiasesBackup : m_pBiasesBackup->clone(m_pBiasesBackup->elemSize());
     }
 
     void updateLoss(NvU32 uBatch, Tensor& wantedOutput,
@@ -35,10 +39,10 @@ struct ILayer
 
     virtual void serialize(ISerializer& s)
     {
-        m_weights.serialize("m_weights", s);
-        m_biases.serialize("m_biases", s);
-        m_weightsBackup.serialize("m_weightsBackup", s);
-        m_biasesBackup.serialize("m_biasesBackup", s);
+        s.serializeSharedPtr("m_pWeights", m_pWeights);
+        s.serializeSharedPtr("m_pBiases", m_pBiases);
+        s.serializeSharedPtr("m_pWeightsBackup", m_pWeightsBackup);
+        s.serializeSharedPtr("m_pBiasesBackup", m_pBiasesBackup);
     }
 
     // functions used to check analytic derivative against numeric ones
@@ -46,12 +50,14 @@ struct ILayer
     virtual double getTrainableParam(NvU32 uParam);
     virtual void setTrainableParam(NvU32 uParam, double fValue);
 
+    virtual ILayer* cloneToDoublePrecision() = 0;
+
 protected:
     ILayer(LAYER_TYPE type) : m_type(type)
     {
     }
     std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
-    Tensor m_weights, m_biases, m_weightsBackup, m_biasesBackup;
+    TensorRef m_pWeights, m_pBiases, m_pWeightsBackup, m_pBiasesBackup;
     BatchDataContainer m_batchesData;
 };
 
@@ -106,10 +112,10 @@ struct FullyConnectedLayer : public ILayer
 
         // fully connected means we have this many weights and biases:
         RNGUniform rng;
-        m_weights.init(1, nSummatorsPerOutputCluster, nValuesPerInputCluster, 1, sizeof(float));
-        m_weights.clearWithRandomValues<float>(-1, 1, rng);
-        m_biases.init(1, nSummatorsPerOutputCluster, 1, 1, sizeof(float));
-        m_biases.clearWithRandomValues<float>(-1, 1, rng);
+        m_pWeights = std::make_shared<Tensor>(1, nSummatorsPerOutputCluster, nValuesPerInputCluster, 1, sizeof(float));
+        m_pWeights->clearWithRandomValues<float>(-1, 1, rng);
+        m_pBiases = std::make_shared<Tensor>(1, nSummatorsPerOutputCluster, 1, 1, sizeof(float));
+        m_pBiases->clearWithRandomValues<float>(-1, 1, rng);
 
         // and our output will be:
         nvAssert(m_inputDims[0] == m_outputDims[0] && m_inputDims[3] == m_outputDims[3]);
@@ -128,6 +134,9 @@ struct FullyConnectedLayer : public ILayer
         s.serializeSimpleType("m_inputDims", m_inputDims);
         s.serializeSimpleType("m_outputDims", m_outputDims);
     }
+
+    virtual ILayer* cloneToDoublePrecision() override;
+
 private:
     template <class T>
     TensorRef forwardInternal(NvU32 uBatch, TensorRef pInput);

@@ -2,7 +2,7 @@
 #include "network.h"
 #include "learningRates.h"
 
-float Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
+double Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
     LearningRates &lr)
 {
     forwardPass(network);

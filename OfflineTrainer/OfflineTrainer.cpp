@@ -32,7 +32,7 @@ int main()
         }
         if (path.empty())
         {
-            path = L"c:\\atomNets\\water_4237.bin";
+            path = L"c:\\atomNets\\water_4236.bin";
         }
         printf("loading %S\n", path.c_str());
         MyReader reader(path);

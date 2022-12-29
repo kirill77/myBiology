@@ -6,6 +6,9 @@
 #include <memory>
 #include "gpuBuffer.h"
 
+struct Tensor;
+typedef std::shared_ptr<Tensor> TensorRef;
+
 struct Tensor : public GPUBuffer
 {
     Tensor() { }
@@ -57,19 +60,13 @@ struct Tensor : public GPUBuffer
         GPUBuffer::serialize(sName, s);
         s.serializeSimpleType("m_dims", m_dims);
     }
-    void copyFrom(Tensor& other)
-    {
-        this->init(other.getDims(), other.elemSize());
-        this->copySubregionFrom(0, other, 0, other.size());
-    }
+    TensorRef clone(NvU32 elemSize);
 
 private:
     Tensor(const Tensor& other) = delete;
     void operator = (const Tensor& other) = delete;
     unsigned m_dims[4] = {};
 };
-
-typedef std::shared_ptr<Tensor> TensorRef;
 
 template <class T>
 struct CUDAROTensor : public CUDAROBuffer<T>

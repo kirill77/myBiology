@@ -47,11 +47,11 @@ struct NeuralNetwork
             m_pLayers[u]->saveCurrentStateToBackup();
         }
     }
-    void restoreStateFromBackup()
+    void restoreStateFromBackup(CopyType copyType = ShallowCopy)
     {
         for (NvU32 u = 0; u < m_pLayers.size(); ++u)
         {
-            m_pLayers[u]->restoreStateFromBackup();
+            m_pLayers[u]->restoreStateFromBackup(copyType);
         }
     }
     TensorRef updateLoss(NvU32 uBatch, Tensor& wantedOutput,

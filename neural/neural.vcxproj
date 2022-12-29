@@ -111,6 +111,7 @@
     <ClCompile Include="learningRates.cpp" />
     <ClCompile Include="neural.cpp" />
     <ClCompile Include="neuralTest.cpp" />
+    <ClCompile Include="tensor.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

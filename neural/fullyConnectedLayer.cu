@@ -76,7 +76,7 @@ TensorRef FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forwardInternal(NvU
 
     dim3 grid(n, m_outputDims[3], 1);
     dim3 block(m_outputDims[2], T_ACTIVATION1 == T_ACTIVATION2 ? m_outputDims[1] : m_outputDims[1] / 2, 1);
-    FCL_Forward<T_ACTIVATION1, T_ACTIVATION2, T> forward(input, output, m_weights, m_biases, beforeActivation);
+    FCL_Forward<T_ACTIVATION1, T_ACTIVATION2, T> forward(input, output, *m_pWeights, *m_pBiases, beforeActivation);
     if (g_bExecuteOnTheGPU)
     {
         fclForwardKernel<<<grid, block>>>(forward);
@@ -186,6 +186,13 @@ Tensor* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(NvU32 uBatch
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
+ILayer* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::cloneToDoublePrecision()
+{
+    nvAssert(false); // not yet implemented
+    return nullptr;
+}
+
+template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 template <class T>
 Tensor* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backwardInternal(NvU32 uBatch, Tensor& loss,
     double fBiasesLR, double fWeightsLR)
@@ -203,7 +210,7 @@ Tensor* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backwardInternal(NvU3
     nvAssert(loss.n() == n && m_outputDims[0] == 1 && loss.h() == m_outputDims[1] && loss.w() == m_outputDims[2] && loss.c() == m_outputDims[3]);
     Tensor& beforeActivation = *batchData.m_beforeActivation;
     FCL_Backward<T_ACTIVATION1, T_ACTIVATION2, T> backward(fBiasesLR, fWeightsLR,
-        input, m_weights, m_biases, batchData.m_pPrevLoss.get(), loss, beforeActivation);
+        input, *m_pWeights, *m_pBiases, batchData.m_pPrevLoss.get(), loss, beforeActivation);
     nvAssert(T_ACTIVATION1 == T_ACTIVATION2 || loss.h() % 2 == 0);
     unsigned outHiNum = (T_ACTIVATION1 == T_ACTIVATION2 ? loss.h() : loss.h() / 2);
     dim3 grid(input.w(), input.h(), 1);
