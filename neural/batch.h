@@ -7,6 +7,7 @@ struct Batch
     Batch(NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput) :
         m_uBatch(uBatch), m_pInput(pInput), m_pWantedOutput(pWantedOutput)
     {
+        m_pLoss = std::make_shared<Tensor>(m_pWantedOutput->getDims(), m_pWantedOutput->elemSize());
     }
 
     // returns the initial error (before progress was made)
@@ -29,5 +30,5 @@ private:
 
     TensorRef updateLoss(NeuralNetwork& network, LossComputer& lossComputer, double* pError = nullptr);
 
-    TensorRef m_pInput, m_pWantedOutput;
+    TensorRef m_pInput, m_pWantedOutput, m_pLoss;
 };

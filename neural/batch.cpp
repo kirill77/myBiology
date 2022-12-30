@@ -35,7 +35,8 @@ double Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComp
 }
 TensorRef Batch::updateLoss(NeuralNetwork &network, LossComputer& lossComputer, double *pErrorPtr)
 {
-    return network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, pErrorPtr);
+    network.updateLoss(m_uBatch, *m_pWantedOutput, lossComputer, m_pLoss, pErrorPtr);
+    return m_pLoss;
 }
 TensorRef Batch::forwardPass(NeuralNetwork& network)
 {
