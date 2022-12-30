@@ -2,16 +2,12 @@
 
 #include <array>
 #include "basics/serializer.h"
-#include "neuralTest.h"
 #include "layer.h"
 #include "batch.h"
 
 struct NeuralNetwork
 {
-    NeuralNetwork()
-    {
-        nvAssert(NeuralTest::isTested());
-    }
+    NeuralNetwork();
 
     virtual NvU32 getNBatches() = 0;
 
@@ -20,14 +16,14 @@ struct NeuralNetwork
         return (NvU32)m_pLayers.size();
     }
 
-    Batch createBatch(NvU32 uBatch)
+    std::shared_ptr<Batch> createBatch(NvU32 uBatch)
     {
-        Batch batch = createAndInitBatchInternal(uBatch);
+        std::shared_ptr<Batch> pBatch = createAndInitBatchInternal(uBatch);
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
-            m_pLayers[uLayer]->allocateBatchData(uBatch, batch.n(), uLayer == 0);
+            m_pLayers[uLayer]->allocateBatchData(uBatch, pBatch->n(), uLayer == 0);
         }
-        return batch;
+        return pBatch;
     }
 
     // returns network output tensor
@@ -98,15 +94,13 @@ struct NeuralNetwork
         m_fLRSum = 0;
         m_nLRSamples = 0;
     }
-    // checks backward pass (analytic) vs numeric derivatives
-    bool testRandomDerivative(Batch& batch, NvU32 nChecks);
 
     virtual NvU32 getNTrainableParams() const;
     virtual double getTrainableParam(NvU32 uParam);
     virtual void setTrainableParam(NvU32 uParam, double fValue);
 
 protected:
-    virtual Batch createAndInitBatchInternal(NvU32 uBatch) = 0;
+    virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
     RNGUniform m_rng;
 

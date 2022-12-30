@@ -4,6 +4,7 @@
 #include "neural/l2Computer.h"
 #include "neural/epoch.h"
 #include "neural/learningRates.h"
+#include "neural/neuralTest.h"
 
 extern size_t g_nCudaBytes;
 

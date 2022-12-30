@@ -175,7 +175,7 @@ struct AtomsNetwork : public NeuralNetwork
 
 private:
     template <class Scrambler>
-    Batch initBatchInternal(NvU32 uBatch, const Scrambler &scrambler)
+    std::shared_ptr<Batch> initBatchInternal(NvU32 uBatch, const Scrambler &scrambler)
     {
         TensorRef pInput = createInputTensor(scrambler);
 
@@ -186,9 +186,9 @@ private:
         {
             copyClusterToOutputTensor(wantedOutput, u, scrambler[u]);
         }
-        return Batch(uBatch, pInput, pWantedOutput);
+        return std::make_shared<Batch>(uBatch, pInput, pWantedOutput);
     }
-    virtual Batch createAndInitBatchInternal(NvU32 uBatch) override
+    virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) override
     {
         if (m_batchAtomIndices.size() == 0)
         {

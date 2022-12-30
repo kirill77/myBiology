@@ -11,8 +11,8 @@ void Epoch::makeStep(NeuralNetwork &network, LossComputer &lossComputer, Learnin
     NvU32 nBatches = network.getNBatches();
     for (NvU32 uBatch = 0; uBatch < nBatches; ++uBatch)
     {
-        Batch batch = network.createBatch(uBatch);
-        fPreErrorsSum += batch.makeMinimalProgress(network, lossComputer, lr);
+        std::shared_ptr<Batch> pBatch = network.createBatch(uBatch);
+        fPreErrorsSum += pBatch->makeMinimalProgress(network, lossComputer, lr);
         fPostErrorsSum += lr.getLastError();
 
         NvU32 uNextPercent = uBatch * 100 / (NvU32)nBatches;

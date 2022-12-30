@@ -17,7 +17,7 @@ struct TestNetwork : public NeuralNetwork
     {
         return 1;
     }
-    virtual Batch createAndInitBatchInternal(NvU32 uBatch) override
+    virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) override
     {
         nvAssert(uBatch < getNBatches());
         RNGUniform rng((uBatch + 1) * 0x12345);
@@ -26,7 +26,7 @@ struct TestNetwork : public NeuralNetwork
         pInput->clearWithRandomValues<float>(0, 1, rng);
         TensorRef pWantedOutput = std::make_shared<Tensor>(NSAMPLES_PER_BATCH, s_layer1OutputDims[1], s_layer1OutputDims[2], s_layer1OutputDims[3],         sizeof(float));
         pWantedOutput->clearWithRandomValues<float>(0, 1, rng);
-        return Batch(uBatch, pInput, pWantedOutput);
+        return std::make_shared<Batch>(uBatch, pInput, pWantedOutput);
     }
 
 private:
@@ -114,21 +114,139 @@ private:
 };
 #endif
 
+struct DerivChecker
+{
+    void init(std::shared_ptr<NeuralNetwork> pNetwork, std::shared_ptr<Batch> pBatch, RNGUniform* pRNG)
+    {
+        m_pNetwork = pNetwork;
+        m_pBatch = pBatch;
+
+        // make internal copy of weights and biases
+        m_pNetwork->saveCurrentStateToBackup();
+
+        //g_bExecuteOnTheGPU = false;
+
+        TensorRef pOutput = m_pBatch->forwardPass(*m_pNetwork);
+
+        // generate some kind of random wanted output
+        m_wantedOutput.init(pOutput->getDims(), sizeof(float));
+        m_wantedOutput.clearWithRandomValues<float>(-1, 1, *pRNG);
+
+        m_lossDeriv.init(pOutput->getDims(), sizeof(float));
+
+        m_lr.init(m_pNetwork->getNLearningRatesNeeded());
+
+        // compute the initial loss - before we call changeParam()
+        m_lossComputer.compute(*pOutput, m_wantedOutput, m_lossDeriv, &m_fLossBefore);
+    }
+    bool doDerivativesMatch(NvU32 uParam)
+    {
+        float fDeltaParamForward = 0.25f;
+        double fPrevPercentDifference = 1e38;
+        std::vector<double> fN, fA;
+        for (NvU32 i2 = 0; ; ++i2) // loop until acceptable accuracy of derivative is achieved
+        {
+            // change the param so that we could compute the numeric derivative dLoss/dParam later on
+            double fPrevParamValue = m_pNetwork->getTrainableParam(uParam);
+            double fNextParamValue = fPrevParamValue + fDeltaParamForward;
+            m_pNetwork->setTrainableParam(uParam, fNextParamValue);
+
+            // see how that has affected the output
+            TensorRef outputAfterChangeRef = m_pBatch->forwardPass(*m_pNetwork);
+            Tensor& outputAfterChange = *outputAfterChangeRef;
+            // compute the change in output due to changeParam() that we did
+            double fLossAfter = 0;
+            m_lossComputer.compute(outputAfterChange, m_wantedOutput, m_lossDeriv, &fLossAfter);
+            double fNumericDeriv = (fLossAfter - m_fLossBefore) / fDeltaParamForward;
+
+            // restore weights/biases (no need for full restoreStateFromBackup() here because we just changed one layer)
+            m_pNetwork->setTrainableParam(uParam, fPrevParamValue);
+            m_pBatch->forwardPass(*m_pNetwork);
+            m_pNetwork->backwardPass(m_pBatch->getBatchIndex(), &m_lossDeriv, m_lr);
+            // backward pass is supposed to change param by the analytic loss derivative
+            double fNextParamValue1 = m_pNetwork->getTrainableParam(uParam);
+            double fAnalyticDeriv = fPrevParamValue - fNextParamValue1;
+
+            fN.push_back((float)fNumericDeriv);
+            fA.push_back(fAnalyticDeriv);
+
+            // restore all weights/biases from the backup (needed because backwardPass() has changed everything)
+            m_pNetwork->restoreStateFromBackup(DeepCopy);
+
+            // loss seem to not depend on this particular param - go to the next sample
+            if (abs(fNumericDeriv + fAnalyticDeriv) < 1e-10)
+            {
+                break;
+            }
+            double fPercentDifference = 200 * abs((fNumericDeriv - fAnalyticDeriv) / (fNumericDeriv + fAnalyticDeriv));
+            if (fPercentDifference < 1)
+            {
+                break; // accuracy of this sample is good enough - go to the next sample
+            }
+            fPrevPercentDifference = fPercentDifference;
+
+            // error is above threshold - try smaller param change
+            fDeltaParamForward /= 2;
+            if (fDeltaParamForward < 1e-10)
+            {
+                // could not reach desired accuracy of derivative - something seems wrong
+                // perhaps precision was not enough - test the same with double precision
+                nvAssert(false);
+                return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    std::shared_ptr<NeuralNetwork> m_pNetwork;
+    Tensor m_wantedOutput, m_lossDeriv;
+    LossComputer m_lossComputer;
+    LearningRates m_lr;
+    double m_fLossBefore = 0;
+    std::shared_ptr<Batch> m_pBatch;
+};
+
+bool NeuralTest::testRandomDerivative(std::shared_ptr<NeuralNetwork> pNetwork, std::shared_ptr<Batch> pBatch, NvU32 nChecks)
+{
+    RNGUniform rng;
+    DerivChecker derivCheckerFloat;
+    derivCheckerFloat.init(pNetwork, pBatch, &rng);
+
+    NvU32 nChecksWanted = nChecks * 100;
+    double fCheckedParamStride = 1;
+    NvU32 nTotalParams = pNetwork->getNTrainableParams();
+    fCheckedParamStride = nTotalParams / (double)nChecksWanted;
+    fCheckedParamStride = std::max(fCheckedParamStride, 1.);
+
+    for (double fCheckedParam = 0; fCheckedParam < nTotalParams; fCheckedParam += fCheckedParamStride)
+    {
+        if (!derivCheckerFloat.doDerivativesMatch((NvU32)fCheckedParam))
+        {
+            nvAssert(false);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void NeuralTest::test()
 {
     m_bTested = true;
     LossComputer lossComputer;
 
     {
-        TestNetwork network;
+        std::shared_ptr<TestNetwork> pNetwork;
+        pNetwork = std::make_shared<TestNetwork>();
         
         LearningRates lr;
-        lr.init(network.getNLearningRatesNeeded());
+        lr.init(pNetwork->getNLearningRatesNeeded());
         
-        Batch batch = network.createBatch(0);
+        std::shared_ptr<Batch> pBatch = pNetwork->createBatch(0);
         for ( ; ; )
         {
-            batch.makeMinimalProgress(network, lossComputer, lr);
+            pBatch->makeMinimalProgress(*pNetwork, lossComputer, lr);
             if (lr.getNStepsMade() >= 10000)
                 break;
         }
@@ -136,7 +254,7 @@ void NeuralTest::test()
         m_bTested = m_bTested && fError > 0 && fError < 1e-11;
         nvAssert(m_bTested);
 
-        m_bTested = m_bTested && network.testRandomDerivative(batch, 100);
+        //m_bTested = m_bTested && testRandomDerivative(pNetwork, pBatch, 100);
         nvAssert(m_bTested);
     }
 
