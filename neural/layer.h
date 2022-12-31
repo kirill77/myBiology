@@ -18,16 +18,16 @@ struct ILayer
 
     void saveCurrentStateToBackup()
     {
-        m_pWeightsBackup =  m_pWeights->clone(m_pWeights->elemSize());
-        m_pBiasesBackup = m_pBiases->clone(m_pBiases->elemSize());
+        m_pWeightsBackup =  m_pWeights->cloneToPrecision(m_pWeights->elemSize());
+        m_pBiasesBackup = m_pBiases->cloneToPrecision(m_pBiases->elemSize());
     }
     void restoreStateFromBackup(CopyType copyType = ShallowCopy)
     {
         nvAssert(m_pWeights != m_pWeightsBackup && m_pBiases != m_pBiasesBackup);
         nvAssert(m_pWeights->getDims() == m_pWeightsBackup->getDims());
         nvAssert(m_pBiases->getDims() == m_pBiasesBackup->getDims());
-        m_pWeights = (copyType == ShallowCopy) ? m_pWeightsBackup : m_pWeightsBackup->clone(m_pWeightsBackup->elemSize());
-        m_pBiases = (copyType == ShallowCopy) ? m_pBiasesBackup : m_pBiasesBackup->clone(m_pBiasesBackup->elemSize());
+        m_pWeights = (copyType == ShallowCopy) ? m_pWeightsBackup : m_pWeightsBackup->cloneToPrecision(m_pWeightsBackup->elemSize());
+        m_pBiases = (copyType == ShallowCopy) ? m_pBiasesBackup : m_pBiasesBackup->cloneToPrecision(m_pBiasesBackup->elemSize());
     }
 
     void updateLoss(NvU32 uBatch, Tensor& wantedOutput,
@@ -50,15 +50,29 @@ struct ILayer
     virtual double getTrainableParam(NvU32 uParam);
     virtual void setTrainableParam(NvU32 uParam, double fValue);
 
-    virtual ILayer* cloneToDoublePrecision() = 0;
+    virtual std::shared_ptr<ILayer> cloneToPrecision(NvU32 elemSize)
+    {
+        nvAssert(false); // not implemented
+        return nullptr;
+    }
 
 protected:
     ILayer(LAYER_TYPE type) : m_type(type)
     {
+        m_pBatchData = std::make_shared< BatchDataContainer>();
     }
     std::array<unsigned, 4> m_inputDims = { }, m_outputDims = { };
+
+    void cloneRefsFrom(ILayer &src, NvU32 elemSize)
+    {
+        m_pWeights = src.m_pWeights->cloneToPrecision(elemSize);
+        m_pBiases = src.m_pBiases->cloneToPrecision(elemSize);
+        m_pWeightsBackup = src.m_pWeightsBackup->cloneToPrecision(elemSize);
+        m_pBiasesBackup = src.m_pBiasesBackup->cloneToPrecision(elemSize);
+        m_pBatchData = src.m_pBatchData->cloneToPrecision(elemSize);
+    }
     TensorRef m_pWeights, m_pBiases, m_pWeightsBackup, m_pBiasesBackup;
-    BatchDataContainer m_batchesData;
+    std::shared_ptr<BatchDataContainer> m_pBatchData;
 };
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
@@ -82,7 +96,7 @@ struct FullyConnectedLayer : public ILayer
     virtual void allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer) override
     {
         __super::allocateBatchData(uBatch, n, isFirstLayer);
-        auto& batchData = m_batchesData.accessBatchData(uBatch);
+        auto& batchData = m_pBatchData->accessBatchData(uBatch);
 
         std::array<unsigned, 4> dimsTmp = m_outputDims;
         dimsTmp[0] = n;
@@ -135,7 +149,12 @@ struct FullyConnectedLayer : public ILayer
         s.serializeSimpleType("m_outputDims", m_outputDims);
     }
 
-    virtual ILayer* cloneToDoublePrecision() override;
+    virtual std::shared_ptr<ILayer> cloneToPrecision(NvU32 elemSize) override
+    {
+        auto p = std::make_shared<FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>>();
+        p->cloneRefsFrom(*this, elemSize);
+        return p;
+    }
 
 private:
     template <class T>

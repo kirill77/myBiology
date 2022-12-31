@@ -60,7 +60,7 @@ struct Tensor : public GPUBuffer
         GPUBuffer::serialize(sName, s);
         s.serializeSimpleType("m_dims", m_dims);
     }
-    TensorRef clone(NvU32 elemSize);
+    TensorRef cloneToPrecision(NvU32 elemSize);
 
 private:
     Tensor(const Tensor& other) = delete;

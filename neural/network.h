@@ -97,6 +97,12 @@ struct NeuralNetwork
     virtual double getTrainableParam(NvU32 uParam);
     virtual void setTrainableParam(NvU32 uParam, double fValue);
 
+    virtual std::shared_ptr<NeuralNetwork> cloneToPrecision(NvU32 elemSize)
+    {
+        nvAssert(false); // not implemented
+        return nullptr;
+    }
+
 protected:
     virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;

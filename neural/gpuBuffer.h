@@ -100,6 +100,7 @@ struct GPUBuffer
     virtual ~GPUBuffer();
     void notifyDeviceBind(bool isWriteBind, bool bDiscardPrevContent = false);
     void syncToHost();
+
     template <class T>
     T* getDevicePointer() const
     {

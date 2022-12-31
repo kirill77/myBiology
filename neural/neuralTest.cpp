@@ -29,6 +29,16 @@ struct TestNetwork : public NeuralNetwork
         return std::make_shared<Batch>(uBatch, pInput, pWantedOutput);
     }
 
+    virtual std::shared_ptr<NeuralNetwork> cloneToPrecision(NvU32 elemSize) override
+    {
+        std::shared_ptr<TestNetwork> p = std::make_shared<TestNetwork>(*this);
+        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
+        {
+            p->m_pLayers[u] = m_pLayers[u]->cloneToPrecision(elemSize);
+        }
+        return p;
+    }
+
 private:
     std::array<unsigned, 4> s_inputDims = { 1, 4, 4, 1 };
     std::array<unsigned, 4> s_layer0OutputDims = { 1, 4, 3, 1 };
@@ -129,15 +139,15 @@ struct DerivChecker
         TensorRef pOutput = m_pBatch->forwardPass(*m_pNetwork);
 
         // generate some kind of random wanted output
-        m_wantedOutput.init(pOutput->getDims(), sizeof(float));
-        m_wantedOutput.clearWithRandomValues<float>(-1, 1, *pRNG);
+        m_pWantedOutput = std::make_shared<Tensor>(pOutput->getDims(), sizeof(float));
+        m_pWantedOutput->clearWithRandomValues<float>(-1, 1, *pRNG);
 
-        m_lossDeriv.init(pOutput->getDims(), sizeof(float));
+        m_pLossDeriv = std::make_shared<Tensor>(pOutput->getDims(), sizeof(float));
 
         m_lr.init(m_pNetwork->getNLearningRatesNeeded());
 
         // compute the initial loss - before we call changeParam()
-        m_lossComputer.compute(*pOutput, m_wantedOutput, m_lossDeriv, &m_fLossBefore);
+        m_lossComputer.compute(*pOutput, *m_pWantedOutput, *m_pLossDeriv, &m_fLossBefore);
     }
     bool doDerivativesMatch(NvU32 uParam)
     {
@@ -156,13 +166,13 @@ struct DerivChecker
             Tensor& outputAfterChange = *outputAfterChangeRef;
             // compute the change in output due to changeParam() that we did
             double fLossAfter = 0;
-            m_lossComputer.compute(outputAfterChange, m_wantedOutput, m_lossDeriv, &fLossAfter);
+            m_lossComputer.compute(outputAfterChange, *m_pWantedOutput, *m_pLossDeriv, &fLossAfter);
             double fNumericDeriv = (fLossAfter - m_fLossBefore) / fDeltaParamForward;
 
             // restore weights/biases (no need for full restoreStateFromBackup() here because we just changed one layer)
             m_pNetwork->setTrainableParam(uParam, fPrevParamValue);
             m_pBatch->forwardPass(*m_pNetwork);
-            m_pNetwork->backwardPass(m_pBatch->getBatchIndex(), &m_lossDeriv, m_lr);
+            m_pNetwork->backwardPass(m_pBatch->getBatchIndex(), m_pLossDeriv.get(), m_lr);
             // backward pass is supposed to change param by the analytic loss derivative
             double fNextParamValue1 = m_pNetwork->getTrainableParam(uParam);
             double fAnalyticDeriv = fPrevParamValue - fNextParamValue1;
@@ -198,9 +208,16 @@ struct DerivChecker
         return true;
     }
 
+    std::shared_ptr<DerivChecker> cloneToPrecision(NvU32 elemSize)
+    {
+        std::shared_ptr<DerivChecker> p = std::make_shared<DerivChecker>();
+        p->m_pNetwork = m_pNetwork->cloneToPrecision(elemSize);
+        return p;
+    }
+
 private:
     std::shared_ptr<NeuralNetwork> m_pNetwork;
-    Tensor m_wantedOutput, m_lossDeriv;
+    TensorRef m_pWantedOutput, m_pLossDeriv;
     LossComputer m_lossComputer;
     LearningRates m_lr;
     double m_fLossBefore = 0;
@@ -210,8 +227,9 @@ private:
 bool NeuralTest::testRandomDerivative(std::shared_ptr<NeuralNetwork> pNetwork, std::shared_ptr<Batch> pBatch, NvU32 nChecks)
 {
     RNGUniform rng;
-    DerivChecker derivCheckerFloat;
-    derivCheckerFloat.init(pNetwork, pBatch, &rng);
+    std::shared_ptr<DerivChecker> m_pDerivCheckerF = std::make_shared<DerivChecker>();
+    m_pDerivCheckerF->init(pNetwork, pBatch, &rng);
+    std::shared_ptr<DerivChecker> m_pDerivCheckerD = m_pDerivCheckerF->cloneToPrecision(sizeof(double));
 
     NvU32 nChecksWanted = nChecks * 100;
     double fCheckedParamStride = 1;
@@ -221,7 +239,7 @@ bool NeuralTest::testRandomDerivative(std::shared_ptr<NeuralNetwork> pNetwork, s
 
     for (double fCheckedParam = 0; fCheckedParam < nTotalParams; fCheckedParam += fCheckedParamStride)
     {
-        if (!derivCheckerFloat.doDerivativesMatch((NvU32)fCheckedParam))
+        if (!m_pDerivCheckerF->doDerivativesMatch((NvU32)fCheckedParam))
         {
             nvAssert(false);
             return false;

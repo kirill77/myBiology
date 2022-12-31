@@ -3,7 +3,7 @@
 
 void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
 {
-    LayerBatchData& batchData = m_batchesData.allocateBatchData(uBatch);
+    LayerBatchData& batchData = m_pBatchData->allocateBatchData(uBatch);
 
     std::array<unsigned, 4> outputDims = m_outputDims;
     outputDims[0] = n;
@@ -19,7 +19,7 @@ void ILayer::allocateBatchData(NvU32 uBatch, NvU32 n, bool isFirstLayer)
 }
 void ILayer::updateLoss(NvU32 uBatch, Tensor& wantedOutput, LossComputer& lossComputer, Tensor& outLoss, double* pErrorPtr)
 {
-    auto& bd = m_batchesData.accessBatchData(uBatch);
+    auto& bd = m_pBatchData->accessBatchData(uBatch);
     Tensor& output = (*bd.m_pOutput);
     lossComputer.compute(output, wantedOutput, outLoss, pErrorPtr);
 }

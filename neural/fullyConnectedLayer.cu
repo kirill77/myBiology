@@ -65,7 +65,7 @@ template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 template <class T>
 TensorRef FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::forwardInternal(NvU32 uBatch, TensorRef pInput)
 {
-    LayerBatchData& batchData = m_batchesData.accessBatchData(uBatch);
+    LayerBatchData& batchData = this->m_pBatchData->accessBatchData(uBatch);
     batchData.m_pPrevInput = pInput;
     Tensor& input = *pInput;
     NvU32 n = input.n();
@@ -186,18 +186,11 @@ Tensor* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backward(NvU32 uBatch
 }
 
 template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
-ILayer* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::cloneToDoublePrecision()
-{
-    nvAssert(false); // not yet implemented
-    return nullptr;
-}
-
-template <ACTIVATION T_ACTIVATION1, ACTIVATION T_ACTIVATION2>
 template <class T>
 Tensor* FullyConnectedLayer<T_ACTIVATION1, T_ACTIVATION2>::backwardInternal(NvU32 uBatch, Tensor& loss,
     double fBiasesLR, double fWeightsLR)
 {
-    auto& batchData = m_batchesData.accessBatchData(uBatch);
+    auto& batchData = this->m_pBatchData->accessBatchData(uBatch);
     Tensor& input = *batchData.m_pPrevInput;
     NvU32 n = input.n();
     nvAssert(m_inputDims[0] == 1 && input.h() == m_inputDims[1] && input.w() == m_inputDims[2] && input.c() == m_inputDims[3]);
