@@ -4,6 +4,7 @@
 
 struct Batch
 {
+    Batch() { }
     Batch(NvU32 uBatch, TensorRef pInput, TensorRef pWantedOutput) :
         m_uBatch(uBatch), m_pInput(pInput), m_pWantedOutput(pWantedOutput)
     {
@@ -23,6 +24,16 @@ struct Batch
     NvU32 getBatchIndex() const
     {
         return m_uBatch;
+    }
+
+    std::shared_ptr<Batch> cloneToPrecision(NvU32 elemSize)
+    {
+        auto p = std::make_shared<Batch>();
+        p->m_uBatch = m_uBatch;
+        p->m_pInput = m_pInput->cloneToPrecision(elemSize);
+        p->m_pWantedOutput = m_pWantedOutput->cloneToPrecision(elemSize);
+        p->m_pLoss = m_pLoss->cloneToPrecision(elemSize);
+        return p;
     }
 
 private:

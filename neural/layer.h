@@ -65,6 +65,8 @@ protected:
 
     void cloneRefsFrom(ILayer &src, NvU32 elemSize)
     {
+        m_inputDims = src.m_inputDims;
+        m_outputDims = src.m_outputDims;
         m_pWeights = src.m_pWeights->cloneToPrecision(elemSize);
         m_pBiases = src.m_pBiases->cloneToPrecision(elemSize);
         m_pWeightsBackup = src.m_pWeightsBackup->cloneToPrecision(elemSize);

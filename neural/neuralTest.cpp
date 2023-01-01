@@ -138,15 +138,19 @@ struct DerivChecker
 
         TensorRef pOutput = m_pBatch->forwardPass(*m_pNetwork);
 
-        // generate some kind of random wanted output
-        m_pWantedOutput = std::make_shared<Tensor>(pOutput->getDims(), sizeof(float));
-        m_pWantedOutput->clearWithRandomValues<float>(-1, 1, *pRNG);
+        // generate some kind of random wanted output if we don't have them yet
+        if (m_pWantedOutput == nullptr)
+        {
+            m_pWantedOutput = std::make_shared<Tensor>(pOutput->getDims(), sizeof(float));
+            m_pWantedOutput->clearWithRandomValues<float>(-1, 1, *pRNG);
+        }
 
-        m_pLossDeriv = std::make_shared<Tensor>(pOutput->getDims(), sizeof(float));
+        m_pLossDeriv = std::make_shared<Tensor>(pOutput->getDims(), m_pWantedOutput->elemSize());
 
         m_lr.init(m_pNetwork->getNLearningRatesNeeded());
 
         // compute the initial loss - before we call changeParam()
+        m_lossComputer.init(m_pWantedOutput->elemSize());
         m_lossComputer.compute(*pOutput, *m_pWantedOutput, *m_pLossDeriv, &m_fLossBefore);
     }
     bool doDerivativesMatch(NvU32 uParam)
@@ -199,9 +203,8 @@ struct DerivChecker
             fDeltaParamForward /= 2;
             if (fDeltaParamForward < 1e-10)
             {
-                // could not reach desired accuracy of derivative - something seems wrong
-                // perhaps precision was not enough - test the same with double precision
-                nvAssert(false);
+                // even with double precision couldn't reach the desired accuracy? something seems wrong
+                nvAssert(m_pWantedOutput->elemSize() == 4);
                 return false;
             }
         }
@@ -211,7 +214,10 @@ struct DerivChecker
     std::shared_ptr<DerivChecker> cloneToPrecision(NvU32 elemSize)
     {
         std::shared_ptr<DerivChecker> p = std::make_shared<DerivChecker>();
-        p->m_pNetwork = m_pNetwork->cloneToPrecision(elemSize);
+        auto pNetwork = m_pNetwork->cloneToPrecision(elemSize);
+        auto pBatch = m_pBatch->cloneToPrecision(elemSize);
+        p->m_pWantedOutput = m_pWantedOutput->cloneToPrecision(elemSize);
+        p->init(pNetwork, pBatch, nullptr);
         return p;
     }
 
@@ -241,8 +247,11 @@ bool NeuralTest::testRandomDerivative(std::shared_ptr<NeuralNetwork> pNetwork, s
     {
         if (!m_pDerivCheckerF->doDerivativesMatch((NvU32)fCheckedParam))
         {
-            nvAssert(false);
-            return false;
+            if (!m_pDerivCheckerD->doDerivativesMatch((NvU32)fCheckedParam)) // try with double precision
+            {
+                nvAssert(false);
+                return false;
+            }
         }
     }
 
@@ -253,6 +262,7 @@ void NeuralTest::test()
 {
     m_bTested = true;
     LossComputer lossComputer;
+    lossComputer.init(sizeof(float));
 
     {
         std::shared_ptr<TestNetwork> pNetwork;
@@ -272,7 +282,7 @@ void NeuralTest::test()
         m_bTested = m_bTested && fError > 0 && fError < 1e-11;
         nvAssert(m_bTested);
 
-        //m_bTested = m_bTested && testRandomDerivative(pNetwork, pBatch, 100);
+        m_bTested = m_bTested && testRandomDerivative(pNetwork, pBatch, 100);
         nvAssert(m_bTested);
     }
 

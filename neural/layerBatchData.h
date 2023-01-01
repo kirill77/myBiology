@@ -8,7 +8,10 @@ struct LayerBatchData
     {
         m_beforeActivation = src.m_beforeActivation->cloneToPrecision(elemSize);
         m_pOutput = src.m_pOutput->cloneToPrecision(elemSize);
-        m_pPrevLoss = src.m_pOutput->cloneToPrecision(elemSize);
+        if (src.m_pPrevLoss)
+        {
+            m_pPrevLoss = src.m_pPrevLoss->cloneToPrecision(elemSize);
+        }
         m_pPrevInput = src.m_pPrevInput->cloneToPrecision(elemSize);
     }
     TensorRef m_beforeActivation; // this is the m_outputs before activation function

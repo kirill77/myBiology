@@ -7,12 +7,12 @@ struct CU_LossComputer
     static const NvU32 BLOCK_SIZE = 32;
 
     CU_LossComputer(Tensor& output, Tensor& wantedOutput,
-        Tensor& outLoss, GPUBuffer* m_lossPerBlock) : m_output(output),
+        Tensor& outLoss, GPUBuffer* pLossPerBlock) : m_output(output),
         m_wantedOutput(wantedOutput), m_outLoss(outLoss, true)
     {
-        if (m_lossPerBlock)
+        if (pLossPerBlock)
         {
-            m_errorStat = CUDARWBuffer<T>(*m_lossPerBlock, true);
+            m_errorStat = CUDARWBuffer<T>(*pLossPerBlock, true);
         }
         nvAssert(wantedOutput.size() == output.size());
         nvAssert(output.size() % output.n() == 0);

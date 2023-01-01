@@ -6,10 +6,12 @@ struct LossComputer
 {
     LossComputer()
     {
-        // this limits maximam number of blocks we can have
-        m_lossPerBlock.resize<float>(1024 * 2);
     }
-
+    void init(NvU32 elemSize)
+    {
+        // this limits maximam number of blocks we can have
+        m_lossPerBlock.resizeWithoutConstructor(1024 * 2, elemSize);
+    }
     void compute(Tensor &outputs, Tensor &wantedOutputs, Tensor &outLoss, double *pAvgError = nullptr);
 
 private:

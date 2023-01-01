@@ -22,39 +22,25 @@ struct GPUBuffer
     {
     }
     template <class T>
-    __host__ __device__ const T& as(NvU32 u) const
+    const T& as(NvU32 u) const
     {
-#ifdef __CUDA_ARCH__
-        nvAssert(u < m_nDeviceElems);
-        return ((T*)m_pDevice)[u];
-#else
         nvAssert(u < m_nHostElems);
         nvAssert(m_hostRev >= m_deviceRev);
         nvAssert(m_elemSize == sizeof(T));
         return ((T*)m_pHost)[u];
-#endif
     }
     template <class T>
-    __host__ __device__ T& as(NvU32 u)
+    T& as(NvU32 u)
     {
-#ifdef __CUDA_ARCH__
-        nvAssert(u < m_nDeviceElems);
-        return ((T *)m_pDevice)[u];
-#else
         nvAssert(m_hostRev >= m_deviceRev);
         nvAssert(m_elemSize == sizeof(T));
         m_hostRev = m_deviceRev + 1;
         nvAssert(u < m_nHostElems);
         return ((T*)m_pHost)[u];
-#endif
     }
-    __host__ __device__ NvU32 size() const
+    NvU32 size() const
     {
-#ifdef __CUDA_ARCH__
         return m_nHostElems;
-#else
-        return m_nHostElems;
-#endif
     }
     size_t sizeInBytes() const
     {

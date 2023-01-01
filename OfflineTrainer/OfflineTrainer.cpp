@@ -43,6 +43,7 @@ int main()
     Epoch epoch;
 
     LossComputer lossComputer;
+    lossComputer.init(sizeof(float));
 
     LearningRates lr;
     lr.init(network.getNLearningRatesNeeded());

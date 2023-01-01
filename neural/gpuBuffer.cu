@@ -77,7 +77,8 @@ void GPUBuffer::syncToHost()
     m_hostRev = m_deviceRev;
 }
 
-__global__ void clearKernel(float* p, NvU32 nElemsToClear)
+template <class T>
+__global__ void clearKernel(T* p, NvU32 nElemsToClear)
 {
     NvU32 uElemToClear = blockIdx.x * blockDim.x + threadIdx.x;
     if (uElemToClear >= nElemsToClear)
@@ -103,24 +104,36 @@ static inline bool doesRunOnGPU(EXECUTE_MODE mode)
 
 void GPUBuffer::clearSubregion(NvU32 offset, NvU32 nElemsToClear, EXECUTE_MODE mode)
 {
-    nvAssert(elemSize() == sizeof(float));
     if (doesRunOnGPU(mode))
     {
         notifyDeviceBind(true, nElemsToClear == m_nHostElems);
         dim3 block(256, 1, 1);
         dim3 grid((nElemsToClear + block.x - 1) / block.x, 1, 1);
-        clearKernel<<<grid, block>>>(((float*)m_pDevice) + offset, nElemsToClear);
+        if (elemSize() == 4)
+        {
+            clearKernel << <grid, block >> > (getDevicePointer<float>() + offset, nElemsToClear);
+        }
+        else
+        {
+            clearKernel << <grid, block >> > (getDevicePointer<double>() + offset, nElemsToClear);
+        }
     }
     else
     {
-        m_hostRev = m_deviceRev + 1;
         nvAssert(offset + nElemsToClear <= size());
-        memset(&(as<float>(offset)), 0, nElemsToClear * elemSize());
+        if (elemSize() == 4)
+        {
+            memset(&(as<float>(offset)), 0, nElemsToClear * elemSize());
+        }
+        else
+        {
+            memset(&(as<double>(offset)), 0, nElemsToClear * elemSize());
+        }
     }
 }
 
-template <class DstType>
-__global__ void copyKernel(DstType* pDst, float *pSrc, NvU32 nElems)
+template <class DstType, class SrcType>
+__global__ void copyKernel(DstType* pDst, SrcType *pSrc, NvU32 nElems)
 {
     NvU32 uElem = blockIdx.x * blockDim.x + threadIdx.x;
     if (uElem >= nElems)
@@ -128,8 +141,8 @@ __global__ void copyKernel(DstType* pDst, float *pSrc, NvU32 nElems)
     pDst[uElem] = (DstType)pSrc[uElem];
 }
 
-template <class DstType>
-void cpuCopy(DstType* pDst, float* pSrc, NvU32 nElems)
+template <class DstType, class SrcType>
+void cpuCopy(DstType* pDst, SrcType* pSrc, NvU32 nElems)
 {
     for (NvU32 u = 0; u < nElems; ++u)
     {
@@ -149,17 +162,29 @@ void GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOffs
         notifyDeviceBind(true, nElemsToCopy == size());
         dim3 block(256, 1, 1);
         dim3 grid((nElemsToCopy + block.x - 1) / block.x, 1, 1);
-        nvAssert(src.elemSize() == 4);
-        float* pSrc = src.getDevicePointer<float>() + srcOffset;
         if (elemSize() == 4)
         {
             float* pDst = getDevicePointer<float>() + dstOffset;
-            copyKernel<<<grid, block>>>(pDst, pSrc, nElemsToCopy);
+            if (src.elemSize() == 4)
+            {
+                copyKernel << <grid, block >> > (pDst, src.getDevicePointer<float>() + srcOffset, nElemsToCopy);
+            }
+            else
+            {
+                copyKernel << <grid, block >> > (pDst, src.getDevicePointer<double>() + srcOffset, nElemsToCopy);
+            }
         }
         else
         {
             double* pDst = getDevicePointer<double>() + dstOffset;
-            copyKernel<<<grid, block>>>(pDst, pSrc, nElemsToCopy);
+            if (src.elemSize() == 4)
+            {
+                copyKernel << <grid, block >> > (pDst, src.getDevicePointer<float>() + srcOffset, nElemsToCopy);
+            }
+            else
+            {
+                copyKernel << <grid, block >> > (pDst, src.getDevicePointer<double>() + srcOffset, nElemsToCopy);
+            }
         }
     }
     else
@@ -168,17 +193,29 @@ void GPUBuffer::copySubregionFrom(NvU32 dstOffset, GPUBuffer& src, NvU32 srcOffs
         src.syncToHost();
         nvAssert(m_hostRev >= m_deviceRev);
         m_hostRev = m_deviceRev + 1;
-        nvAssert(src.elemSize() == 4);
-        float* pSrc = &src.as<float>(srcOffset);
         if (elemSize() == 4)
         {
             float* pDst = &this->as<float>(dstOffset);
-            cpuCopy(pDst, pSrc, nElemsToCopy);
+            if (src.elemSize() == 4)
+            {
+                cpuCopy(pDst, &src.as<float>(srcOffset), nElemsToCopy);
+            }
+            else
+            {
+                cpuCopy(pDst, &src.as<double>(srcOffset), nElemsToCopy);
+            }
         }
         else
         {
             double* pDst = &this->as<double>(dstOffset);
-            cpuCopy(pDst, pSrc, nElemsToCopy);
+            if (src.elemSize() == 4)
+            {
+                cpuCopy(pDst, &src.as<float>(srcOffset), nElemsToCopy);
+            }
+            else
+            {
+                cpuCopy(pDst, &src.as<double>(srcOffset), nElemsToCopy);
+            }
         }
     }
 }
