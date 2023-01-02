@@ -106,7 +106,6 @@ struct NeuralNetwork
 protected:
     virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
-    RNGUniform m_rng;
 
 private:
     double m_fLRSum = 0;
