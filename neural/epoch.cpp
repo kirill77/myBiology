@@ -2,16 +2,16 @@
 #include "network.h"
 #include "learningRates.h"
 
-void Epoch::makeStep(NeuralNetwork &network, LossComputer &lossComputer, LearningRates &lr)
+void Epoch::makeStep(DataLoader &loader, NeuralNetwork &network, LossComputer &lossComputer, LearningRates &lr)
 {
     printf("0%%\r");
     NvU32 uPrevPercent = 0;
 
     double fPreErrorsSum = 0, fPostErrorsSum = 0;
-    NvU32 nBatches = network.getNBatches();
+    NvU32 nBatches = loader.getNBatches();
     for (NvU32 uBatch = 0; uBatch < nBatches; ++uBatch)
     {
-        std::shared_ptr<Batch> pBatch = network.createBatch(uBatch);
+        std::shared_ptr<Batch> pBatch = loader.createBatch(uBatch);
         fPreErrorsSum += pBatch->makeMinimalProgress(network, lossComputer, lr);
         fPostErrorsSum += lr.getLastError();
 

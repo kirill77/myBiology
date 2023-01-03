@@ -5,6 +5,8 @@
 double Batch::makeMinimalProgress(NeuralNetwork& network, LossComputer &lossComputer,
     LearningRates &lr)
 {
+    network.allocateBatchData(m_uBatch, this->n());
+
     forwardPass(network);
     double fPreError = 0;
     updateLoss(network, lossComputer, &fPreError);

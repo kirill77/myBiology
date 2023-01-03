@@ -9,22 +9,18 @@ struct NeuralNetwork
 {
     NeuralNetwork();
 
-    virtual NvU32 getNBatches() = 0;
-
     virtual NvU32 getNLearningRatesNeeded() const
     {
         return (NvU32)m_pLayers.size();
     }
-
-    std::shared_ptr<Batch> createBatch(NvU32 uBatch)
+    
+    void allocateBatchData(NvU32 uBatch, NvU32 batchN)
     {
-        std::shared_ptr<Batch> pBatch = createAndInitBatchInternal(uBatch);
         for (NvU32 uLayer = 0; uLayer < m_pLayers.size(); ++uLayer)
         {
-            m_pLayers[uLayer]->allocateBatchData(uBatch, pBatch->n(), uLayer == 0);
+            m_pLayers[uLayer]->allocateBatchData(uBatch, batchN, uLayer == 0);
         }
-        return pBatch;
-    }
+    } 
 
     // returns network output tensor
     TensorRef forwardPass(NvU32 uBatch, TensorRef pInput)
@@ -99,15 +95,33 @@ struct NeuralNetwork
 
     virtual std::shared_ptr<NeuralNetwork> cloneToPrecision(NvU32 elemSize)
     {
-        nvAssert(false); // not implemented
-        return nullptr;
+        std::shared_ptr<NeuralNetwork> p = std::make_shared<NeuralNetwork>(*this);
+        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
+        {
+            p->m_pLayers[u] = m_pLayers[u]->cloneToPrecision(elemSize);
+        }
+        return p;
+    }
+
+    void addLayer(std::shared_ptr<ILayer> pLayer)
+    {
+        m_pLayers.push_back(pLayer);
     }
 
 protected:
-    virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) = 0;
     std::vector<std::shared_ptr<ILayer>> m_pLayers;
 
 private:
     double m_fLRSum = 0;
     int m_nLRSamples = 0;
+};
+
+struct DataLoader
+{
+    virtual void serialize(ISerializer& s)
+    {
+    }
+    virtual std::shared_ptr<NeuralNetwork> createNetwork() = 0;
+    virtual NvU32 getNBatches() = 0;
+    virtual std::shared_ptr<Batch> createBatch(NvU32 uBatch) = 0;
 };

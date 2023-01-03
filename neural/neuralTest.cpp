@@ -7,17 +7,13 @@
 
 bool NeuralTest::m_bTested = false;
 
-struct TestNetwork : public NeuralNetwork
+struct TestDataLoader : public DataLoader
 {
-    TestNetwork()
-    {
-        createTestLayers(m_pLayers);
-    }
     virtual NvU32 getNBatches() override
     {
         return 1;
     }
-    virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) override
+    virtual std::shared_ptr<Batch> createBatch(NvU32 uBatch) override
     {
         nvAssert(uBatch < getNBatches());
         RNGUniform rng((uBatch + 1) * 0x12345);
@@ -29,33 +25,25 @@ struct TestNetwork : public NeuralNetwork
         return std::make_shared<Batch>(uBatch, pInput, pWantedOutput);
     }
 
-    virtual std::shared_ptr<NeuralNetwork> cloneToPrecision(NvU32 elemSize) override
-    {
-        std::shared_ptr<TestNetwork> p = std::make_shared<TestNetwork>(*this);
-        for (NvU32 u = 0; u < m_pLayers.size(); ++u)
-        {
-            p->m_pLayers[u] = m_pLayers[u]->cloneToPrecision(elemSize);
-        }
-        return p;
-    }
-
 private:
     std::array<unsigned, 4> s_inputDims = { 1, 4, 4, 1 };
     std::array<unsigned, 4> s_layer0OutputDims = { 1, 4, 3, 1 };
     std::array<unsigned, 4> s_layer1OutputDims = { 1, 1, 1, 1 };
 
-    bool createTestLayers(std::vector<std::shared_ptr<ILayer>>& pLayers)
+public:
+    virtual std::shared_ptr<NeuralNetwork> createNetwork() override
     {
+        std::shared_ptr<NeuralNetwork> pNetwork = std::make_shared<NeuralNetwork>();
         using Layer0Type = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
         std::shared_ptr<Layer0Type> pLayer0 = std::make_shared<Layer0Type>();
         pLayer0->init(s_inputDims, s_layer0OutputDims);
-        pLayers.push_back(pLayer0);
+        pNetwork->addLayer(pLayer0);
 
         using Layer1Type = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
         std::shared_ptr<Layer1Type> pLayer1 = std::make_shared<Layer1Type>();
         pLayer1->init(s_layer0OutputDims, s_layer1OutputDims);
-        pLayers.push_back(pLayer1);
-        return true;
+        pNetwork->addLayer(pLayer1);
+        return pNetwork;
     }
 };
 
@@ -265,13 +253,13 @@ void NeuralTest::test()
     lossComputer.init(sizeof(float));
 
     {
-        std::shared_ptr<TestNetwork> pNetwork;
-        pNetwork = std::make_shared<TestNetwork>();
+        TestDataLoader loader;
+        std::shared_ptr<NeuralNetwork> pNetwork = loader.createNetwork();
         
         LearningRates lr;
         lr.init(pNetwork->getNLearningRatesNeeded());
         
-        std::shared_ptr<Batch> pBatch = pNetwork->createBatch(0);
+        std::shared_ptr<Batch> pBatch = loader.createBatch(0);
         for ( ; ; )
         {
             pBatch->makeMinimalProgress(*pNetwork, lossComputer, lr);

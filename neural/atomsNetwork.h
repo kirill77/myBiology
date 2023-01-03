@@ -76,12 +76,8 @@ inline void copy(rtvector<float, 3>& dst, const rtvector<T, 3>& src)
 }
 
 template <class T>
-struct AtomsNetwork : public NeuralNetwork
+struct AtomsDataLoader : public DataLoader
 {
-    AtomsNetwork()
-    {
-        createaAtomLayers(m_pLayers);
-    }
     using InternalLayerType = FullyConnectedLayer<ACTIVATION_RELU, ACTIVATION_MRELU>;
 
     inline NvU32 getNAtoms() const { return (NvU32)m_constAtomData.size(); }
@@ -157,9 +153,9 @@ struct AtomsNetwork : public NeuralNetwork
         return getNStoredSimSteps() * getNAtoms() / NATOMS_PER_BATCH;
     }
 
-    virtual void serialize(ISerializer& s) override
+    virtual void serialize(ISerializer& s)
     {
-        NeuralNetwork::serialize(s);
+        DataLoader::serialize(s);
         m_constAtomData.serialize("m_constAtomDataTensor", s);
         s.serializeArraySize("m_simSteps", m_simSteps);
         if (m_simSteps.size() > 0)
@@ -188,7 +184,7 @@ private:
         }
         return std::make_shared<Batch>(uBatch, pInput, pWantedOutput);
     }
-    virtual std::shared_ptr<Batch> createAndInitBatchInternal(NvU32 uBatch) override
+    virtual std::shared_ptr<Batch> createBatch(NvU32 uBatch) override
     {
         if (m_batchAtomIndices.size() == 0)
         {
@@ -256,10 +252,10 @@ private:
     // this is essentially an offset to the force one after the last
     static const NvU32 s_nOutputValuesPerCluster = computeOutputForceOffset(ATOMS_PER_CLUSTER);
 
-    bool createaAtomLayers(std::vector<std::shared_ptr<ILayer>>& pLayers)
+public:
+    std::shared_ptr<NeuralNetwork> createNetwork() override
     {
-        nvAssert(pLayers.size() == 0);
-
+        std::shared_ptr<NeuralNetwork> pNetwork = std::make_shared<NeuralNetwork>();
         std::array<std::array<unsigned, 4>, 3> outputDims =
         { {
             { 1, 128, 1, 1 },
@@ -271,16 +267,18 @@ private:
         {
             auto pLayer = std::make_shared<InternalLayerType>();
             pLayer->init(prevOutputDims, outputDims[u]);
-            pLayers.push_back(pLayer);
+            pNetwork->addLayer(pLayer);
             prevOutputDims = outputDims[u];
         }
         using OutputLayerType = FullyConnectedLayer<ACTIVATION_IDENTITY, ACTIVATION_IDENTITY>;
         auto pLayer = std::make_shared<OutputLayerType>();
         std::array<unsigned, 4> wantedOutputDims = { 1, s_nOutputValuesPerCluster, 1, 1 };
         pLayer->init(prevOutputDims, wantedOutputDims);
-        pLayers.push_back(pLayer);
-        return true;
+        pNetwork->addLayer(pLayer);
+        return pNetwork;
     }
+
+private:
     static const NvU32 NATOMS_PER_BATCH = 256; // number of atoms we train on simultaneously
 
     void copyClusterToInputTensor(Tensor &input, NvU32 uDstCluster,

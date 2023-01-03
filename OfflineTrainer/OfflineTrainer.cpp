@@ -12,7 +12,7 @@ int main()
 {
     NeuralTest::test();
 
-    AtomsNetwork<float> network;
+    AtomsDataLoader<float> loader;
 
     // load the latest trained network
     {
@@ -33,12 +33,14 @@ int main()
         }
         if (path.empty())
         {
-            path = L"c:\\atomNets\\water_4236.bin";
+            path = L"c:\\atomNets\\water_4238.bin";
         }
         printf("loading %S\n", path.c_str());
         MyReader reader(path);
-        network.serialize(reader);
+        loader.serialize(reader);
     }
+
+    std::shared_ptr<NeuralNetwork> pNetwork = loader.createNetwork();
 
     Epoch epoch;
 
@@ -46,7 +48,7 @@ int main()
     lossComputer.init(sizeof(float));
 
     LearningRates lr;
-    lr.init(network.getNLearningRatesNeeded());
+    lr.init(pNetwork->getNLearningRatesNeeded());
 
     std::string sBuffer;
     sBuffer.resize(1024);
@@ -56,7 +58,7 @@ int main()
     auto lastSaveTime = startTime;
     for ( ; ; )
     {
-        epoch.makeStep(network, lossComputer, lr);
+        epoch.makeStep(loader, *pNetwork, lossComputer, lr);
 
         auto curTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> secondsSinceStart = curTime - startTime;
@@ -66,7 +68,7 @@ int main()
             "nSteps: %d, avgPreError: %#.3g, avgPostError: %#.3g, avgLRate: %#.3g, "
             "MSecPerStep: %.2f, MB: %.2f\n",
             lr.getNStepsMade(), epoch.getAvgPreError(), epoch.getAvgPostError(),
-            network.computeAvgLRStats(), fMSecsPerTrainingStep, (double)g_nCudaBytes / (1024 * 1024));
+            pNetwork->computeAvgLRStats(), fMSecsPerTrainingStep, (double)g_nCudaBytes / (1024 * 1024));
         printf("%s", sBuffer.c_str());
 
         {
@@ -88,13 +90,13 @@ int main()
                 lr.getNStepsMade());
             {
                 MyWriter writer(sBuffer);
-                network.serialize(writer);
+                pNetwork->serialize(writer);
             }
             lastSaveTime = curTime;
             printf("saving completed\n");
         }
 
-        network.resetAvgLRStats();
+        pNetwork->resetAvgLRStats();
     }
 
 #if 0
